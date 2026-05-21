@@ -1,5 +1,27 @@
 # Releases automáticos (GitHub Actions)
 
+## Atalho de dia a dia: `enviar_github.bat`
+
+Em vez de digitar os 4 comandos abaixo a cada alteração, use o `.bat` na raiz:
+
+```cmd
+enviar_github.bat
+```
+
+Ele pede a mensagem e executa em sequência: `git pull --rebase`, `git status`,
+`git add .`, `git commit -m "..."` e `git push origin main`. Se não houver
+alterações, ele só sincroniza e encerra. Você também pode passar a mensagem
+direto como argumento:
+
+```cmd
+enviar_github.bat "fix: corrige cálculo de ICMS ST"
+```
+
+Esse `.bat` é só para o desenvolvedor — não entra no pacote de release dos clientes.
+
+---
+
+
 Ao dar **push** na branch **`main`**, o workflow **`.github/workflows/auto-release.yml`**:
 
 1. Aumenta o **patch** da versão em `package.json` (ex.: 1.0.0 → 1.0.1).
