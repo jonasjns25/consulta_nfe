@@ -2358,24 +2358,43 @@
         `;
       }
       
-      // Origem (apenas XML) – Tabela A
-      if (produto.icmsOrig !== undefined && produto.icmsOrig !== null && produto.icmsOrig !== '') {
-        html += `
-          <div class="detalhes-item-comparacao">
-            <span class="detalhes-label">${formatarLabel('Origem')}</span>
-            <span class="detalhes-value" style="font-size: 0.85rem; line-height: 1.4;">${traduzirOrigem(produto.icmsOrig)}</span>
-            <span class="detalhes-value" style="color: var(--lumi-muted);">-</span>
-          </div>
-        `;
-      } else {
-        html += `
-          <div class="detalhes-item-comparacao">
-            <span class="detalhes-label">${formatarLabel('Origem')}</span>
-            <span class="detalhes-value">-</span>
-            <span class="detalhes-value" style="color: var(--lumi-muted);">-</span>
-          </div>
-        `;
+      // Origem – Tabela A (XML "orig" x produto.atrib do ERP)
+      // Tratada como ponto de atencao (laranja), nao como erro (vermelho).
+      const valorOrigXML = produto.icmsOrig;
+      const atribERP = dadosERP ? buscarCampo(dadosERP, 'produto_atrib', 'ATRIB', 'atrib') : null;
+      const xmlOrigStr = (valorOrigXML !== undefined && valorOrigXML !== null && valorOrigXML !== '')
+        ? String(valorOrigXML).trim()
+        : '';
+      const erpOrigStr = (atribERP !== undefined && atribERP !== null && String(atribERP).trim() !== '')
+        ? String(atribERP).trim()
+        : '';
+      const xmlOrigDigito = (xmlOrigStr.match(/[0-8]/) || [''])[0];
+      const erpOrigDigito = (erpOrigStr.match(/[0-8]/) || [''])[0];
+      const xmlOrigLabel = xmlOrigStr ? traduzirOrigem(xmlOrigStr) : '-';
+      const erpOrigLabel = erpOrigStr ? traduzirOrigem(erpOrigStr) : '-';
+      let estiloXmlOrig = 'font-size: 0.85rem; line-height: 1.4;';
+      let estiloErpOrig = 'color: var(--lumi-muted); font-size: 0.85rem; line-height: 1.4;';
+      let badgeOrigem = '';
+      if (xmlOrigDigito && erpOrigDigito) {
+        if (xmlOrigDigito === erpOrigDigito) {
+          estiloXmlOrig += ' color: #1f7a55;';
+          estiloErpOrig = 'color: #1f7a55; font-size: 0.85rem; line-height: 1.4;';
+        } else {
+          // Ponto de atencao, NAO erro.
+          estiloXmlOrig += ' color: #b35c00;';
+          estiloErpOrig = 'color: #b35c00; font-size: 0.85rem; line-height: 1.4;';
+          badgeOrigem = ' <span title="Ponto de atenção: origem do XML difere do cadastro (produto.atrib)" '
+            + 'style="background:#fff4e0;color:#b35c00;border:1px solid #b35c00;border-radius:10px;'
+            + 'padding:1px 6px;font-size:0.7rem;font-weight:700;margin-left:4px;">⚠ Atenção</span>';
+        }
       }
+      html += `
+        <div class="detalhes-item-comparacao">
+          <span class="detalhes-label">${formatarLabel('Origem')}${badgeOrigem}</span>
+          <span class="detalhes-value" style="${estiloXmlOrig}">${xmlOrigLabel}</span>
+          <span class="detalhes-value" style="${estiloErpOrig}">${erpOrigLabel}</span>
+        </div>
+      `;
       
       // CST ou CSOSN (Simples Nacional) — exibe um ou outro conforme o regime
       if (ehSimplesNacional) {
