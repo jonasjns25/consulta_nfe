@@ -1,0 +1,7 @@
+.env
+node_modules/
+backups/
+logs/
+dist/
+nssm/
+update_*.zip

@@ -1,0 +1,1314 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ConfNF - Conferencia Cega</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Inter", "Segoe UI", "Roboto", sans-serif;
+      --lumi-primary: #c8102e;
+      --lumi-primary-strong: #db2636;
+      --lumi-text: #222;
+      --lumi-muted: #666;
+      --lumi-surface: #fff;
+      --lumi-border: rgba(200, 16, 46, 0.16);
+      --lumi-soft: #fff8f4;
+      --success: #1f8b4c;
+      --warning: #ad7a00;
+      --danger: #c0392b;
+      --shadow: 0 18px 36px rgba(34, 34, 34, 0.1);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at top left, #fff8f4, #ffffff);
+      color: var(--lumi-text);
+      padding: 2rem 1rem 3rem;
+    }
+
+    header, main {
+      max-width: 1240px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    h1, h2, h3 { margin: 0; }
+    h1 { font-size: clamp(1.9rem, 3vw, 2.6rem); }
+    p { margin: 0; }
+
+    .muted { color: var(--lumi-muted); }
+    .hidden { display: none !important; }
+
+    .nav-links {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .nav-links a {
+      text-decoration: none;
+      color: var(--lumi-primary);
+      font-weight: 600;
+    }
+
+    .card {
+      background: var(--lumi-surface);
+      border: 1px solid var(--lumi-border);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1rem;
+    }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.9rem;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      margin-bottom: 0.9rem;
+    }
+
+    .field label {
+      font-size: 0.92rem;
+      color: var(--lumi-muted);
+      font-weight: 600;
+    }
+
+    input, select, textarea, button {
+      font: inherit;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--lumi-border);
+      border-radius: 12px;
+      padding: 0.8rem 0.9rem;
+      background: #fff;
+    }
+
+    textarea {
+      min-height: 88px;
+      resize: vertical;
+    }
+
+    .actions {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .btn-primary,
+    .btn-secondary,
+    .btn-ghost,
+    .btn-danger {
+      border: none;
+      border-radius: 12px;
+      padding: 0.8rem 1.1rem;
+      cursor: pointer;
+      font-weight: 700;
+      min-height: 48px;
+    }
+
+    .btn-primary {
+      background: var(--lumi-primary);
+      color: #fff;
+    }
+
+    .btn-secondary {
+      background: #f4f4f4;
+      color: var(--lumi-text);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--lumi-border);
+      color: var(--lumi-text);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    .btn-small {
+      min-height: 34px;
+      padding: 0.45rem 0.75rem;
+      font-size: 0.86rem;
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .info-box {
+      border-radius: 16px;
+      padding: 1rem;
+      background: var(--lumi-soft);
+      border: 1px solid var(--lumi-border);
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      border-radius: 999px;
+      padding: 0.3rem 0.75rem;
+      font-size: 0.85rem;
+      font-weight: 700;
+      background: rgba(200, 16, 46, 0.08);
+      color: var(--lumi-primary);
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .status-banner {
+      border-radius: 16px;
+      padding: 0.95rem 1rem;
+      margin-bottom: 1rem;
+      font-weight: 600;
+    }
+
+    .status-banner.info { background: rgba(52, 152, 219, 0.12); color: #1d5f85; }
+    .status-banner.success { background: rgba(31, 139, 76, 0.12); color: var(--success); }
+    .status-banner.warning { background: rgba(173, 122, 0, 0.12); color: var(--warning); }
+    .status-banner.error { background: rgba(192, 57, 43, 0.12); color: var(--danger); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.94rem;
+    }
+
+    th, td {
+      padding: 0.75rem 0.55rem;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--lumi-muted);
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .qty-input {
+      max-width: 130px;
+    }
+
+    .tag-status {
+      border-radius: 999px;
+      padding: 0.2rem 0.6rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+      display: inline-block;
+    }
+
+    .tag-pendente { background: rgba(99, 110, 114, 0.12); color: #606b70; }
+    .tag-ok { background: rgba(31, 139, 76, 0.12); color: var(--success); }
+    .tag-alerta { background: rgba(173, 122, 0, 0.12); color: var(--warning); }
+    .tag-extra { background: rgba(52, 152, 219, 0.12); color: #1d5f85; }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      z-index: 10080;
+    }
+
+    .modal-box {
+      width: min(980px, 96vw);
+      max-height: 90vh;
+      overflow: auto;
+      background: #fff;
+      border-radius: 18px;
+      padding: 1rem;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+      border: 1px solid var(--lumi-border);
+    }
+
+    .list-reset {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .list-reset li + li {
+      margin-top: 0.55rem;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 1rem;
+    }
+
+    @media (max-width: 980px) {
+      .grid-2, .grid-3, .grid-4, .split {
+        grid-template-columns: 1fr;
+      }
+      body { padding: 1rem 0.75rem 2rem; }
+      .card { padding: 1rem; }
+      th, td { padding: 0.6rem 0.45rem; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>ConfNF</h1>
+      <p class="muted">Conferencia cega de NF-e para recebimento.</p>
+    </div>
+    <nav class="nav-links">
+      <a href="index.html">Consulta NF-e</a>
+      <a href="autorizacao-recepcao-xml.html">Autorizacao de Recepcao</a>
+      <a href="confnf.html"><strong>ConfNF</strong></a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="card" id="card-login">
+      <div class="toolbar">
+        <div>
+          <h2>Acesso ao Modulo</h2>
+          <p class="muted">Entre com usuario/senha ou PIN para iniciar a conferencia.</p>
+        </div>
+        <span class="pill" id="session-pill">Sessao nao iniciada</span>
+      </div>
+
+      <div id="login-banner" class="status-banner info hidden"></div>
+
+      <form id="login-form" class="grid-2">
+        <div class="field">
+          <label for="login-usuario">Usuario</label>
+          <input id="login-usuario" autocomplete="username" placeholder="conferente">
+        </div>
+        <div class="field">
+          <label for="login-doca">Doca/Portaria</label>
+          <input id="login-doca" autocomplete="off" placeholder="Recebimento 01">
+        </div>
+        <div class="field">
+          <label for="login-senha">Senha</label>
+          <input id="login-senha" type="password" autocomplete="current-password" placeholder="123456">
+        </div>
+        <div class="field">
+          <label for="login-pin">PIN (opcional)</label>
+          <input id="login-pin" autocomplete="one-time-code" inputmode="numeric" maxlength="4" placeholder="1234">
+        </div>
+        <div class="actions" style="grid-column: 1 / -1;">
+          <button type="submit" class="btn-primary">Entrar</button>
+          <button type="button" class="btn-ghost" id="btn-logout" disabled>Sair</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card hidden" id="card-chave">
+      <div class="toolbar">
+        <div>
+          <h2>Selecionar NF-e</h2>
+          <p class="muted">Digite ou cole a chave de 44 digitos para consultar o XML no ERP.</p>
+        </div>
+      </div>
+
+      <div id="nfe-banner" class="status-banner info hidden"></div>
+
+      <div class="grid-2">
+        <div class="field">
+          <label for="chave-nfe">Chave NF-e</label>
+          <input id="chave-nfe" autocomplete="off" inputmode="numeric" maxlength="44" placeholder="52260303380763001418550080006280581278478325">
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <div class="actions">
+            <button type="button" class="btn-secondary" id="btn-validar-chave">Validar chave</button>
+            <button type="button" class="btn-primary" id="btn-buscar-nfe">Confirmar e buscar NF</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-4 info-box" id="preview-chave">
+        <div><strong>UF</strong><br><span class="muted">-</span></div>
+        <div><strong>CNPJ emitente</strong><br><span class="muted">-</span></div>
+        <div><strong>Serie / Numero</strong><br><span class="muted">-</span></div>
+        <div><strong>Ambiente</strong><br><span class="muted">-</span></div>
+      </div>
+    </section>
+
+    <section class="card hidden" id="card-nfe">
+      <div class="toolbar">
+        <div>
+          <h2>Cabecalho da NF</h2>
+          <p class="muted">O conferente visualiza apenas a guia cega e dados operacionais.</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn-secondary" id="btn-iniciar-conferencia">Iniciar conferencia</button>
+          <button type="button" class="btn-ghost" id="btn-recarregar-conferencia">Recarregar conferencia</button>
+        </div>
+      </div>
+
+      <div class="grid-4" id="nfe-header-grid"></div>
+    </section>
+
+    <section class="card hidden" id="card-conferente">
+      <div class="toolbar">
+        <div>
+          <h2>Guia Cega</h2>
+          <p class="muted">Registre apenas o que foi encontrado fisicamente.</p>
+        </div>
+        <span class="pill" id="pill-conferencia">Conferencia nao iniciada</span>
+      </div>
+
+      <div class="split">
+        <div>
+          <div class="info-box" style="margin-bottom:1rem;">
+            <div class="field" style="margin-bottom:0;">
+              <label for="scan-produto">Ler código de barras do produto</label>
+              <div class="actions">
+                <input id="scan-produto" autocomplete="off" inputmode="numeric" placeholder="Bipe ou digite o código do produto">
+                <button type="button" class="btn-secondary btn-small" id="btn-localizar-produto">Localizar item</button>
+              </div>
+              <p class="muted">Ao ler o código, o item será aberto para lançar quantidade, lotes e validade opcional.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table id="tabela-itens-conferente">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Cod. Fornecedor</th>
+                  <th>Produto XML</th>
+                  <th>Produto ERP</th>
+                  <th>EAN caixa / unitario</th>
+                  <th>Unidade</th>
+                  <th>Lançamento</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <aside class="info-box">
+          <h3 style="margin-bottom:0.75rem;">Itens extras</h3>
+          <div id="extras-list"></div>
+          <div class="actions" style="margin-top:0.75rem;">
+            <button type="button" class="btn-ghost" id="btn-adicionar-extra">Registrar item extra</button>
+          </div>
+          <div class="field" style="margin-top:1rem;">
+            <label for="obs-conferencia">Observacao geral</label>
+            <textarea id="obs-conferencia" placeholder="Observacoes da doca, avarias, faltas visiveis..."></textarea>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn-primary" id="btn-enviar-aprovacao">Enviar para aprovacao</button>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="card hidden" id="card-supervisor">
+      <div class="toolbar">
+        <div>
+          <h2>Supervisor</h2>
+          <p class="muted">Analise pendencias e aprove ou solicite recontagem.</p>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn-secondary" id="btn-carregar-pendencias">Atualizar pendencias</button>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="info-box">
+          <h3 style="margin-bottom:0.75rem;">Conferencias pendentes</h3>
+          <ul class="list-reset" id="lista-pendencias"></ul>
+        </div>
+        <div class="info-box">
+          <h3 style="margin-bottom:0.75rem;">Resumo da conferencia selecionada</h3>
+          <div id="resumo-supervisor" class="muted">Selecione uma conferencia pendente para visualizar o comparativo.</div>
+        </div>
+      </div>
+
+      <div class="table-wrap" style="margin-top:1rem;">
+        <table id="tabela-supervisor">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Produto</th>
+              <th>Un</th>
+              <th>Qt NF</th>
+              <th>Qt Conf</th>
+              <th>Diferenca</th>
+              <th>Status</th>
+              <th>Acao</th>
+              <th>Obs</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="actions" style="margin-top:1rem;">
+        <button type="button" class="btn-primary" id="btn-aprovar-tudo">Aprovar tudo</button>
+        <button type="button" class="btn-secondary" id="btn-enviar-recontagem">Solicitar recontagem</button>
+        <button type="button" class="btn-danger" id="btn-rejeitar-nf">Rejeitar NF</button>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal-overlay hidden" id="item-editor-overlay">
+    <div class="modal-box">
+      <div class="toolbar">
+        <div>
+          <h3 id="item-editor-title">Contagem do Produto</h3>
+          <p class="muted" id="item-editor-subtitle">Lance a contagem e os lotes do item.</p>
+        </div>
+        <button type="button" class="btn-ghost btn-small" id="btn-fechar-editor">Fechar</button>
+      </div>
+
+      <div class="grid-3">
+        <div class="info-box"><strong>Código XML</strong><br><span id="editor-cprod">-</span></div>
+        <div class="info-box"><strong>Unidade XML</strong><br><span id="editor-xml-unidade">-</span></div>
+        <div class="info-box"><strong>Unidade Digitação</strong><br><span id="editor-erp-unidade">-</span></div>
+      </div>
+
+      <div class="field" style="margin-top:1rem;">
+        <label for="editor-quantidade">Quantidade total contada</label>
+        <input id="editor-quantidade" type="number" min="0" step="0.0001" placeholder="0,0000">
+        <div class="muted" id="editor-equivalencia">Equivalência XML</div>
+      </div>
+
+      <div class="toolbar" style="margin-top:1rem;">
+        <div>
+          <h3>Lotes</h3>
+          <p class="muted">Lote e validade são opcionais. Se houver vários lotes, informe um por linha.</p>
+        </div>
+        <button type="button" class="btn-secondary btn-small" id="btn-adicionar-lote">Adicionar lote</button>
+      </div>
+
+      <div id="editor-lotes-lista"></div>
+      <div class="muted" id="editor-lotes-resumo" style="margin-top:0.75rem;"></div>
+
+      <div class="actions" style="justify-content:flex-end;margin-top:1rem;">
+        <button type="button" class="btn-ghost" id="btn-cancelar-editor">Cancelar</button>
+        <button type="button" class="btn-primary" id="btn-salvar-editor">Salvar item</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      token: null,
+      usuario: null,
+      doca: '',
+      nfe: null,
+      conferenciaId: null,
+      extras: [],
+      pendencias: [],
+      conferenciaSupervisor: null,
+      itemEditor: null
+    };
+
+    const keyPreviewMap = {
+      '11': 'RO', '12': 'AC', '13': 'AM', '14': 'RR', '15': 'PA', '16': 'AP', '17': 'TO',
+      '21': 'MA', '22': 'PI', '23': 'CE', '24': 'RN', '25': 'PB', '26': 'PE', '27': 'AL',
+      '28': 'SE', '29': 'BA', '31': 'MG', '32': 'ES', '33': 'RJ', '35': 'SP', '41': 'PR',
+      '42': 'SC', '43': 'RS', '50': 'MS', '51': 'MT', '52': 'GO', '53': 'DF'
+    };
+
+    function $(id) { return document.getElementById(id); }
+
+    function setBanner(id, message, type = 'info') {
+      const el = $(id);
+      if (!el) return;
+      if (!message) {
+        el.textContent = '';
+        el.className = 'status-banner info hidden';
+        return;
+      }
+      el.textContent = message;
+      el.className = `status-banner ${type}`;
+    }
+
+    function apiFetch(url, options = {}) {
+      const headers = new Headers(options.headers || {});
+      if (state.token) headers.set('Authorization', `Bearer ${state.token}`);
+      if (!headers.has('Content-Type') && options.body) headers.set('Content-Type', 'application/json');
+      return fetch(url, { ...options, headers });
+    }
+
+    function formatarData(value) {
+      if (!value) return '-';
+      try {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return String(value);
+        return date.toLocaleString('pt-BR');
+      } catch (_) {
+        return String(value);
+      }
+    }
+
+    function formatarNumero(value, casas = 4) {
+      return Number(value || 0).toLocaleString('pt-BR', {
+        minimumFractionDigits: casas,
+        maximumFractionDigits: casas
+      });
+    }
+
+    function atualizarSessaoUI() {
+      $('session-pill').textContent = state.usuario
+        ? `${state.usuario.nome} (${state.usuario.perfil})`
+        : 'Sessao nao iniciada';
+      $('btn-logout').disabled = !state.usuario;
+      $('login-usuario').disabled = !!state.usuario;
+      $('login-senha').disabled = !!state.usuario;
+      $('login-pin').disabled = !!state.usuario;
+      $('login-doca').disabled = !!state.usuario;
+      $('login-form').querySelector('button[type="submit"]').disabled = !!state.usuario;
+      $('card-chave').classList.toggle('hidden', !state.usuario);
+      $('card-supervisor').classList.toggle('hidden', !state.usuario || !['supervisor', 'administrador'].includes(state.usuario.perfil));
+      if (!state.usuario) {
+        $('card-nfe').classList.add('hidden');
+        $('card-conferente').classList.add('hidden');
+      }
+    }
+
+    function validarDigitoVerificador(chave) {
+      if (!/^\d{44}$/.test(chave)) return false;
+      const numeros = chave.slice(0, -1);
+      const dvInformado = parseInt(chave.slice(-1), 10);
+      let soma = 0;
+      let peso = 2;
+      for (let i = numeros.length - 1; i >= 0; i -= 1) {
+        soma += parseInt(numeros[i], 10) * peso;
+        peso = peso === 9 ? 2 : peso + 1;
+      }
+      const resto = soma % 11;
+      const dvCalculado = resto < 2 ? 0 : 11 - resto;
+      return dvCalculado === dvInformado;
+    }
+
+    function montarPreviewChave(chave) {
+      if (!/^\d{44}$/.test(chave)) return null;
+      return {
+        uf: keyPreviewMap[chave.slice(0, 2)] || chave.slice(0, 2),
+        cnpj: chave.slice(6, 20),
+        serie: String(parseInt(chave.slice(22, 25), 10)),
+        numero: String(parseInt(chave.slice(25, 34), 10)),
+        ambiente: chave.slice(34, 35) === '1' ? 'Producao' : 'Homologacao'
+      };
+    }
+
+    function renderPreviewChave() {
+      const chave = $('chave-nfe').value.replace(/\D/g, '');
+      const preview = montarPreviewChave(chave);
+      const cards = $('preview-chave').children;
+      if (!preview) {
+        cards[0].innerHTML = '<strong>UF</strong><br><span class="muted">-</span>';
+        cards[1].innerHTML = '<strong>CNPJ emitente</strong><br><span class="muted">-</span>';
+        cards[2].innerHTML = '<strong>Serie / Numero</strong><br><span class="muted">-</span>';
+        cards[3].innerHTML = '<strong>Ambiente</strong><br><span class="muted">-</span>';
+        return;
+      }
+      cards[0].innerHTML = `<strong>UF</strong><br><span>${preview.uf}</span>`;
+      cards[1].innerHTML = `<strong>CNPJ emitente</strong><br><span>${preview.cnpj}</span>`;
+      cards[2].innerHTML = `<strong>Serie / Numero</strong><br><span>${preview.serie} / ${preview.numero}</span>`;
+      cards[3].innerHTML = `<strong>Ambiente</strong><br><span>${preview.ambiente}</span>`;
+    }
+
+    function renderCabecalhoNfe() {
+      if (!state.nfe) return;
+      $('card-nfe').classList.remove('hidden');
+      const header = state.nfe;
+      $('nfe-header-grid').innerHTML = `
+        <div class="info-box"><strong>NF / Serie</strong><br>${header.nNF || '-'} / ${header.serie || '-'}</div>
+        <div class="info-box"><strong>Emitente</strong><br>${header.emitente?.nome || '-'}</div>
+        <div class="info-box"><strong>Data emissao</strong><br>${formatarData(header.dhEmi)}</div>
+        <div class="info-box"><strong>Total de itens</strong><br>${header.itens?.length || 0}</div>
+        <div class="info-box"><strong>Volumes declarados</strong><br>${header.volumes || 0}</div>
+        <div class="info-box"><strong>Peso bruto</strong><br>${formatarNumero(header.pesoB || 0, 3)} kg</div>
+        <div class="info-box"><strong>Status NF</strong><br>${header.cStat || '-'} ${header.xMotivo || ''}</div>
+        <div class="info-box"><strong>Conferencia atual</strong><br>${state.conferenciaId || 'Nao iniciada'}</div>
+      `;
+    }
+
+    function statusBadge(status) {
+      if (status === 'conferido' || status === 'OK') return '<span class="tag-status tag-ok">OK</span>';
+      if (status === 'divergente' || status === 'FALTA' || status === 'SOBRA' || status === 'RECONTAGEM') return '<span class="tag-status tag-alerta">' + status + '</span>';
+      if (status === 'extra' || status === 'EXTRA') return '<span class="tag-status tag-extra">EXTRA</span>';
+      return '<span class="tag-status tag-pendente">PENDENTE</span>';
+    }
+
+    function textoConversaoErp(item) {
+      const tipo = item.erp_tipo_conversao || item.tipo_conversao || 'nenhum';
+      const fator = Number(item.erp_fator_conversao ?? item.fator_aplicado ?? 1);
+      const tabforHint = item.erp_conversao_origem === 'tabfor'
+        ? ` | Tabfor UNDFOR: ${item.erp_undfor || '-'} | EMBFOR: ${item.erp_embfor || '-'} | FATORFOR: ${item.erp_fatorfor != null ? formatarNumero(item.erp_fatorfor, 4) : '-'}`
+        : '';
+      if (tipo === 'peso' && item.erp_peso_medio_un != null) {
+        const unidadesPorMedidaXml = item.erp_peso_medio_un > 0 ? (1 / Number(item.erp_peso_medio_un)) : 0;
+        return `Peso: 1 ${item.erp_unidade || 'UN'} ~ ${formatarNumero(item.erp_peso_medio_un, 4)} ${item.uCom || '-'} | 1 ${item.uCom || '-'} ~ ${formatarNumero(unidadesPorMedidaXml, 4)} ${item.erp_unidade || 'UN'}${tabforHint}`;
+      }
+      if (tipo === 'fixo') {
+        return `Fator: 1 ${item.uCom || '-'} = ${formatarNumero(fator, 4)} ${item.erp_unidade || 'UN'}${tabforHint}`;
+      }
+      return `Sem conversão${tabforHint}`;
+    }
+
+    function calcularQuantidadeXmlEstimada(item, quantidadeInformada) {
+      const qt = Number(quantidadeInformada);
+      if (!Number.isFinite(qt) || qt < 0) return null;
+      const tipo = item.erp_tipo_conversao || item.tipo_conversao || 'nenhum';
+      const unidadeXml = String(item.uCom || '').trim().toUpperCase();
+      const unidadeErp = String(item.erp_unidade || item.unid_erp || item.uCom || '').trim().toUpperCase();
+      if (!unidadeXml || unidadeXml === unidadeErp || tipo === 'nenhum') {
+        return qt;
+      }
+      if (tipo === 'fixo') {
+        const fator = Number(item.erp_fator_conversao ?? item.fator_aplicado ?? 1);
+        if (!Number.isFinite(fator) || fator <= 0) return null;
+        return qt / fator;
+      }
+      if (tipo === 'peso') {
+        const peso = Number(item.erp_peso_medio_un ?? 0);
+        if (!Number.isFinite(peso) || peso <= 0) return null;
+        return qt * peso;
+      }
+      return qt;
+    }
+
+    function textoQuantidadeXmlEstimada(item, quantidadeInformada) {
+      const estimada = calcularQuantidadeXmlEstimada(item, quantidadeInformada);
+      if (estimada == null) return 'Informe a quantidade contada no ERP para validar com a quantidade do XML.';
+      const unidadeXml = item.uCom || '-';
+      const unidadeErp = item.erp_unidade || item.unid_erp || item.uCom || '-';
+      return `Digitado no ERP: ${quantidadeInformada === '' || quantidadeInformada == null ? '0,0000' : formatarNumero(quantidadeInformada, 4)} ${unidadeErp} | Equivalente no XML: ${formatarNumero(estimada, 4)} ${unidadeXml}`;
+    }
+
+    function normalizarCodigoLeitura(value) {
+      return String(value || '').trim().replace(/\s+/g, '').replace(/^0+(?=\d)/, '');
+    }
+
+    function obterItemPorNItem(nItem) {
+      return (state.nfe?.itens || []).find((item) => String(item.nItem) === String(nItem)) || null;
+    }
+
+    function localizarItemPorCodigo(codigoLido) {
+      const codigo = normalizarCodigoLeitura(codigoLido);
+      if (!codigo) return null;
+      return (state.nfe?.itens || []).find((item) => {
+        const scanCodes = Array.isArray(item.scan_codes) ? item.scan_codes : [];
+        return scanCodes.some((candidate) => normalizarCodigoLeitura(candidate) === codigo);
+      }) || null;
+    }
+
+    function clonarLotes(item) {
+      return Array.isArray(item?.lotes)
+        ? item.lotes.map((lote) => ({
+            lote: lote?.lote || '',
+            dt_validade: lote?.dt_validade || '',
+            qt_informada: lote?.qt_informada == null ? '' : String(lote.qt_informada),
+            unidade: lote?.unidade || item.unidade_digitacao || item.erp_unidade || item.unid_erp || item.uCom || '',
+            obs: lote?.obs || ''
+          }))
+        : [];
+    }
+
+    function fecharEditorItem() {
+      state.itemEditor = null;
+      $('item-editor-overlay').classList.add('hidden');
+    }
+
+    function renderLotesEditor() {
+      const editor = state.itemEditor;
+      const wrap = $('editor-lotes-lista');
+      if (!editor) {
+        wrap.innerHTML = '';
+        $('editor-lotes-resumo').textContent = '';
+        return;
+      }
+      if (editor.lotes.length === 0) {
+        wrap.innerHTML = '<p class="muted">Nenhum lote informado. O item pode ser salvo somente com a quantidade total.</p>';
+        $('editor-lotes-resumo').textContent = '';
+        return;
+      }
+      wrap.innerHTML = '';
+      editor.lotes.forEach((lote, index) => {
+        const div = document.createElement('div');
+        div.className = 'info-box';
+        div.style.marginBottom = '0.65rem';
+        div.innerHTML = `
+          <div class="grid-3">
+            <div class="field">
+              <label>Lote</label>
+              <input type="text" data-lote-field="${index}" data-lote-prop="lote" value="${lote.lote || ''}" autocomplete="off" placeholder="Ex.: LOTE123">
+            </div>
+            <div class="field">
+              <label>Validade</label>
+              <input type="date" data-lote-field="${index}" data-lote-prop="dt_validade" value="${lote.dt_validade || ''}">
+            </div>
+            <div class="field">
+              <label>Quantidade</label>
+              <input type="number" min="0" step="0.0001" data-lote-field="${index}" data-lote-prop="qt_informada" value="${lote.qt_informada || ''}" placeholder="0,0000">
+            </div>
+          </div>
+          <div class="actions" style="justify-content:flex-end;">
+            <button type="button" class="btn-ghost btn-small" data-remover-lote="${index}">Remover lote</button>
+          </div>
+        `;
+        wrap.appendChild(div);
+      });
+      wrap.querySelectorAll('[data-lote-field]').forEach((input) => {
+        input.addEventListener('input', () => {
+          const index = Number(input.dataset.loteField);
+          const prop = input.dataset.loteProp;
+          if (!editor.lotes[index]) return;
+          editor.lotes[index][prop] = input.value;
+          atualizarResumoEditor();
+        });
+      });
+      wrap.querySelectorAll('[data-remover-lote]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          editor.lotes.splice(Number(btn.dataset.removerLote), 1);
+          renderLotesEditor();
+          atualizarResumoEditor();
+        });
+      });
+      atualizarResumoEditor();
+    }
+
+    function atualizarResumoEditor() {
+      const editor = state.itemEditor;
+      if (!editor) return;
+      const item = obterItemPorNItem(editor.nItem);
+      if (!item) return;
+      $('editor-equivalencia').textContent = textoQuantidadeXmlEstimada(item, $('editor-quantidade').value);
+      const totalLotes = editor.lotes.reduce((sum, lote) => sum + (Number(lote.qt_informada) || 0), 0);
+      const unidade = item.unidade_digitacao || item.erp_unidade || item.unid_erp || item.uCom || '-';
+      $('editor-lotes-resumo').textContent = editor.lotes.length
+        ? `Soma dos lotes: ${formatarNumero(totalLotes, 4)} ${unidade}.`
+        : 'Sem lotes informados.';
+    }
+
+    function abrirEditorItem(nItem, codigoLido = '') {
+      const item = obterItemPorNItem(nItem);
+      if (!item) return;
+      state.itemEditor = {
+        nItem: item.nItem,
+        codigoLido: codigoLido || '',
+        lotes: clonarLotes(item)
+      };
+      $('item-editor-title').textContent = `Item ${item.nItem} - ${item.xProd || 'Produto'}`;
+      $('item-editor-subtitle').textContent = item.erp_descricao
+        ? `ERP: ${item.erp_descricao}`
+        : 'Sem vínculo ERP encontrado para este item.';
+      $('editor-cprod').textContent = item.cProd || '-';
+      $('editor-xml-unidade').textContent = item.uCom || '-';
+      $('editor-erp-unidade').textContent = item.unidade_digitacao || item.erp_unidade || item.unid_erp || item.uCom || '-';
+      $('editor-quantidade').value = item.qt_conferida == null ? '' : item.qt_conferida;
+      $('item-editor-overlay').classList.remove('hidden');
+      renderLotesEditor();
+      atualizarResumoEditor();
+      $('editor-quantidade').focus();
+      $('editor-quantidade').select();
+    }
+
+    function salvarEditorItem() {
+      const editor = state.itemEditor;
+      if (!editor) return;
+      const item = obterItemPorNItem(editor.nItem);
+      if (!item) return;
+      const quantidade = $('editor-quantidade').value;
+      item.qt_conferida = quantidade === '' ? 0 : Number(quantidade);
+      item.lotes = editor.lotes
+        .map((lote) => ({
+          lote: String(lote.lote || '').trim(),
+          dt_validade: String(lote.dt_validade || '').trim(),
+          qt_informada: lote.qt_informada === '' ? 0 : Number(lote.qt_informada),
+          unidade: item.unidade_digitacao || item.erp_unidade || item.unid_erp || item.uCom || null,
+          obs: String(lote.obs || '').trim()
+        }))
+        .filter((lote) => lote.qt_informada || lote.lote || lote.dt_validade);
+      fecharEditorItem();
+      renderItensConferente();
+      setBanner('nfe-banner', `Item ${item.nItem} atualizado para ${formatarNumero(item.qt_conferida || 0, 4)} ${item.unidade_digitacao || item.erp_unidade || item.uCom || '-'}.`, 'info');
+    }
+
+    function renderProdutoErp(item) {
+      if (!item.erp_encontrado) {
+        return '<span class="muted">Sem vínculo ERP encontrado</span>';
+      }
+      return `
+        <strong>${item.erp_descricao || '-'}</strong><br>
+        <span class="muted">Cod ERP: ${item.erp_codigo ?? '-'} | Un ERP: ${item.erp_unidade || '-'}</span><br>
+        <span class="muted">${textoConversaoErp(item)}</span>
+      `;
+    }
+
+    function renderItensConferente() {
+      const tbody = $('tabela-itens-conferente').querySelector('tbody');
+      tbody.innerHTML = '';
+      const itens = state.nfe?.itens || [];
+      itens.forEach((item) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${item.nItem}</td>
+          <td>${item.cProd || '-'}</td>
+          <td><strong>${item.xProd || '-'}</strong></td>
+          <td>${renderProdutoErp(item)}</td>
+          <td>
+            XML: ${item.cEAN || '-'}<br><span class="muted">XML Trib: ${item.cEANTrib || '-'}</span>
+            ${item.erp_encontrado ? `<br><span class="muted">ERP Forn: ${item.erp_ean_fornecedor || '-'}</span><br><span class="muted">ERP Unit: ${item.erp_ean_unitario || '-'}</span>` : ''}
+          </td>
+          <td>${item.uCom || '-'}<br><span class="muted">Digitar em: ${item.unidade_digitacao || item.erp_unidade || item.unid_erp || item.uCom || '-'}</span></td>
+          <td>
+            <strong>${formatarNumero(item.qt_conferida || 0, 4)} ${item.unidade_digitacao || item.erp_unidade || item.unid_erp || item.uCom || '-'}</strong><br>
+            <span class="muted">${textoQuantidadeXmlEstimada(item, item.qt_conferida)}</span><br>
+            <span class="muted">${Array.isArray(item.lotes) && item.lotes.length ? `${item.lotes.length} lote(s) informado(s)` : 'Sem lotes informados'}</span><br>
+            <button type="button" class="btn-ghost btn-small" data-editar-item="${item.nItem}" style="margin-top:0.45rem;">Lançar / editar</button>
+          </td>
+          <td>${statusBadge(item.status || 'pendente')}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+      tbody.querySelectorAll('[data-editar-item]').forEach((btn) => {
+        btn.addEventListener('click', () => abrirEditorItem(btn.dataset.editarItem));
+      });
+      $('card-conferente').classList.remove('hidden');
+      $('pill-conferencia').textContent = state.conferenciaId ? `Conferencia #${state.conferenciaId}` : 'Conferencia nao iniciada';
+      renderExtras();
+    }
+
+    function renderExtras() {
+      const wrap = $('extras-list');
+      wrap.innerHTML = '';
+      if (state.extras.length === 0) {
+        wrap.innerHTML = '<p class="muted">Nenhum item extra registrado.</p>';
+        return;
+      }
+      state.extras.forEach((extra, index) => {
+        const div = document.createElement('div');
+        div.className = 'info-box';
+        div.style.marginBottom = '0.65rem';
+        div.innerHTML = `
+          <div><strong>${extra.descricao || 'ITEM EXTRA'}</strong></div>
+          <div class="muted">EAN: ${extra.cEAN || '-'} | Qtd: ${formatarNumero(extra.qt_conferida || 0, 4)}</div>
+          <div class="actions" style="margin-top:0.5rem;">
+            <button type="button" class="btn-ghost" data-remove-extra="${index}">Remover</button>
+          </div>
+        `;
+        wrap.appendChild(div);
+      });
+      wrap.querySelectorAll('[data-remove-extra]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.extras.splice(parseInt(btn.dataset.removeExtra, 10), 1);
+          renderExtras();
+        });
+      });
+    }
+
+    async function login(event) {
+      event.preventDefault();
+      setBanner('login-banner', '');
+      if (state.usuario && state.token) {
+        setBanner('login-banner', 'Sessao ja iniciada. Use Sair para trocar de usuario.', 'info');
+        return;
+      }
+      const body = {
+        usuario: $('login-usuario').value.trim(),
+        senha: $('login-senha').value.trim(),
+        pin: $('login-pin').value.trim()
+      };
+      state.doca = $('login-doca').value.trim();
+      if (!body.usuario || (!body.senha && !body.pin)) {
+        setBanner('login-banner', 'Informe usuario e senha ou PIN antes de entrar.', 'warning');
+        return;
+      }
+      try {
+        const resp = await apiFetch('/api/confnf/login', {
+          method: 'POST',
+          body: JSON.stringify(body)
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Falha no login.');
+        state.token = data.token;
+        state.usuario = data.usuario;
+        atualizarSessaoUI();
+        $('login-senha').value = '';
+        $('login-pin').value = '';
+        setBanner('login-banner', `Sessao iniciada para ${data.usuario.nome}.`, 'success');
+      } catch (error) {
+        setBanner('login-banner', error.message || 'Falha no login.', 'error');
+      }
+    }
+
+    function logout() {
+      state.token = null;
+      state.usuario = null;
+      state.nfe = null;
+      state.conferenciaId = null;
+      state.extras = [];
+      state.pendencias = [];
+      state.conferenciaSupervisor = null;
+      state.itemEditor = null;
+      $('login-form').reset();
+      $('scan-produto').value = '';
+      fecharEditorItem();
+      atualizarSessaoUI();
+      setBanner('login-banner', 'Sessao encerrada.', 'info');
+    }
+
+    async function buscarNfe() {
+      setBanner('nfe-banner', '');
+      const chave = $('chave-nfe').value.replace(/\D/g, '');
+      $('chave-nfe').value = chave;
+      if (!validarDigitoVerificador(chave)) {
+        setBanner('nfe-banner', 'Chave invalida. Verifique o digito verificador.', 'error');
+        return;
+      }
+      try {
+        const resp = await apiFetch(`/api/confnf/nfe/xml?chave=${encodeURIComponent(chave)}`);
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Falha ao buscar a NF-e.');
+        state.nfe = data.nfe;
+        state.extras = [];
+        $('scan-produto').value = '';
+        renderCabecalhoNfe();
+        renderItensConferente();
+        setBanner('nfe-banner', data.conferencia
+          ? `NF localizada. Existe conferencia ${data.conferencia.status} para esta chave.`
+          : 'NF localizada com sucesso.', 'success');
+        if (data.conferencia) state.conferenciaId = data.conferencia.id;
+      } catch (error) {
+        setBanner('nfe-banner', error.message || 'Falha ao buscar NF-e.', 'error');
+      }
+    }
+
+    async function iniciarConferencia() {
+      if (!state.nfe?.chave_nfe) {
+        setBanner('nfe-banner', 'Busque a NF-e antes de iniciar a conferencia.', 'warning');
+        return;
+      }
+      try {
+        const resp = await apiFetch('/api/confnf/conferencia/iniciar', {
+          method: 'POST',
+          body: JSON.stringify({
+            chave_nfe: state.nfe.chave_nfe,
+            doca: state.doca || 'Recebimento'
+          })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Falha ao iniciar conferencia.');
+        state.conferenciaId = data.id_conferencia;
+        setBanner('nfe-banner', data.retomada
+          ? `Conferencia retomada com o ID ${data.id_conferencia}.`
+          : `Conferencia iniciada com o ID ${data.id_conferencia}.`, 'success');
+        if (data.retomada) {
+          await carregarConferenciaAtual();
+        } else {
+          $('pill-conferencia').textContent = `Conferencia #${state.conferenciaId}`;
+        }
+      } catch (error) {
+        setBanner('nfe-banner', error.message || 'Falha ao iniciar conferencia.', 'error');
+      }
+    }
+
+    async function carregarConferenciaAtual() {
+      if (!state.conferenciaId) {
+        setBanner('nfe-banner', 'Nenhuma conferencia para recarregar.', 'warning');
+        return;
+      }
+      try {
+        const resp = await apiFetch(`/api/confnf/conferencia/${state.conferenciaId}`);
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Falha ao recarregar conferencia.');
+        state.nfe = { ...(state.nfe || {}), ...(data.cabecalho || {}), itens: data.itens || [] };
+        state.extras = data.extras || [];
+        renderCabecalhoNfe();
+        renderItensConferente();
+        setBanner('nfe-banner', 'Conferencia recarregada.', 'info');
+      } catch (error) {
+        setBanner('nfe-banner', error.message || 'Falha ao recarregar conferencia.', 'error');
+      }
+    }
+
+    function coletarItensConferidos() {
+      return (state.nfe?.itens || []).map((item) => ({
+        nItem: Number(item.nItem),
+        qt_conferida: item.qt_conferida == null ? 0 : Number(item.qt_conferida),
+        lotes: Array.isArray(item.lotes) ? item.lotes : []
+      }));
+    }
+
+    function localizarProdutoPorCodigo() {
+      const codigo = $('scan-produto').value.trim();
+      if (!codigo) {
+        setBanner('nfe-banner', 'Informe ou bipa um código antes de localizar.', 'warning');
+        return;
+      }
+      const item = localizarItemPorCodigo(codigo);
+      if (!item) {
+        setBanner('nfe-banner', `Nenhum item da NF foi localizado para o código ${codigo}.`, 'error');
+        return;
+      }
+      $('scan-produto').value = '';
+      abrirEditorItem(item.nItem, codigo);
+    }
+
+    async function enviarParaAprovacao() {
+      if (!state.conferenciaId) {
+        setBanner('nfe-banner', 'Inicie a conferencia antes de enviar para aprovacao.', 'warning');
+        return;
+      }
+      try {
+        const resp = await apiFetch('/api/confnf/conferencia/resultado', {
+          method: 'POST',
+          body: JSON.stringify({
+            id_conferencia: state.conferenciaId,
+            itens: coletarItensConferidos(),
+            extras: state.extras,
+            obs: $('obs-conferencia').value.trim()
+          })
+        });
+        const data = await resp.json();
+        if (resp.status === 409 && data?.conferencia?.id) {
+          state.conferenciaId = data.conferencia.id;
+          await carregarConferenciaAtual();
+          throw new Error(`${data.error || 'Já existe conferência pendente para esta chave.'} Conferência ativa: #${data.conferencia.id}.`);
+        }
+        if (!resp.ok) throw new Error(data.error || 'Falha ao enviar resultado.');
+        setBanner('nfe-banner', 'Conferencia enviada para aprovacao do supervisor.', 'success');
+        await carregarPendencias();
+      } catch (error) {
+        setBanner('nfe-banner', error.message || 'Falha ao enviar resultado.', 'error');
+      }
+    }
+
+    function adicionarExtra() {
+      const cEAN = prompt('Informe o EAN do item extra:', '');
+      if (cEAN === null) return;
+      const descricao = prompt('Informe a descricao do item extra:', 'ITEM EXTRA');
+      if (descricao === null) return;
+      const qt = prompt('Informe a quantidade encontrada:', '1');
+      if (qt === null) return;
+      state.extras.push({
+        cEAN: cEAN.trim(),
+        descricao: descricao.trim() || 'ITEM EXTRA',
+        qt_conferida: Number(qt) || 0
+      });
+      renderExtras();
+    }
+
+    async function carregarPendencias() {
+      if (!state.usuario || !['supervisor', 'administrador'].includes(state.usuario.perfil)) return;
+      const list = $('lista-pendencias');
+      list.innerHTML = '<li class="muted">Carregando...</li>';
+      try {
+        const resp = await apiFetch('/api/confnf/conferencias/pendentes');
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Falha ao carregar pendencias.');
+        state.pendencias = data || [];
+        if (state.pendencias.length === 0) {
+          list.innerHTML = '<li class="muted">Nenhuma conferencia pendente.</li>';
+          return;
+        }
+        list.innerHTML = '';
+        state.pendencias.forEach((item) => {
+          const li = document.createElement('li');
+          li.innerHTML = `
+            <button type="button" class="btn-ghost" style="width:100%;text-align:left;" data-pendente-id="${item.id}">
+              <strong>NF ${item.nNF || '-'} / Serie ${item.serie || '-'}</strong><br>
+              <span class="muted">${item.nome_emitente || '-'} | ${item.status} | ${formatarData(item.dt_inicio)}</span>
+            </button>
+          `;
+          list.appendChild(li);
+        });
+        list.querySelectorAll('[data-pendente-id]').forEach((btn) => {
+          btn.addEventListener('click', () => carregarConferenciaSupervisor(btn.dataset.pendenteId));
+        });
+      } catch (error) {
+        list.innerHTML = `<li style="color:#c0392b;">${error.message || 'Falha ao carregar pendencias.'}</li>`;
+      }
+    }
+
+    async function carregarConferenciaSupervisor(id) {
+      try {
+        const resp = await apiFetch(`/api/confnf/conferencia/${id}`);
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Falha ao carregar conferencia.');
+        state.conferenciaSupervisor = data;
+        renderSupervisor();
+      } catch (error) {
+        $('resumo-supervisor').textContent = error.message || 'Falha ao carregar conferencia.';
+      }
+    }
+
+    function renderSupervisor() {
+      const data = state.conferenciaSupervisor;
+      if (!data) return;
+      $('resumo-supervisor').innerHTML = `
+        <strong>Conferencia #${data.cabecalho.id}</strong><br>
+        NF: ${data.cabecalho.nNF || '-'} / Serie ${data.cabecalho.serie || '-'}<br>
+        Emitente: ${data.cabecalho.nome_emitente || '-'}<br>
+        Status: ${data.cabecalho.status || '-'}
+      `;
+      const tbody = $('tabela-supervisor').querySelector('tbody');
+      tbody.innerHTML = '';
+      (data.itens || []).forEach((item) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${item.nItem}</td>
+          <td>
+            <strong>XML:</strong> ${item.xProd || '-'}<br>
+            <span class="muted">ERP: ${item.erp_descricao || 'Sem vínculo ERP'}</span><br>
+            <span class="muted">Cod ERP: ${item.erp_codigo ?? '-'} | Un ERP: ${item.erp_unidade || item.unid_erp || item.uCom || '-'}</span>
+          </td>
+          <td>${item.uCom || '-'}<br><span class="muted">Digitado: ${item.unidade_digitacao || item.erp_unidade || item.unid_erp || item.uCom || '-'}</span></td>
+          <td>${formatarNumero(item.qNF || 0, 4)}</td>
+          <td>${formatarNumero(item.qt_conferida_erp || item.qt_conferida || 0, 4)}<br><span class="muted">XML: ${formatarNumero(item.qt_conferida_xml || 0, 4)}</span></td>
+          <td>${formatarNumero(item.diferenca || 0, 4)}<br><span class="muted">${formatarNumero(item.percentual_diferenca || 0, 2)}%</span></td>
+          <td>${statusBadge(item.status_resumido || item.status || 'pendente')}</td>
+          <td>
+            <select data-acao-item="${item.id}">
+              <option value="aceitar">Aceitar</option>
+              <option value="recontagem">Recontagem</option>
+              <option value="devolver">Devolver</option>
+              <option value="forcar_nf">Forcar NF</option>
+            </select>
+          </td>
+          <td><input data-obs-item="${item.id}" placeholder="Observacao"></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function coletarAcoesSupervisor(acaoGlobal) {
+      const selects = Array.from(document.querySelectorAll('[data-acao-item]'));
+      return selects.map((select) => {
+        const idItem = select.dataset.acaoItem;
+        const obsInput = document.querySelector(`[data-obs-item="${idItem}"]`);
+        return {
+          id_item: Number(idItem),
+          acao: select.value,
+          obs: obsInput ? obsInput.value.trim() : ''
+        };
+      }).filter((item) => item.acao || acaoGlobal);
+    }
+
+    async function enviarAcaoSupervisor(acaoGlobal) {
+      if (!state.conferenciaSupervisor?.cabecalho?.id) return;
+      try {
+        const resp = await apiFetch('/api/confnf/conferencia/aprovar', {
+          method: 'POST',
+          body: JSON.stringify({
+            id_conferencia: state.conferenciaSupervisor.cabecalho.id,
+            acao_global: acaoGlobal,
+            acoes: coletarAcoesSupervisor(acaoGlobal),
+            obs: acaoGlobal === 'rejeitar_nf' ? 'NF rejeitada pelo supervisor.' : ''
+          })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Falha ao processar aprovacao.');
+        $('resumo-supervisor').innerHTML += `<br><strong>Resultado:</strong> ${data.status}`;
+        await carregarPendencias();
+        await carregarConferenciaSupervisor(state.conferenciaSupervisor.cabecalho.id);
+      } catch (error) {
+        $('resumo-supervisor').innerHTML += `<br><span style="color:#c0392b;">${error.message || 'Falha ao processar aprovacao.'}</span>`;
+      }
+    }
+
+    $('login-form').addEventListener('submit', login);
+    $('btn-logout').addEventListener('click', logout);
+    $('chave-nfe').addEventListener('input', () => {
+      $('chave-nfe').value = $('chave-nfe').value.replace(/\D/g, '').slice(0, 44);
+      renderPreviewChave();
+    });
+    $('btn-validar-chave').addEventListener('click', () => {
+      const chave = $('chave-nfe').value.replace(/\D/g, '');
+      renderPreviewChave();
+      setBanner('nfe-banner', validarDigitoVerificador(chave) ? 'Chave valida.' : 'Chave invalida.', validarDigitoVerificador(chave) ? 'success' : 'error');
+    });
+    $('btn-buscar-nfe').addEventListener('click', buscarNfe);
+    $('btn-iniciar-conferencia').addEventListener('click', iniciarConferencia);
+    $('btn-recarregar-conferencia').addEventListener('click', carregarConferenciaAtual);
+    $('btn-localizar-produto').addEventListener('click', localizarProdutoPorCodigo);
+    $('scan-produto').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        localizarProdutoPorCodigo();
+      }
+    });
+    $('editor-quantidade').addEventListener('input', atualizarResumoEditor);
+    $('btn-adicionar-lote').addEventListener('click', () => {
+      if (!state.itemEditor) return;
+      const item = obterItemPorNItem(state.itemEditor.nItem) || {};
+      state.itemEditor.lotes.push({
+        lote: '',
+        dt_validade: '',
+        qt_informada: '',
+        unidade: item.unidade_digitacao || item.erp_unidade || item.unid_erp || item.uCom || '',
+        obs: ''
+      });
+      renderLotesEditor();
+    });
+    $('btn-fechar-editor').addEventListener('click', fecharEditorItem);
+    $('btn-cancelar-editor').addEventListener('click', fecharEditorItem);
+    $('btn-salvar-editor').addEventListener('click', salvarEditorItem);
+    $('btn-adicionar-extra').addEventListener('click', adicionarExtra);
+    $('btn-enviar-aprovacao').addEventListener('click', enviarParaAprovacao);
+    $('btn-carregar-pendencias').addEventListener('click', carregarPendencias);
+    $('btn-aprovar-tudo').addEventListener('click', () => enviarAcaoSupervisor('aprovar_tudo'));
+    $('btn-enviar-recontagem').addEventListener('click', () => enviarAcaoSupervisor('recontagem'));
+    $('btn-rejeitar-nf').addEventListener('click', () => enviarAcaoSupervisor('rejeitar_nf'));
+
+    atualizarSessaoUI();
+    renderPreviewChave();
+  </script>
+</body>
+</html>

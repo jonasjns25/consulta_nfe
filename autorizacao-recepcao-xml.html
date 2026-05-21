@@ -1,0 +1,1499 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Autorização de Recepção de XML</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Inter", "Segoe UI", "Roboto", sans-serif;
+      --lumi-primary: #C8102E;
+      --lumi-primary-strong: #DB2636;
+      --lumi-secondary: #E03C49;
+      --lumi-secondary-soft: rgba(200, 16, 46, 0.18);
+      --lumi-surface: #FFFFFF;
+      --lumi-surface-muted: #FFF8F4;
+      --lumi-gradient-start: #FFF8F4;
+      --lumi-gradient-end: #FFFFFF;
+      --lumi-dark: #222222;
+      --lumi-text: #222222;
+      --lumi-muted: #3A3A3A;
+      --lumi-border: rgba(200, 16, 46, 0.2);
+      --success: #00b894;
+      --warning: #ffb347;
+      --danger: #DB2636;
+      --shadow: 0 20px 45px rgba(34, 34, 34, 0.14);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at top left, var(--lumi-gradient-start), var(--lumi-gradient-end));
+      padding: 2.5rem 1.5rem 3rem;
+      color: var(--lumi-text);
+    }
+    .nav-links {
+      max-width: 1200px;
+      margin: 0 auto 1rem;
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .nav-links a {
+      color: var(--lumi-muted);
+      text-decoration: none;
+      font-size: 0.95rem;
+      padding: 0.4rem 0.8rem;
+      border-radius: 10px;
+      transition: background 0.2s, color 0.2s;
+    }
+    .nav-links a:hover {
+      color: var(--lumi-primary);
+      background: var(--lumi-secondary-soft);
+    }
+    .nav-links a.active {
+      color: var(--lumi-primary);
+      font-weight: 600;
+    }
+    header {
+      max-width: 1200px;
+      margin: 0 auto 1.5rem;
+    }
+    header h1 {
+      margin: 0;
+      font-size: clamp(1.8rem, 3vw, 2.6rem);
+      font-weight: 700;
+      color: var(--lumi-dark);
+    }
+    header p { margin: 0; color: var(--lumi-muted); }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+    .card {
+      background: var(--lumi-surface);
+      border-radius: 24px;
+      padding: 1.9rem;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--lumi-border);
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+    .card-header h2 { margin: 0; font-size: 1.2rem; }
+    .card-header span { color: var(--lumi-muted); font-size: 0.95rem; }
+    label {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--lumi-muted);
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+    input[type="file"],
+    input[type="text"],
+    select {
+      border-radius: 12px;
+      border: 1px solid var(--lumi-border);
+      padding: 0.75rem;
+      font-size: 1rem;
+      background: #fff;
+      color: #222;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--lumi-primary);
+      box-shadow: 0 0 0 3px rgba(200, 16, 46, 0.25);
+    }
+    button {
+      border: none;
+      border-radius: 12px;
+      padding: 0.85rem 1.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-strong));
+      color: #fff;
+      box-shadow: 0 12px 30px rgba(200, 16, 46, 0.35);
+    }
+    .btn-secondary {
+      background: rgba(200, 16, 46, 0.08);
+      color: var(--lumi-dark);
+    }
+    .legenda {
+      font-size: 0.85rem;
+      color: var(--lumi-muted);
+      margin: -0.5rem 0 0.5rem;
+    }
+    .table-wrapper {
+      overflow: auto;
+      border-radius: 20px;
+      border: 1px solid rgba(200, 16, 46, 0.08);
+    }
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0 8px;
+      min-width: 900px;
+    }
+    thead { background: rgba(200, 16, 46, 0.06); }
+    th, td {
+      text-align: left;
+      padding: 0.75rem 0.85rem;
+      font-size: 0.9rem;
+      vertical-align: middle;
+    }
+    tbody tr {
+      background: #fff;
+      box-shadow: 0 8px 16px rgba(34, 34, 34, 0.05);
+      cursor: pointer;
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+    tbody tr:nth-child(even) { background: rgba(200, 16, 46, 0.04); }
+    tbody tr:hover {
+      background: rgba(200, 16, 46, 0.08);
+      box-shadow: 0 12px 20px rgba(34, 34, 34, 0.1);
+    }
+    .situacao-ok { color: var(--success); font-weight: 500; }
+    .situacao-erro { color: var(--danger); font-weight: 500; }
+    .situacao-aviso { color: var(--warning); font-weight: 500; }
+    .empty-state {
+      border: 1px dashed rgba(200, 16, 46, 0.35);
+      border-radius: 16px;
+      padding: 2rem;
+      text-align: center;
+      color: var(--lumi-muted);
+    }
+    .form-actions-rodape {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: flex-end;
+    }
+    .form-actions-rodape label { flex: 1; min-width: 200px; }
+    .form-actions-rodape .btns { display: flex; gap: 0.75rem; }
+    .resumo { font-size: 0.9rem; color: var(--lumi-muted); margin-bottom: 1rem; }
+    .hidden { display: none !important; }
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      background: var(--lumi-dark);
+      color: #fff;
+      padding: 0.9rem 1.2rem;
+      border-radius: 12px;
+      box-shadow: 0 20px 30px rgba(34, 34, 34, 0.2);
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.2s, transform 0.2s;
+    }
+    .toast.visible { opacity: 1; transform: translateY(0); }
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-content {
+      background: #fff;
+      border-radius: 20px;
+      padding: 1.5rem 2rem;
+      max-width: 480px;
+      width: 100%;
+      box-shadow: 0 25px 50px rgba(0,0,0,0.25);
+    }
+    .modal-content h3 { margin: 0 0 0.75rem; }
+    .modal-content p { color: var(--lumi-muted); margin: 0 0 1rem; }
+    .modal-content .modal-actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem; }
+    .modal-vinculo .modal-resumo-erros { font-size: 0.9rem; white-space: pre-wrap; max-height: 80px; overflow-y: auto; margin-bottom: 1rem; }
+    .modal-vinculo-campos { display: flex; flex-direction: column; gap: 1rem; margin: 1rem 0; }
+    .modal-campo label { font-size: 0.85rem; font-weight: 600; color: var(--lumi-muted); }
+    .modal-campo input { width: 100%; }
+    .modal-campo.readonly .modal-campo input, .modal-campo.readonly #modal-ref-info { background: var(--lumi-surface-muted); padding: 0.5rem 0.75rem; border-radius: 10px; }
+    .input-with-search { display: flex; gap: 0.5rem; align-items: center; }
+    .input-with-search input { flex: 1; }
+    .input-with-search-wrap { position: relative; }
+    .btn-icon { padding: 0.75rem; border-radius: 12px; border: 1px solid var(--lumi-border); background: var(--lumi-surface); cursor: pointer; font-size: 1rem; }
+    .btn-icon:hover { background: var(--lumi-secondary-soft); border-color: var(--lumi-primary); }
+    .busca-resultados { position: absolute; left: 0; right: 0; top: 100%; z-index: 10; background: #fff; border: 1px solid var(--lumi-border); border-radius: 12px; box-shadow: var(--shadow); max-height: 220px; overflow-y: auto; margin-top: 4px; }
+    .busca-resultados:not(.hidden) { display: block; }
+    .busca-resultados .item-busca { padding: 0.6rem 0.75rem; cursor: pointer; border-bottom: 1px solid var(--lumi-border); font-size: 0.9rem; }
+    .busca-resultados .item-busca:last-child { border-bottom: none; }
+    .busca-resultados .item-busca:hover { background: var(--lumi-secondary-soft); }
+    .busca-resultados .item-busca strong { color: var(--lumi-primary); }
+    .modal-content.modal-vinculo { max-width: 520px; }
+    .filtros-consulta-card .filtros-tags { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.75rem 0; align-items: center; }
+    .filtros-consulta-card .filtro-tag { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.35rem 0.75rem; background: rgba(200, 16, 46, 0.1); border-radius: 999px; font-size: 0.85rem; color: var(--lumi-dark); }
+    .filtros-consulta-card .filtro-tag strong { color: var(--lumi-primary); }
+    .filtros-consulta-card .link-consulta { margin-top: 0.75rem; }
+    .filtros-consulta-card .link-consulta a { color: var(--lumi-primary); font-weight: 600; text-decoration: none; }
+    .filtros-consulta-card .link-consulta a:hover { text-decoration: underline; }
+    .filtros-consulta-card .sem-filtros { color: var(--lumi-muted); font-size: 0.95rem; margin: 0.5rem 0; }
+  </style>
+</head>
+<body>
+  <nav class="nav-links">
+    <a href="index.html">Consulta NF-e</a>
+    <a href="autorizacao-recepcao-xml.html" class="active">Autorização de Recepção de XML</a>
+  </nav>
+
+  <header>
+    <h1>Autorização de Recepção de XML</h1>
+    <p>Selecione o XML da nota, valide os itens (REF/PLU) e autorize a recepção para facilitar o lançamento das NFs no sistema.</p>
+  </header>
+
+  <main>
+    <section class="card filtros-consulta-card">
+      <div class="card-header">
+        <div>
+          <h2>Filtros da consulta</h2>
+          <span>Mesmos filtros da página Consulta NF-e. Altere na Consulta e use o botão &quot;Autorizar recepção de XML&quot; para voltar com os novos filtros.</span>
+        </div>
+        <div>
+          <a href="#" id="link-alterar-filtros" class="btn-primary" style="display: inline-block; text-decoration: none;">Alterar filtros na Consulta NF-e</a>
+        </div>
+      </div>
+      <div id="filtros-tags-container">
+        <div class="filtros-tags" id="filtros-tags"></div>
+        <p class="sem-filtros hidden" id="sem-filtros-msg">Nenhum filtro herdado. Na página Consulta NF-e, clique no ícone &quot;Autorizar recepção de XML&quot; (✓) na linha da NF-e que deseja incluir no sistema.</p>
+      </div>
+      <div class="link-consulta hidden" id="link-consulta-wrap">
+        <a href="#" id="link-consulta">Abrir Consulta NF-e com estes filtros</a>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <div>
+          <h2>XML da NF-e a ser autorizada</h2>
+          <span>O XML vinculado à NF-e selecionada na Consulta será incluído no sistema após análise e salvamento.</span>
+        </div>
+      </div>
+      <div id="nfe-vinculada-wrap" class="hidden" style="margin-bottom: 1rem; padding: 1rem; background: rgba(200, 16, 46, 0.08); border-radius: 12px; border: 1px solid var(--lumi-border);">
+        <div style="font-weight: 600; color: var(--lumi-primary); margin-bottom: 0.35rem;">NF-e vinculada (da Consulta NF-e)</div>
+        <div id="nfe-chave-exibir" style="font-family: monospace; font-size: 0.85rem; word-break: break-all; color: var(--lumi-dark); margin-bottom: 0.75rem;"></div>
+        <button type="button" class="btn-primary" id="btn-carregar-xml-sistema">Carregar XML desta NF-e do sistema</button>
+      </div>
+      <label>
+        Ou selecione um arquivo XML manualmente
+        <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+          <input type="file" id="input-xml" accept=".xml" style="max-width: 320px;">
+          <span id="arquivo-nome" style="color: var(--lumi-muted); font-size: 0.9rem;">Nenhum arquivo selecionado.</span>
+        </div>
+      </label>
+    </section>
+
+    <p class="legenda">
+      <strong>REF</strong> = dados do XML (Danfe) &nbsp;|&nbsp; <strong>PLU</strong> = produto cadastrado no sistema &nbsp;|&nbsp;
+      Clique duas vezes na linha para corrigir divergências.
+    </p>
+
+    <section class="card">
+      <div class="card-header">
+        <div>
+          <h2>Itens da nota (REF / PLU / Situação)</h2>
+          <span id="resumo-texto">Selecione um arquivo XML para exibir os itens.</span>
+        </div>
+      </div>
+      <div class="table-wrapper" id="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 3%;">#</th>
+              <th style="width: 18%;">REF - Descrição (XML)</th>
+              <th style="width: 11%;">REF - EAN (XML)</th>
+              <th style="width: 7%;">REF - Un.</th>
+              <th style="width: 8%;">PLU - Código</th>
+              <th style="width: 18%;">PLU - Descrição (Sistema)</th>
+              <th style="width: 7%;">PLU - Un.</th>
+              <th style="width: 7%;">Fator Conv.</th>
+              <th style="width: 21%;">Situação</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-itens"></tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="empty-state">
+        <p>Nenhum item carregado.</p>
+        <small>Selecione um arquivo XML da NF-e acima.</small>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <div>
+          <h2>Após validar todos os itens (Situação OK)</h2>
+          <span>Escolha a natureza de operação, analise e salve para autorizar a recepção.</span>
+        </div>
+      </div>
+      <div class="form-actions-rodape">
+        <label>
+          Natureza de Operação
+          <select id="natureza-operacao">
+            <option value="">Selecione a natureza de operação</option>
+            <option value="1">Entrada - Compra</option>
+            <option value="2">Entrada - Devolução</option>
+            <option value="3">Outras entradas</option>
+          </select>
+        </label>
+        <div class="btns">
+          <button type="button" class="btn-primary" id="btn-analisar" disabled>Analisar</button>
+          <button type="button" class="btn-secondary" id="btn-salvar" disabled>Salvar</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="modal-overlay" id="modal-divergencia">
+    <div class="modal-content modal-vinculo">
+      <h3>Vincular item do XML ao sistema</h3>
+      <p id="modal-divergencia-texto" class="modal-resumo-erros"></p>
+      <div class="modal-vinculo-campos">
+        <div class="modal-campo readonly">
+          <label>Item do XML (REF)</label>
+          <div id="modal-ref-info">—</div>
+        </div>
+        <div class="modal-campo modal-campo-busca">
+          <label>PLU (código do sistema)</label>
+          <div class="input-with-search-wrap">
+            <div class="input-with-search">
+              <input type="text" id="modal-plu" placeholder="Código ou busque pelo nome/EAN" autocomplete="off" />
+              <button type="button" class="btn-icon" id="modal-buscar-plu" title="Buscar produto">🔍</button>
+            </div>
+            <div id="modal-busca-resultados" class="busca-resultados hidden"></div>
+          </div>
+        </div>
+        <div class="modal-campo">
+          <label>Descrição (sistema)</label>
+          <input type="text" id="modal-descricao" readonly placeholder="Preencha o PLU ou escolha na busca" />
+        </div>
+        <div class="modal-campo">
+          <label>Unidade</label>
+          <input type="text" id="modal-unidade" placeholder="Ex: UN, CX, PCT" />
+        </div>
+        <div class="modal-campo">
+          <label>Fator de conversão</label>
+          <input type="text" id="modal-fator" placeholder="Ex: 1" />
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="modal-fechar">Cancelar</button>
+        <button type="button" class="btn-primary" id="modal-salvar-vinculo">Salvar vínculo</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const inputXml = document.getElementById('input-xml');
+    const arquivoNome = document.getElementById('arquivo-nome');
+    const tbodyItens = document.getElementById('tbody-itens');
+    const resumoTexto = document.getElementById('resumo-texto');
+    const tableWrapper = document.getElementById('table-wrapper');
+    const emptyState = document.getElementById('empty-state');
+    const btnAnalisar = document.getElementById('btn-analisar');
+    const btnSalvar = document.getElementById('btn-salvar');
+    const naturezaOperacao = document.getElementById('natureza-operacao');
+    const toast = document.getElementById('toast');
+    const modalDivergencia = document.getElementById('modal-divergencia');
+    const modalDivergenciaTexto = document.getElementById('modal-divergencia-texto');
+    const modalFechar = document.getElementById('modal-fechar');
+    const modalRefInfo = document.getElementById('modal-ref-info');
+    const modalPlu = document.getElementById('modal-plu');
+    const modalDescricao = document.getElementById('modal-descricao');
+    const modalUnidade = document.getElementById('modal-unidade');
+    const modalFator = document.getElementById('modal-fator');
+    const modalBuscaResultados = document.getElementById('modal-busca-resultados');
+    const modalBuscarPlu = document.getElementById('modal-buscar-plu');
+    const modalSalvarVinculo = document.getElementById('modal-salvar-vinculo');
+
+    let modalVinculoIndex = -1;
+    let buscaPluTimeout = null;
+    const filtrosTags = document.getElementById('filtros-tags');
+    const semFiltrosMsg = document.getElementById('sem-filtros-msg');
+    const linkConsultaWrap = document.getElementById('link-consulta-wrap');
+    const linkConsulta = document.getElementById('link-consulta');
+    const linkAlterarFiltros = document.getElementById('link-alterar-filtros');
+    const nfeVinculadaWrap = document.getElementById('nfe-vinculada-wrap');
+    const nfeChaveExibir = document.getElementById('nfe-chave-exibir');
+    const btnCarregarXmlSistema = document.getElementById('btn-carregar-xml-sistema');
+
+    let itens = [];
+    let chaveNfeAtual = '';
+
+    // Parâmetros de filtro (mesmos da Consulta NF-e)
+    function getParamsFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        data_inicial: params.get('data_inicial') || '',
+        data_final: params.get('data_final') || '',
+        estabelecimento: params.get('estabelecimento') || '',
+        tipo_nf: params.get('tipo_nf') || '',
+        fornecedor: params.get('fornecedor') || '',
+        numero: params.get('numero') || '',
+        chave: params.get('chave') || '',
+        status: params.get('status') || '',
+        status_compra: params.get('status_compra') || '',
+        usuario: params.get('usuario') || ''
+      };
+    }
+
+    function formatarDataFiltro(s) {
+      if (!s) return '-';
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+        const [a, m, d] = s.slice(0, 10).split('-');
+        return d + '/' + m + '/' + a;
+      }
+      return s;
+    }
+
+    function aplicarFiltrosNaPagina() {
+      const p = getParamsFromUrl();
+      const temAlgum = Object.values(p).some(v => v !== '');
+      semFiltrosMsg.classList.toggle('hidden', temAlgum);
+      filtrosTags.classList.toggle('hidden', !temAlgum);
+      linkConsultaWrap.classList.toggle('hidden', !temAlgum);
+
+      const query = new URLSearchParams();
+      Object.entries(p).forEach(([k, v]) => { if (v) query.append(k, v); });
+      const queryString = query.toString();
+      linkAlterarFiltros.href = queryString ? 'index.html?' + queryString : 'index.html';
+      linkConsulta.href = linkAlterarFiltros.href;
+
+      if (!temAlgum) return;
+
+      const labels = {
+        tipo_nf: { '1': 'Saída', '0': 'Entrada', '': 'Todas' },
+        status: { 'lancada': 'Lançadas', 'pendente': 'Pendentes', '': 'Todas' },
+        status_compra: { '': 'Todos', 'pendente': 'Pendente (não lançada)', '0': 'Não Conferida', '1': 'Em Conferência', '2': 'Na Recepção', '3': 'Com Divergência', '4': 'NF Recebida' }
+      };
+      const tags = [];
+      if (p.data_inicial && p.data_final) {
+        tags.push('<span class="filtro-tag"><strong>Período:</strong> ' + formatarDataFiltro(p.data_inicial) + ' → ' + formatarDataFiltro(p.data_final) + '</span>');
+      }
+      if (p.estabelecimento) {
+        tags.push('<span class="filtro-tag"><strong>Estab.:</strong> ' + escapeHtml(p.estabelecimento) + '</span>');
+      }
+      if (p.tipo_nf !== undefined && labels.tipo_nf[p.tipo_nf]) {
+        tags.push('<span class="filtro-tag"><strong>Tipo NF:</strong> ' + labels.tipo_nf[p.tipo_nf] + '</span>');
+      }
+      if (p.fornecedor) {
+        tags.push('<span class="filtro-tag"><strong>Fornecedor:</strong> ' + escapeHtml(p.fornecedor.substring(0, 20)) + (p.fornecedor.length > 20 ? '…' : '') + '</span>');
+      }
+      if (p.numero) {
+        tags.push('<span class="filtro-tag"><strong>Nº NF:</strong> ' + escapeHtml(p.numero) + '</span>');
+      }
+      if (p.status && labels.status[p.status]) {
+        tags.push('<span class="filtro-tag"><strong>Status:</strong> ' + labels.status[p.status] + '</span>');
+      }
+      if (p.status_compra !== undefined && labels.status_compra[p.status_compra]) {
+        tags.push('<span class="filtro-tag"><strong>Status compra:</strong> ' + labels.status_compra[p.status_compra] + '</span>');
+      }
+      if (p.usuario) {
+        tags.push('<span class="filtro-tag"><strong>Usuário:</strong> ' + escapeHtml(p.usuario) + '</span>');
+      }
+      filtrosTags.innerHTML = tags.join('');
+
+      // NF-e vinculada (chave do XML a ser autorizado)
+      chaveNfeAtual = p.chave || '';
+      if (chaveNfeAtual) {
+        nfeVinculadaWrap.classList.remove('hidden');
+        nfeChaveExibir.textContent = chaveNfeAtual;
+      } else {
+        nfeVinculadaWrap.classList.add('hidden');
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      aplicarFiltrosNaPagina();
+      btnCarregarXmlSistema.addEventListener('click', carregarXmlDoSistema);
+    });
+
+    async function carregarXmlDoSistema() {
+      if (!chaveNfeAtual) return;
+      btnCarregarXmlSistema.disabled = true;
+      btnCarregarXmlSistema.textContent = 'Carregando…';
+      try {
+        const resp = await fetch('/xml/' + encodeURIComponent(chaveNfeAtual));
+        if (!resp.ok) throw new Error('XML não encontrado ou erro no servidor.');
+        const texto = await resp.text();
+        const extraidos = extrairItensDoXml(texto);
+        if (!extraidos) {
+          itens = linhasExemplo();
+          mostrarToast('XML recebido; exibindo dados de exemplo (parsing em desenvolvimento).');
+        } else {
+          mostrarToast('Validando produtos com dados do sistema...');
+          itens = await validarItensComERP(extraidos, chaveNfeAtual);
+          mostrarToast('XML da NF-e carregado e validado.');
+        }
+        arquivoNome.textContent = 'XML carregado do sistema (chave ' + chaveNfeAtual.substring(0, 8) + '…)';
+        arquivoNome.style.color = 'var(--lumi-text)';
+        atualizarTabela();
+      } catch (e) {
+        mostrarToast(e.message || 'Erro ao carregar XML do sistema.', true);
+      } finally {
+        btnCarregarXmlSistema.disabled = false;
+        btnCarregarXmlSistema.textContent = 'Carregar XML desta NF-e do sistema';
+      }
+    }
+
+    function mostrarToast(msg, isError = false) {
+      toast.textContent = msg;
+      toast.style.background = isError ? 'var(--danger)' : 'var(--lumi-dark)';
+      toast.classList.add('visible');
+      setTimeout(() => toast.classList.remove('visible'), 2600);
+    }
+
+    function atualizarTabela() {
+      tbodyItens.innerHTML = '';
+      const temItens = itens.length > 0;
+      tableWrapper.classList.toggle('hidden', !temItens);
+      emptyState.classList.toggle('hidden', temItens);
+      btnAnalisar.disabled = !temItens;
+
+      if (!temItens) return;
+
+      let okCount = 0;
+      itens.forEach((item, idx) => {
+        if (item.situacaoClasse === 'situacao-ok') okCount++;
+        const tr = document.createElement('tr');
+        tr.dataset.index = idx;
+        tr.innerHTML = `
+          <td>${item.num}</td>
+          <td>${escapeHtml(item.refDescricao)}</td>
+          <td>${escapeHtml(item.refEan)}</td>
+          <td>${item.refUnidade}</td>
+          <td>${item.pluCodigo}</td>
+          <td>${escapeHtml(item.pluDescricao)}</td>
+          <td>${item.pluUnidade}</td>
+          <td>${item.fatorConversao}</td>
+          <td class="${item.situacaoClasse}">${escapeHtml(item.situacao)}</td>
+        `;
+        tr.addEventListener('dblclick', () => abrirModalDivergencia(item, idx));
+        tbodyItens.appendChild(tr);
+      });
+
+      resumoTexto.textContent = `${itens.length} item(ns) | ${okCount} validado(s) | ${itens.length - okCount} pendente(s) de análise.`;
+    }
+
+    function escapeHtml(s) {
+      if (s == null) return '';
+      const t = document.createElement('div');
+      t.textContent = s;
+      return t.innerHTML;
+    }
+
+    function abrirModalDivergencia(item, index) {
+      modalVinculoIndex = index;
+      // Resumo de erros/avisos
+      let texto = (item.situacao || '') + '\n';
+      if (item.erros && item.erros.length > 0) {
+        texto += '\nErros: ' + item.erros.join('; ');
+      }
+      if (item.avisos && item.avisos.length > 0) {
+        texto += (texto.trim() ? '\n' : '') + 'Avisos: ' + item.avisos.join('; ');
+      }
+      modalDivergenciaTexto.textContent = texto || 'Nenhuma divergência. Você pode ajustar o vínculo com o sistema.';
+
+      modalRefInfo.innerHTML = '<strong>#' + escapeHtml(item.num) + '</strong> ' + escapeHtml(item.refDescricao || '-') +
+        '<br><small>EAN: ' + escapeHtml(item.refEan || '-') + ' · Unidade XML: ' + escapeHtml(item.refUnidade || '-') + '</small>';
+
+      modalPlu.value = item.pluCodigo || '';
+      modalDescricao.value = item.pluDescricao || '';
+      modalUnidade.value = item.pluUnidade || '';
+      modalFator.value = item.fatorConversao != null && item.fatorConversao !== '' ? String(item.fatorConversao) : '1';
+
+      modalBuscaResultados.classList.add('hidden');
+      modalBuscaResultados.innerHTML = '';
+      modalDivergencia.classList.add('active');
+      setTimeout(() => modalPlu.focus(), 100);
+    }
+
+    function fecharModalVinculo() {
+      modalDivergencia.classList.remove('active');
+      modalVinculoIndex = -1;
+      modalBuscaResultados.classList.add('hidden');
+    }
+
+    async function buscarProdutos(q) {
+      if (!q || q.length < 2) return [];
+      const resp = await fetch('/produtos/buscar?q=' + encodeURIComponent(q));
+      if (!resp.ok) return [];
+      return resp.json();
+    }
+
+    function exibirResultadosBusca(lista) {
+      modalBuscaResultados.innerHTML = '';
+      if (!lista || lista.length === 0) {
+        modalBuscaResultados.innerHTML = '<div class="item-busca">Nenhum produto encontrado.</div>';
+      } else {
+        lista.forEach(p => {
+          const div = document.createElement('div');
+          div.className = 'item-busca';
+          div.innerHTML = '<strong>' + escapeHtml(String(p.plu)) + '</strong> ' + escapeHtml(p.descricao || '') + (p.unidade ? ' · ' + escapeHtml(p.unidade) : '');
+          div.dataset.plu = p.plu;
+          div.dataset.descricao = p.descricao || '';
+          div.dataset.unidade = p.unidade || '';
+          div.addEventListener('click', () => {
+            modalPlu.value = p.plu;
+            modalDescricao.value = p.descricao || '';
+            modalUnidade.value = p.unidade || '';
+            modalBuscaResultados.classList.add('hidden');
+            modalBuscaResultados.innerHTML = '';
+            modalFator.focus();
+          });
+          modalBuscaResultados.appendChild(div);
+        });
+      }
+      modalBuscaResultados.classList.remove('hidden');
+    }
+
+    modalBuscarPlu.addEventListener('click', async () => {
+      const q = modalPlu.value.trim();
+      if (q.length < 2) {
+        mostrarToast('Digite ao menos 2 caracteres para buscar.', true);
+        return;
+      }
+      const lista = await buscarProdutos(q);
+      exibirResultadosBusca(lista);
+    });
+
+    modalPlu.addEventListener('input', () => {
+      clearTimeout(buscaPluTimeout);
+      modalBuscaResultados.classList.add('hidden');
+      const q = modalPlu.value.trim();
+      if (q.length < 2) return;
+      buscaPluTimeout = setTimeout(async () => {
+        const lista = await buscarProdutos(q);
+        exibirResultadosBusca(lista);
+      }, 350);
+    });
+
+    modalPlu.addEventListener('focus', () => {
+      const q = modalPlu.value.trim();
+      if (q.length >= 2 && modalBuscaResultados.classList.contains('hidden')) {
+        buscarProdutos(q).then(exibirResultadosBusca);
+      }
+    });
+
+    modalSalvarVinculo.addEventListener('click', () => {
+      if (modalVinculoIndex < 0 || !itens[modalVinculoIndex]) return;
+      const plu = modalPlu.value.trim();
+      const descricao = modalDescricao.value.trim();
+      const unidade = modalUnidade.value.trim();
+      const fator = modalFator.value.trim();
+      if (!plu) {
+        mostrarToast('Informe o PLU (código do sistema).', true);
+        return;
+      }
+      const item = itens[modalVinculoIndex];
+      item.pluCodigo = plu;
+      item.pluDescricao = descricao || item.pluDescricao;
+      item.pluUnidade = unidade || item.pluUnidade;
+      item.fatorConversao = fator || '1';
+      item.situacao = 'Vinculado manualmente';
+      item.situacaoClasse = 'situacao-aviso';
+      item.erros = item.erros || [];
+      item.avisos = item.avisos || [];
+      fecharModalVinculo();
+      atualizarTabela();
+      mostrarToast('Vínculo salvo. A linha foi atualizada.');
+    });
+
+    modalFechar.addEventListener('click', fecharModalVinculo);
+    modalDivergencia.addEventListener('click', (e) => {
+      if (e.target === modalDivergencia) fecharModalVinculo();
+    });
+
+    function linhasExemplo() {
+      return [
+        { num: '1', refDescricao: 'Produto Exemplo A (XML)', refEan: '7891234567890', refUnidade: 'UN', pluCodigo: '1001', pluDescricao: 'Produto A - Cadastro Sistema', pluUnidade: 'UN', fatorConversao: '1', situacao: 'OK - Pendente de Análise', situacaoClasse: 'situacao-ok' },
+        { num: '2', refDescricao: 'Produto Exemplo B (XML)', refEan: '7891234567891', refUnidade: 'CX', pluCodigo: '', pluDescricao: '', pluUnidade: '', fatorConversao: '', situacao: 'Produto Não Cadastrado', situacaoClasse: 'situacao-erro' },
+        { num: '3', refDescricao: 'Produto Exemplo C (XML)', refEan: '7891234567892', refUnidade: 'PAR', pluCodigo: '1003', pluDescricao: 'Produto C - Cadastro', pluUnidade: 'UN', fatorConversao: '2', situacao: 'Divergência entre Embalagem e Unidade', situacaoClasse: 'situacao-aviso' }
+      ];
+    }
+
+    // ==== Funções de validação (baseadas em detalhes.html) ====
+    function buscarCampoERP(obj, ...nomes) {
+      if (!obj) return null;
+      for (const nome of nomes) {
+        if (obj[nome] !== undefined && obj[nome] !== null) return obj[nome];
+        const nomeUpper = nome.toUpperCase();
+        if (obj[nomeUpper] !== undefined && obj[nomeUpper] !== null) return obj[nomeUpper];
+        const nomeLower = nome.toLowerCase();
+        if (obj[nomeLower] !== undefined && obj[nomeLower] !== null) return obj[nomeLower];
+      }
+      return null;
+    }
+
+    function compararValores(valorXML, valorERP) {
+      const erpTemValor = valorERP !== null && valorERP !== undefined && 
+                         (typeof valorERP === 'number' ? true : String(valorERP).trim() !== '');
+      const xmlTemValor = valorXML !== null && valorXML !== undefined && 
+                         (typeof valorXML === 'number' ? true : String(valorXML).trim() !== '');
+      if (erpTemValor && !xmlTemValor) return false;
+      if (!xmlTemValor) return !erpTemValor;
+      if (typeof valorXML === 'number' && typeof valorERP === 'number') {
+        return Math.abs(valorXML - valorERP) < 0.01;
+      }
+      const xmlStr = String(valorXML).trim().toLowerCase();
+      const erpStr = String(valorERP).trim().toLowerCase();
+      return xmlStr === erpStr;
+    }
+
+    // Variável global para tolerâncias (será carregada do endpoint /detalhes)
+    let toleranciaImpostos = null;
+
+    function dentroTolerancia(valorXML, valorERP, tipoImposto = 'icms') {
+      if (!toleranciaImpostos) return false;
+      const diferenca = valorXML - valorERP;
+      if (tipoImposto === 'ipi') {
+        const toleranciaMais = toleranciaImpostos.ipiMais || 0;
+        const toleranciaMenos = toleranciaImpostos.ipiMenos || 0;
+        if (diferenca > 0) return diferenca <= toleranciaMais;
+        if (diferenca < 0) return Math.abs(diferenca) <= toleranciaMenos;
+      } else {
+        const toleranciaMais = toleranciaImpostos.impMais || 0;
+        const toleranciaMenos = toleranciaImpostos.impMenos || 0;
+        if (diferenca > 0) return diferenca <= toleranciaMais;
+        if (diferenca < 0) return Math.abs(diferenca) <= toleranciaMenos;
+      }
+      return true;
+    }
+
+    function temErroImposto(valorXML, valorERP, tipoImposto = 'icms') {
+      if (valorERP === null || valorERP === undefined) return false;
+      const xml = typeof valorXML === 'number' ? valorXML : (parseFloat(valorXML) || 0);
+      const erp = typeof valorERP === 'number' ? valorERP : (parseFloat(valorERP) || 0);
+      const igual = Math.abs(xml - erp) < 0.01;
+      if (igual) return false;
+      return !dentroTolerancia(xml, erp, tipoImposto);
+    }
+
+    function calcularCamposFiscaisComparacao(produtoXML, dadosERP) {
+      const origemERP = String(
+        buscarCampoERP(dadosERP, 'dadosERPOrigem', 'DADOSERPORIGEM', '_dadosERPOrigem', '_DADOSERPORIGEM') || ''
+      ).trim().toLowerCase();
+      const ehSimulado = origemERP === 'tabfor' || origemERP === 'embalagem';
+      const qtd = buscarCampoERP(dadosERP, 'qtd', 'QTD');
+      const valorBruto = buscarCampoERP(dadosERP, 'valor', 'VALOR');
+      const reducao = buscarCampoERP(dadosERP, 'reducao', 'REDUCAO', 'reducaos', 'REDUCAOS');
+      const oda = buscarCampoERP(dadosERP, 'ODA', 'oda', 'Oda');
+      const aliquota = buscarCampoERP(dadosERP, 'aliquota', 'ALIQUOTA', 'fiscal_imposto', 'FISCAL_IMPOSTO', 'fiscal_impostos', 'FISCAL_IMPOSTOS');
+      const tributo = buscarCampoERP(dadosERP, 'tributo', 'TRIBUTO', 'fiscal_atrib2', 'FISCAL_ATRIB2', 'ATRIB2');
+      const fiscalImpostoST = buscarCampoERP(dadosERP, 'fiscal_imposto_st', 'FISCAL_IMPOSTO_ST');
+      const fcpAliquota = buscarCampoERP(dadosERP, 'FCP_aliquota', 'fcp_aliquota', 'FCP_ALIQUOTA');
+      const fcpstAliquota = buscarCampoERP(dadosERP, 'fcpst_aliquota', 'FCPST_ALIQUOTA', 'FCPST_aliquota');
+      const fcpValor = buscarCampoERP(dadosERP, 'fcp_valor', 'FCP_VALOR', 'FCP_valor');
+      const fcpstValor = buscarCampoERP(dadosERP, 'fcpst_valor', 'FCPST_VALOR', 'FCPST_valor');
+      const imposto = buscarCampoERP(dadosERP, 'imposto', 'IMPOSTO');
+      const cstICMS = String(produtoXML?.icmsCST || '').trim();
+      const permiteICMSST = cstICMS === '10' || cstICMS === '30' || cstICMS === '70';
+      const modalidadeBCST = String(produtoXML?.icmsModBCST || '').trim();
+      const ehMVA = modalidadeBCST === '4' || modalidadeBCST === 4;
+
+      let cstERP = null;
+      if (tributo !== null && tributo !== undefined && tributo !== '') {
+        cstERP = String(tributo).padStart(2, '0').slice(0, 2);
+      }
+
+      const qtdNumERP = parseFloat(qtd) || 0;
+      const valorNumERP = parseFloat(valorBruto) || 0;
+      const reducaoNum = parseFloat(reducao) || 0;
+      const valorUnitXML = parseFloat(produtoXML?.valorUnitarioTrib || produtoXML?.valorUnitario || 0) || 0;
+      const qtdTribXML = parseFloat(produtoXML?.quantidadeTrib || produtoXML?.quantidade || 0) || 0;
+      const valorProdutoXML = valorUnitXML * qtdTribXML;
+      const valorFreteXML = parseFloat(produtoXML?.valorFrete || 0) || 0;
+      const valorOutrosXML = parseFloat(produtoXML?.valorOutros || 0) || 0;
+      const valorIPIXML = parseFloat(produtoXML?.valorIPI || 0) || 0;
+
+      let valorAdicionalICMS = 0;
+      if (ehSimulado) {
+        valorAdicionalICMS = valorOutrosXML + valorFreteXML + valorIPIXML;
+      } else {
+        const odaERPTotal = qtdNumERP * (parseFloat(oda) || 0);
+        const valorCombinadoXML = valorFreteXML + valorOutrosXML;
+        const odaJaIncluiFrete = Math.abs(valorCombinadoXML - odaERPTotal) < 0.01;
+        if (odaERPTotal > 0) {
+          valorAdicionalICMS = odaJaIncluiFrete ? odaERPTotal : odaERPTotal + valorFreteXML;
+        }
+      }
+
+      let baseCalculoERP = null;
+      if (cstERP && (cstERP === '30' || cstERP === '40' || cstERP === '60')) {
+        baseCalculoERP = 0;
+      } else if (ehSimulado) {
+        baseCalculoERP = (valorProdutoXML * (reducaoNum > 0 ? (reducaoNum / 100) : 1)) + valorAdicionalICMS;
+      } else if (qtd !== null && valorBruto !== null) {
+        baseCalculoERP = ((qtdNumERP * valorNumERP) * (reducaoNum > 0 ? (reducaoNum / 100) : 1)) + valorAdicionalICMS;
+      }
+
+      let aliquotaERP = null;
+      if (aliquota !== null && aliquota !== undefined && aliquota !== '') {
+        aliquotaERP = parseFloat(aliquota) || 0;
+      }
+
+      let valorICMSERP = null;
+      if (baseCalculoERP !== null && aliquotaERP !== null) {
+        valorICMSERP = baseCalculoERP * (aliquotaERP / 100);
+      }
+
+      let aliquotaFCPERP = null;
+      if (fcpAliquota !== null && fcpAliquota !== undefined && fcpAliquota !== '') {
+        aliquotaFCPERP = parseFloat(fcpAliquota) || 0;
+      }
+      let baseCalculoFCPERP = null;
+      if (aliquotaFCPERP !== null && aliquotaFCPERP !== 0) {
+        baseCalculoFCPERP = baseCalculoERP;
+      } else if (aliquotaFCPERP === 0) {
+        baseCalculoFCPERP = 0;
+      }
+      let valorFCPERP = null;
+      if (ehSimulado && baseCalculoFCPERP !== null && aliquotaFCPERP !== null) {
+        valorFCPERP = baseCalculoFCPERP * (aliquotaFCPERP / 100);
+      } else if (fcpValor !== null && fcpValor !== undefined && fcpValor !== '') {
+        valorFCPERP = parseFloat(fcpValor) || 0;
+      }
+
+      let baseCalculoSTERP = null;
+      if (!permiteICMSST) {
+        baseCalculoSTERP = 0;
+      } else if (cstERP === '40' || cstERP === '60') {
+        baseCalculoSTERP = 0;
+      } else if (ehSimulado) {
+        if (ehMVA) {
+          const pMVAST = parseFloat(produtoXML?.percentualMVA || 0) || 0;
+          baseCalculoSTERP = valorProdutoXML * (1 + (pMVAST / 100));
+        } else {
+          baseCalculoSTERP = parseFloat(produtoXML?.baseCalculoICMSST || 0) || 0;
+        }
+      } else {
+        const lucro = buscarCampoERP(dadosERP, 'lucro', 'LUCRO');
+        const pauta = buscarCampoERP(dadosERP, 'Pauta', 'PAUTA', 'pauta');
+        const reducaoSaida = buscarCampoERP(dadosERP, 'reducao_saida', 'REDUCAO_SAIDA', 'Reducao_saida');
+        let valorAdicionalST = 0;
+        const odaERPTotalST = qtdNumERP * (parseFloat(oda) || 0);
+        const valorCombinadoXMLST = valorFreteXML + valorOutrosXML;
+        const odaJaIncluiFreteST = Math.abs(valorCombinadoXMLST - odaERPTotalST) < 0.01;
+        if (odaERPTotalST > 0) {
+          valorAdicionalST = odaJaIncluiFreteST ? odaERPTotalST : odaERPTotalST + valorFreteXML;
+        }
+        if (ehMVA) {
+          const ipiValor = buscarCampoERP(dadosERP, 'ipi_valor', 'IPI_VALOR', 'ipiValor', 'IPIVALOR');
+          if (lucro !== null && lucro !== undefined && lucro !== '' && qtd !== null && valorBruto !== null) {
+            const lucroNum = parseFloat(lucro) || 0;
+            const ipiValorNum = parseFloat(ipiValor) || 0;
+            baseCalculoSTERP = (((valorNumERP * qtdNumERP) + ipiValorNum + valorAdicionalST) * (1 + (lucroNum / 100)));
+          }
+        } else if (pauta !== null && pauta !== undefined && pauta !== '' && parseFloat(pauta) !== 0 && qtd !== null) {
+          const pautaNum = parseFloat(pauta) || 0;
+          baseCalculoSTERP = (qtdNumERP * pautaNum) + valorAdicionalST;
+        }
+        if (baseCalculoSTERP !== null && reducaoSaida !== null && reducaoSaida !== undefined && reducaoSaida !== '') {
+          const reducaoSaidaNum = parseFloat(reducaoSaida) || 0;
+          if (reducaoSaidaNum > 0 && reducaoSaidaNum < 100) {
+            baseCalculoSTERP = baseCalculoSTERP * (reducaoSaidaNum / 100);
+          }
+        }
+      }
+
+      let aliquotaICMSSTERP = null;
+      if (!permiteICMSST) {
+        aliquotaICMSSTERP = 0;
+      } else if (fiscalImpostoST !== null && fiscalImpostoST !== undefined && fiscalImpostoST !== '') {
+        aliquotaICMSSTERP = parseFloat(fiscalImpostoST) || 0;
+      }
+
+      let valorICMSSTERP = null;
+      if (!permiteICMSST) {
+        valorICMSSTERP = 0;
+      } else if (ehSimulado && baseCalculoSTERP !== null && aliquotaICMSSTERP !== null) {
+        valorICMSSTERP = (baseCalculoSTERP * (aliquotaICMSSTERP / 100)) - (valorICMSERP || 0);
+      } else if (imposto !== null && imposto !== undefined && imposto !== '') {
+        valorICMSSTERP = parseFloat(imposto) || 0;
+      }
+
+      let aliquotaFCPSTERP = null;
+      if (!permiteICMSST) {
+        aliquotaFCPSTERP = 0;
+      } else if (fcpstAliquota !== null && fcpstAliquota !== undefined && fcpstAliquota !== '') {
+        aliquotaFCPSTERP = parseFloat(fcpstAliquota) || 0;
+      }
+      let baseCalculoFCPSTERP = null;
+      if (!permiteICMSST) {
+        baseCalculoFCPSTERP = 0;
+      } else if (aliquotaFCPSTERP !== null && aliquotaFCPSTERP !== 0) {
+        baseCalculoFCPSTERP = baseCalculoSTERP;
+      } else if (aliquotaFCPSTERP === 0) {
+        baseCalculoFCPSTERP = 0;
+      }
+      let valorFCPSTERP = null;
+      if (ehSimulado && baseCalculoFCPSTERP !== null && aliquotaFCPSTERP !== null) {
+        valorFCPSTERP = (baseCalculoFCPSTERP * (aliquotaFCPSTERP / 100)) - (valorFCPERP || 0);
+      } else if (!permiteICMSST) {
+        valorFCPSTERP = 0;
+      } else if (fcpstValor !== null && fcpstValor !== undefined && fcpstValor !== '') {
+        valorFCPSTERP = parseFloat(fcpstValor) || 0;
+      }
+
+      return {
+        ehSimulado,
+        qtd,
+        valorBruto,
+        reducao,
+        oda,
+        cstERP,
+        permiteICMSST,
+        baseCalculoERP,
+        aliquotaERP,
+        valorICMSERP,
+        aliquotaFCPERP,
+        baseCalculoFCPERP,
+        valorFCPERP,
+        baseCalculoSTERP,
+        aliquotaICMSSTERP,
+        valorICMSSTERP,
+        aliquotaFCPSTERP,
+        baseCalculoFCPSTERP,
+        valorFCPSTERP
+      };
+    }
+
+    function validarProduto(item, dadosERP, produtoXML = null) {
+      if (!dadosERP) {
+        return { ok: false, situacao: 'Produto Não Cadastrado', classe: 'situacao-erro', erros: [], avisos: [] };
+      }
+
+      const erros = [];
+      const avisos = [];
+
+      const reffor = buscarCampoERP(dadosERP, 'reffor', 'REFFOR');
+      const codigoERP = reffor !== null && reffor !== '' ? String(reffor) : null;
+      const codigoXML = item.refCodigo || '';
+      if (codigoERP && !compararValores(codigoXML, codigoERP)) {
+        erros.push('Código divergente');
+      }
+
+      const barra1 = buscarCampoERP(dadosERP, 'embalagem_barra1', 'EMBALAGEM_BARRA1') || '';
+      const barra2 = buscarCampoERP(dadosERP, 'embalagem_barra2', 'EMBALAGEM_BARRA2') || '';
+      const barra3 = buscarCampoERP(dadosERP, 'embalagem_barra3', 'EMBALAGEM_BARRA3') || '';
+      const eanXML = String(item.refEan || '').trim();
+      const eanOk = eanXML && (eanXML === String(barra1).trim() || eanXML === String(barra2).trim() || eanXML === String(barra3).trim());
+      if (eanXML && !eanOk && (barra1 || barra2 || barra3)) {
+        avisos.push('EAN não encontrado no cadastro');
+      }
+
+      const undERP = buscarCampoERP(dadosERP, 'und', 'UND') || '';
+      const unidadeXML = item.refUnidade || '';
+      if (undERP && !compararValores(unidadeXML, undERP)) {
+        erros.push('Divergência entre Embalagem e Unidade');
+      }
+
+      const fatorERP = buscarCampoERP(dadosERP, 'fator', 'FATOR');
+      const fatorXML = parseFloat(item.fatorConversao) || 0;
+      if (fatorERP !== null && fatorERP !== undefined) {
+        const fatorERPNum = parseFloat(fatorERP) || 1;
+        if (fatorXML > 0 && Math.abs(fatorXML - fatorERPNum) >= 0.01) {
+          avisos.push('Fator de Conversão pode estar incorreto');
+        }
+      }
+
+      if (!produtoXML) {
+        if (erros.length > 0) {
+          return { ok: false, situacao: erros.join('; '), classe: 'situacao-erro', erros, avisos };
+        }
+        if (avisos.length > 0) {
+          return { ok: false, situacao: avisos.join('; '), classe: 'situacao-aviso', erros, avisos };
+        }
+        return { ok: true, situacao: 'OK - Pendente de Análise', classe: 'situacao-ok', erros, avisos };
+      }
+
+      const origemERP = String(
+        buscarCampoERP(dadosERP, 'dadosERPOrigem', 'DADOSERPORIGEM', '_dadosERPOrigem', '_DADOSERPORIGEM') || ''
+      ).trim().toLowerCase();
+      const ehSimulado = origemERP === 'tabfor' || origemERP === 'embalagem';
+      const qtd = buscarCampoERP(dadosERP, 'qtd', 'QTD');
+      const descontoTotal = buscarCampoERP(dadosERP, 'desconto', 'DESCONTO');
+      if (qtd !== null && descontoTotal !== null) {
+        const qtdNum = parseFloat(qtd) || 0;
+        const descontoNum = parseFloat(descontoTotal) || 0;
+        const valorDescERP = Math.round((qtdNum * descontoNum) * 100) / 100;
+        const valorDescXML = produtoXML.valorDesconto || 0;
+        if (!compararValores(valorDescXML, valorDescERP)) {
+          erros.push('Valor Desconto divergente');
+        }
+      }
+
+      const oda = buscarCampoERP(dadosERP, 'ODA', 'oda', 'Oda');
+      const valorComparacaoXML = ehSimulado
+        ? (produtoXML.valorOutros || 0)
+        : ((produtoXML.valorFrete || 0) + (produtoXML.valorOutros || 0));
+      let valorOutrosERP = null;
+      if (ehSimulado) {
+        valorOutrosERP = produtoXML.valorOutros || 0;
+      } else if (qtd !== null && oda !== null) {
+        const qtdNum = parseFloat(qtd) || 0;
+        const odaNum = parseFloat(oda) || 0;
+        valorOutrosERP = qtdNum * odaNum;
+      }
+      if (valorOutrosERP !== null && !compararValores(valorComparacaoXML, valorOutrosERP)) {
+        erros.push('Valor Frete/Outros (ODA) divergente');
+      }
+
+      const calculosFiscais = calcularCamposFiscaisComparacao(produtoXML, dadosERP);
+      const cstERP = calculosFiscais.cstERP;
+      const valorBruto = calculosFiscais.valorBruto;
+      const baseCalculoERP = calculosFiscais.baseCalculoERP;
+      const aliquotaERP = calculosFiscais.aliquotaERP;
+      const valorICMSERP = calculosFiscais.valorICMSERP;
+      const aliquotaFCPERP = calculosFiscais.aliquotaFCPERP;
+      const baseCalculoFCPERP = calculosFiscais.baseCalculoFCPERP;
+      const valorFCPERP = calculosFiscais.valorFCPERP;
+      const permiteICMSST = calculosFiscais.permiteICMSST;
+      const baseCalculoSTERP = calculosFiscais.baseCalculoSTERP;
+      const aliquotaICMSSTERP = calculosFiscais.aliquotaICMSSTERP;
+      const valorICMSSTERP = calculosFiscais.valorICMSSTERP;
+      const aliquotaFCPSTERP = calculosFiscais.aliquotaFCPSTERP;
+      const baseCalculoFCPSTERP = calculosFiscais.baseCalculoFCPSTERP;
+      const valorFCPSTERP = calculosFiscais.valorFCPSTERP;
+
+      const cstXML = produtoXML.icmsCST || '';
+      if (cstERP && !compararValores(cstXML, cstERP)) {
+        erros.push('CST ICMS divergente');
+      }
+
+      const baseCalculoXML = produtoXML.baseCalculoICMS || 0;
+      if (baseCalculoERP !== null && temErroImposto(baseCalculoXML, baseCalculoERP, 'icms')) {
+        erros.push('Base de Cálculo ICMS divergente');
+      }
+
+      const aliquotaXML = produtoXML.aliquotaICMS || 0;
+      if (aliquotaERP !== null && !compararValores(aliquotaXML, aliquotaERP)) {
+        erros.push('Alíquota ICMS divergente');
+      }
+
+      const valorICMSXML = produtoXML.valorICMS || 0;
+      if (valorICMSERP !== null && temErroImposto(valorICMSXML, valorICMSERP, 'icms')) {
+        erros.push('Valor ICMS divergente');
+      }
+
+      const baseCalculoFCPXML = produtoXML.baseCalculoFCP || 0;
+      const xmlTemFCPBase = (produtoXML.baseCalculoFCP || 0) !== 0;
+      if (baseCalculoFCPERP !== null && !xmlTemFCPBase && baseCalculoFCPERP !== 0) {
+        erros.push('Base de Cálculo FCP divergente');
+      } else if (baseCalculoFCPERP !== null && temErroImposto(baseCalculoFCPXML, baseCalculoFCPERP, 'icms')) {
+        erros.push('Base de Cálculo FCP divergente');
+      }
+
+      const valorFCPXML = produtoXML.valorFCP || 0;
+      const xmlTemFCPValor = (produtoXML.valorFCP || 0) !== 0;
+      if (valorFCPERP !== null) {
+        if (valorFCPERP !== 0 && !xmlTemFCPValor) {
+          erros.push('Valor FCP divergente');
+        } else if (temErroImposto(valorFCPXML, valorFCPERP, 'icms')) {
+          erros.push('Valor FCP divergente');
+        }
+      }
+
+      if (aliquotaFCPERP !== null) {
+        const aliquotaFCPXML = produtoXML.aliquotaFCP || 0;
+        if (aliquotaFCPERP !== 0 && aliquotaFCPXML === 0) {
+          erros.push('Alíquota FCP divergente');
+        } else if (!compararValores(aliquotaFCPXML, aliquotaFCPERP)) {
+          erros.push('Alíquota FCP divergente');
+        }
+      }
+
+      const cstICMS = produtoXML.icmsCST || '';
+      if (permiteICMSST) {
+        const baseCalculoSTXML = produtoXML.baseCalculoICMSST || 0;
+        const baseSTXMLZero = (produtoXML.baseCalculoICMSST || 0) === 0 || Math.abs(produtoXML.baseCalculoICMSST || 0) < 0.01;
+        const valorICMSSTXMLZero = (produtoXML.valorICMSST || 0) === 0 || Math.abs(produtoXML.valorICMSST || 0) < 0.01;
+        const isCSTComSTZerada = (cstICMS === '10' || cstICMS === '70') && baseSTXMLZero && valorICMSSTXMLZero;
+
+        if (baseCalculoSTERP !== null && !isCSTComSTZerada && temErroImposto(baseCalculoSTXML, baseCalculoSTERP, 'icms')) {
+          erros.push('Base de Cálculo ICMS ST divergente');
+        }
+
+        const aliquotaICMSSTXML = produtoXML.aliquotaICMSST || 0;
+        if (aliquotaICMSSTERP !== null && !compararValores(aliquotaICMSSTXML, aliquotaICMSSTERP) && !isCSTComSTZerada) {
+          erros.push('Alíquota ICMS ST divergente');
+        }
+
+        const valorICMSSTXML = produtoXML.valorICMSST || 0;
+        if (valorICMSSTERP !== null && temErroImposto(valorICMSSTXML, valorICMSSTERP, 'icms') && !isCSTComSTZerada) {
+          erros.push('Valor ICMS ST divergente');
+        }
+
+        const baseCalculoFCPSTXML = produtoXML.baseCalculoFCPST || 0;
+        const xmlTemFCPSTBase = (produtoXML.baseCalculoFCPST || 0) !== 0;
+        if (baseCalculoFCPSTERP !== null && !xmlTemFCPSTBase && baseCalculoFCPSTERP !== 0 && !isCSTComSTZerada) {
+          erros.push('Base de Cálculo FCP ST divergente');
+        } else if (baseCalculoFCPSTERP !== null && temErroImposto(baseCalculoFCPSTXML, baseCalculoFCPSTERP, 'icms') && !isCSTComSTZerada) {
+          erros.push('Base de Cálculo FCP ST divergente');
+        }
+
+        const valorFCPSTXML = produtoXML.valorFCPST || 0;
+        const xmlTemFCPSTValor = (produtoXML.valorFCPST || 0) !== 0;
+        if (valorFCPSTERP !== null) {
+          if (valorFCPSTERP !== 0 && !xmlTemFCPSTValor && !isCSTComSTZerada) {
+            erros.push('Valor FCP ST divergente');
+          } else if (temErroImposto(valorFCPSTXML, valorFCPSTERP, 'icms') && !isCSTComSTZerada) {
+            erros.push('Valor FCP ST divergente');
+          }
+        }
+
+        if (aliquotaFCPSTERP !== null) {
+          const aliquotaFCPSTXML = produtoXML.aliquotaFCPST || 0;
+          if (aliquotaFCPSTERP !== 0 && aliquotaFCPSTXML === 0) {
+            erros.push('Alíquota FCP ST divergente');
+          } else if (!compararValores(aliquotaFCPSTXML, aliquotaFCPSTERP)) {
+            erros.push('Alíquota FCP ST divergente');
+          }
+        }
+      }
+
+      if ((produtoXML.valorIPI || 0) > 0) {
+        if (!ehSimulado) {
+        let baseCalculoIPIERP = null;
+        if (qtd !== null && valorBruto !== null) {
+          const qtdNum = parseFloat(qtd) || 0;
+          const valorNum = parseFloat(valorBruto) || 0;
+          const odaNum = parseFloat(oda) || 0;
+          const freteNum = produtoXML.valorFrete || 0;
+          baseCalculoIPIERP = (qtdNum * valorNum) + odaNum + freteNum;
+        }
+        const baseCalculoIPIXML = produtoXML.baseCalculoIPI || 0;
+        if (baseCalculoIPIERP !== null && temErroImposto(baseCalculoIPIXML, baseCalculoIPIERP, 'ipi')) {
+          erros.push('Base de Cálculo IPI divergente');
+        }
+
+        const ipiAliq = buscarCampoERP(dadosERP, 'ipi', 'IPI');
+        let aliquotaIPIERP = null;
+        if (ipiAliq !== null && ipiAliq !== undefined && ipiAliq !== '') {
+          aliquotaIPIERP = parseFloat(ipiAliq) || 0;
+        }
+        const aliquotaIPIXML = produtoXML.aliquotaIPI || 0;
+        if (aliquotaIPIERP !== null && !compararValores(aliquotaIPIXML, aliquotaIPIERP)) {
+          erros.push('Alíquota IPI divergente');
+        }
+
+        const valorIPIERPDireto = buscarCampoERP(dadosERP, 'ipi_valor', 'IPI_VALOR', 'ipiValor', 'IPIVALOR');
+        if (valorIPIERPDireto !== null && valorIPIERPDireto !== undefined && valorIPIERPDireto !== '') {
+          const valorIPIERP = parseFloat(valorIPIERPDireto) || 0;
+          const valorIPIXML = produtoXML.valorIPI || 0;
+          if (temErroImposto(valorIPIXML, valorIPIERP, 'ipi')) {
+            erros.push('Valor IPI divergente');
+          }
+        }
+        }
+      }
+
+      if (erros.length > 0) {
+        return { ok: false, situacao: erros.join('; '), classe: 'situacao-erro', erros, avisos };
+      }
+      if (avisos.length > 0) {
+        return { ok: false, situacao: avisos.join('; '), classe: 'situacao-aviso', erros, avisos };
+      }
+      return { ok: true, situacao: 'OK - Pendente de Análise', classe: 'situacao-ok', erros, avisos };
+    }
+
+    function extrairItensDoXml(textoXml) {
+      const resultado = [];
+      try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(textoXml, 'text/xml');
+        const dets = doc.querySelectorAll('det');
+        if (dets.length === 0) return null;
+        dets.forEach((det, i) => {
+          const prod = det.querySelector('prod');
+          if (!prod) return;
+          const nItem = det.getAttribute('n') || String(i + 1);
+          const desc = prod.querySelector('xProd')?.textContent?.trim() || '';
+          const codigo = prod.querySelector('cProd')?.textContent?.trim() || '';
+          const ean = prod.querySelector('cEAN')?.textContent?.trim() || prod.querySelector('cBarra')?.textContent?.trim() || '';
+          const eanTrib = prod.querySelector('cEANTrib')?.textContent?.trim() || '';
+          const uCom = prod.querySelector('uCom')?.textContent?.trim() || '';
+          const uTrib = prod.querySelector('uTrib')?.textContent?.trim() || '';
+          const qCom = parseFloat(prod.querySelector('qCom')?.textContent || 0);
+          const qTrib = parseFloat(prod.querySelector('qTrib')?.textContent || 0);
+          const vUnCom = parseFloat(prod.querySelector('vUnCom')?.textContent || 0);
+          const vUnTrib = parseFloat(prod.querySelector('vUnTrib')?.textContent || 0);
+          const vProd = parseFloat(prod.querySelector('vProd')?.textContent || 0);
+          const vFrete = parseFloat(prod.querySelector('vFrete')?.textContent || 0);
+          const vSeg = parseFloat(prod.querySelector('vSeg')?.textContent || 0);
+          const vDesc = parseFloat(prod.querySelector('vDesc')?.textContent || 0);
+          const vOutro = parseFloat(prod.querySelector('vOutro')?.textContent || 0);
+          const ncm = prod.querySelector('NCM')?.textContent?.trim() || '';
+          const cfop = prod.querySelector('CFOP')?.textContent?.trim() || '';
+          
+          // ICMS: grupo filho ICMSSN* ou ICMS* (CRT 1 – Simples Nacional usa ICMSSN102, 201 etc.)
+          const impostoEl = det.querySelector('imposto');
+          let icmsWrapper =
+            impostoEl?.querySelector('ICMS') ||
+            [...(impostoEl?.children || [])].find((n) => /^ICMS$/i.test(n.localName || '')) ||
+            det.querySelector('imposto ICMS') ||
+            det.querySelector('ICMS');
+          let icmsDet = null;
+          if (icmsWrapper && icmsWrapper.children) {
+            for (let ij = 0; ij < icmsWrapper.children.length; ij++) {
+              const ch = icmsWrapper.children[ij];
+              const tagLoc = ch.localName || (ch.tagName && ch.tagName.split(':').pop()) || '';
+              if (/^ICMS/i.test(tagLoc)) {
+                icmsDet = ch;
+                break;
+              }
+            }
+          }
+          const icmsOrig = icmsDet?.querySelector('orig')?.textContent?.trim()
+            || icmsDet?.getElementsByTagName('orig')[0]?.textContent?.trim()
+            || '';
+          const icmsCST = icmsDet?.querySelector('CST')?.textContent?.trim()
+            || icmsDet?.getElementsByTagName('CST')[0]?.textContent?.trim()
+            || '';
+          const icmsCSOSN = icmsDet?.querySelector('CSOSN')?.textContent?.trim()
+            || icmsDet?.getElementsByTagName('CSOSN')[0]?.textContent?.trim()
+            || '';
+          const icmsModBC = icmsDet?.querySelector('modBC')?.textContent?.trim() || '';
+          const icmsRedBC = parseFloat(icmsDet?.querySelector('pRedBC')?.textContent || 0);
+          const baseCalculoICMS = parseFloat(icmsDet?.querySelector('vBC')?.textContent || 0);
+          const aliquotaICMS = parseFloat(icmsDet?.querySelector('pICMS')?.textContent || 0);
+          const valorICMS = parseFloat(icmsDet?.querySelector('vICMS')?.textContent || 0);
+          const baseCalculoFCP = parseFloat(icmsDet?.querySelector('vBCFCP')?.textContent || 0);
+          const aliquotaFCP = parseFloat(icmsDet?.querySelector('pFCP')?.textContent || 0);
+          const valorFCP = parseFloat(icmsDet?.querySelector('vFCP')?.textContent || 0);
+          const icmsModBCST = icmsDet?.querySelector('modBCST')?.textContent?.trim() || '';
+          const percentualMVA = parseFloat(icmsDet?.querySelector('pMVAST')?.textContent || 0);
+          const baseCalculoICMSST = parseFloat(icmsDet?.querySelector('vBCST')?.textContent || 0);
+          const aliquotaICMSST = parseFloat(icmsDet?.querySelector('pICMSST')?.textContent || 0);
+          const valorICMSST = parseFloat(icmsDet?.querySelector('vICMSST')?.textContent || 0);
+          const baseCalculoFCPST = parseFloat(icmsDet?.querySelector('vBCFCPST')?.textContent || 0);
+          const aliquotaFCPST = parseFloat(icmsDet?.querySelector('pFCPST')?.textContent || 0);
+          const valorFCPST = parseFloat(icmsDet?.querySelector('vFCPST')?.textContent || 0);
+          const pCredSN = parseFloat(icmsDet?.querySelector('pCredSN')?.textContent || 0);
+          const vCredICMSSN = parseFloat(icmsDet?.querySelector('vCredICMSSN')?.textContent || 0);
+          
+          // IPI
+          const ipi = det.querySelector('imposto IPI') || det.querySelector('IPI');
+          const ipiTrib = ipi?.querySelector('IPITrib');
+          const ipiNt = ipi?.querySelector('IPINT');
+          const baseCalculoIPI = parseFloat(ipiTrib?.querySelector('vBC')?.textContent || 0);
+          const aliquotaIPI = parseFloat(ipiTrib?.querySelector('pIPI')?.textContent || 0);
+          const valorIPI = parseFloat(ipiTrib?.querySelector('vIPI')?.textContent || ipiNt?.querySelector('vIPI')?.textContent || 0);
+          
+          resultado.push({
+            num: nItem,
+            refDescricao: desc || '(sem descrição)',
+            refCodigo: codigo,
+            refEan: ean || '-',
+            refUnidade: uCom || '-',
+            pluCodigo: '',
+            pluDescricao: '',
+            pluUnidade: '',
+            fatorConversao: '',
+            situacao: 'Produto Não Cadastrado',
+            situacaoClasse: 'situacao-erro',
+            dadosERP: null, // Será preenchido após buscar no ERP
+            // Dados completos do XML para validação
+            produtoXML: {
+              codigo,
+              eanComercial: ean,
+              eanTributavel: eanTrib,
+              descricao: desc,
+              ncm,
+              cfop,
+              unidade: uCom,
+              unidadeTrib: uTrib,
+              quantidade: qCom,
+              quantidadeTrib: qTrib,
+              valorUnitario: vUnCom,
+              valorUnitarioTrib: vUnTrib,
+              valorTotal: vProd,
+              valorFrete: vFrete,
+              valorSeguro: vSeg,
+              valorDesconto: vDesc,
+              valorOutros: vOutro,
+              icmsOrig,
+              icmsCST,
+              icmsCSOSN,
+              icmsModBC,
+              icmsRedBC,
+              baseCalculoICMS,
+              aliquotaICMS,
+              valorICMS,
+              baseCalculoFCP,
+              aliquotaFCP,
+              valorFCP,
+              icmsModBCST,
+              percentualMVA,
+              baseCalculoICMSST,
+              aliquotaICMSST,
+              valorICMSST,
+              baseCalculoFCPST,
+              aliquotaFCPST,
+              valorFCPST,
+              pCredSN,
+              vCredICMSSN,
+              baseCalculoIPI,
+              aliquotaIPI,
+              valorIPI
+            }
+          });
+        });
+        return resultado.length ? resultado : null;
+      } catch (e) {
+        console.error('Erro ao extrair XML:', e);
+        return null;
+      }
+    }
+
+    async function buscarDadosERP(chave) {
+      if (!chave) return { mapa: null, tolerancia: null };
+      try {
+        const resp = await fetch('/detalhes/' + encodeURIComponent(chave));
+        if (!resp.ok) return { mapa: null, tolerancia: null };
+        const dados = await resp.json();
+        const produtos = dados.produtos || [];
+        const mapa = {};
+        produtos.forEach(p => {
+          if (p.item && p.dadosERP) {
+            mapa[p.item] = {
+              ...p.dadosERP,
+              dadosERPOrigem: p.dadosERPOrigem || p.dadosERP?.dadosERPOrigem || null
+            };
+          }
+        });
+        return { mapa, tolerancia: dados.tolerancia || null };
+      } catch (e) {
+        console.error('Erro ao buscar dados ERP:', e);
+        return { mapa: null, tolerancia: null };
+      }
+    }
+
+    async function validarItensComERP(itensExtraidos, chaveNfe) {
+      if (!chaveNfe || itensExtraidos.length === 0) return itensExtraidos;
+      
+      const { mapa: mapaERP, tolerancia } = await buscarDadosERP(chaveNfe);
+      if (!mapaERP) return itensExtraidos;
+
+      // Carregar tolerância globalmente
+      toleranciaImpostos = tolerancia;
+
+      return itensExtraidos.map(item => {
+        const dadosERP = mapaERP[item.num] || null;
+        item.dadosERP = dadosERP;
+
+        if (dadosERP) {
+          // Preencher dados PLU do ERP (campos retornados pelo endpoint /detalhes/:chave)
+          const reffor = buscarCampoERP(dadosERP, 'reffor', 'REFFOR');
+          const produtoDesc = buscarCampoERP(dadosERP, 'produto_descricao', 'PRODUTO_DESCRICAO', 'produto_desc', 'produto_descricao') || '';
+          const produtoNome = buscarCampoERP(dadosERP, 'produto_nome', 'PRODUTO_NOME', 'produto_nome') || '';
+          const und = buscarCampoERP(dadosERP, 'und', 'UND') || '';
+          const fator = buscarCampoERP(dadosERP, 'fator', 'FATOR') || '1';
+
+          item.pluCodigo = reffor || '';
+          item.pluDescricao = produtoDesc || produtoNome || '';
+          item.pluUnidade = und || '';
+          item.fatorConversao = String(fator);
+
+          // Validar produto com dados completos do XML
+          const produtoXML = item.produtoXML || null;
+          const validacao = validarProduto(item, dadosERP, produtoXML);
+          item.situacao = validacao.situacao;
+          item.situacaoClasse = validacao.classe;
+          item.erros = validacao.erros || [];
+          item.avisos = validacao.avisos || [];
+        } else {
+          item.situacao = 'Produto Não Cadastrado';
+          item.situacaoClasse = 'situacao-erro';
+          item.erros = [];
+          item.avisos = [];
+        }
+
+        return item;
+      });
+    }
+
+    inputXml.addEventListener('change', async () => {
+      const file = inputXml.files?.[0];
+      if (!file) {
+        arquivoNome.textContent = 'Nenhum arquivo selecionado.';
+        itens = [];
+        atualizarTabela();
+        return;
+      }
+      arquivoNome.textContent = file.name;
+      arquivoNome.style.color = 'var(--lumi-text)';
+
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const texto = reader.result;
+          const extraidos = extrairItensDoXml(texto);
+          if (!extraidos) {
+            itens = linhasExemplo();
+            mostrarToast('XML lido. Exibindo dados de exemplo (parsing real em desenvolvimento).');
+          } else {
+            // Se temos chave, validar com dados do ERP
+            if (chaveNfeAtual) {
+              mostrarToast('Validando produtos com dados do sistema...');
+              itens = await validarItensComERP(extraidos, chaveNfeAtual);
+              mostrarToast('XML carregado e validado.');
+            } else {
+              itens = extraidos;
+              mostrarToast('XML carregado. Associe os produtos manualmente ou use o botão "Autorizar recepção" na Consulta NF-e.');
+            }
+          }
+          atualizarTabela();
+        } catch (e) {
+          mostrarToast('Erro ao processar XML: ' + e.message, true);
+          itens = [];
+          atualizarTabela();
+        }
+      };
+      reader.onerror = () => {
+        mostrarToast('Erro ao ler o arquivo.', true);
+        itens = [];
+        atualizarTabela();
+      };
+      reader.readAsText(file, 'UTF-8');
+    });
+
+    btnAnalisar.addEventListener('click', () => {
+      const todosOk = itens.every(i => i.situacaoClasse === 'situacao-ok');
+      if (!todosOk) {
+        mostrarToast('Corrija todas as divergências (duplo clique na linha) antes de analisar.', true);
+        return;
+      }
+      if (!naturezaOperacao.value) {
+        mostrarToast('Selecione a Natureza de Operação.', true);
+        return;
+      }
+      mostrarToast('Análise em desenvolvimento. Será verificado: Pedido de Compra, conformidade e bloqueios.');
+      btnSalvar.disabled = false;
+    });
+
+    btnSalvar.addEventListener('click', () => {
+      mostrarToast('Salvar em desenvolvimento. O XML será autorizado para a próxima etapa.');
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,3122 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Consulta NF-e</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Inter", "Segoe UI", "Roboto", sans-serif;
+      --lumi-primary: #C8102E;
+      --lumi-primary-strong: #DB2636;
+      --lumi-secondary: #E03C49;
+      --lumi-secondary-soft: rgba(200, 16, 46, 0.18);
+      --lumi-surface: #FFFFFF;
+      --lumi-surface-muted: #FFF8F4;
+      --lumi-gradient-start: #FFF8F4;
+      --lumi-gradient-end: #FFFFFF;
+      --lumi-dark: #222222;
+      --lumi-text: #222222;
+      --lumi-muted: #3A3A3A;
+      --lumi-border: rgba(200, 16, 46, 0.2);
+      --success: #00b894;
+      --warning: #ffb347;
+      --danger: #DB2636;
+      --shadow: 0 20px 45px rgba(34, 34, 34, 0.14);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at top left, var(--lumi-gradient-start), var(--lumi-gradient-end));
+      padding: 2.5rem 1.5rem 3rem;
+      color: var(--lumi-text);
+    }
+
+    header {
+      max-width: 1200px;
+      margin: 0 auto 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.8rem, 3vw, 2.6rem);
+      font-weight: 700;
+      color: var(--lumi-dark);
+    }
+
+    header p {
+      margin: 0;
+      color: var(--lumi-muted);
+    }
+
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .card {
+      background-color: var(--lumi-surface);
+      border-radius: 24px;
+      padding: 1.9rem;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--lumi-border);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .card-header h2 {
+      margin: 0;
+      font-size: 1.2rem;
+    }
+
+    .card-header span {
+      color: var(--lumi-muted);
+      font-size: 0.95rem;
+    }
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .field-grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 1rem;
+    }
+
+    /* Tamanhos específicos dos campos */
+    .field-grid label {
+      grid-column: span 2;
+    }
+
+    .field-grid label.field-small {
+      grid-column: span 1;
+    }
+
+    .field-grid label.field-medium {
+      grid-column: span 2;
+    }
+
+    .field-grid label.field-large {
+      grid-column: span 3;
+    }
+
+    .field-grid label.field-xlarge {
+      grid-column: span 4;
+    }
+
+    .field-grid label.field-row-start {
+      grid-column-start: 1;
+    }
+
+    /* Filtros colapsáveis */
+    .filtros-content {
+      overflow: hidden;
+      transition: max-height 0.4s ease, opacity 0.3s ease, padding 0.3s ease;
+      max-height: 1000px;
+      opacity: 1;
+    }
+
+    .filtros-content.collapsed {
+      max-height: 0;
+      opacity: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+
+    .btn-toggle-filtros {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border: 1px solid var(--lumi-border);
+      background: #fff;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--lumi-muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-toggle-filtros:hover {
+      border-color: var(--lumi-primary);
+      color: var(--lumi-primary);
+    }
+
+    .btn-toggle-filtros .toggle-icon {
+      transition: transform 0.3s ease;
+    }
+
+    .btn-toggle-filtros.collapsed .toggle-icon {
+      transform: rotate(-180deg);
+    }
+
+    .filtros-resumo {
+      display: none;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+
+    .filtros-resumo.visible {
+      display: flex;
+    }
+
+    .filtro-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.3rem 0.7rem;
+      background: rgba(200, 16, 46, 0.1);
+      border-radius: 999px;
+      font-size: 0.8rem;
+      color: var(--lumi-dark);
+    }
+
+    .filtro-tag strong {
+      color: var(--lumi-primary);
+    }
+
+    /* Seletor de Servidor */
+    .server-selector {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.6rem 1rem;
+      background: var(--lumi-surface);
+      border: 1px solid var(--lumi-border);
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .server-selector-label {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--lumi-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .server-selector-label .server-icon {
+      font-size: 1.1rem;
+    }
+
+    .server-select {
+      padding: 0.4rem 0.8rem;
+      border: 1px solid var(--lumi-border);
+      border-radius: 8px;
+      font-size: 0.9rem;
+      background: #fff;
+      color: var(--lumi-dark);
+      cursor: pointer;
+      min-width: 180px;
+      transition: border-color 0.2s ease;
+    }
+
+    .server-select:hover {
+      border-color: var(--lumi-primary);
+    }
+
+    .server-select:focus {
+      outline: none;
+      border-color: var(--lumi-primary);
+      box-shadow: 0 0 0 2px rgba(200, 16, 46, 0.2);
+    }
+
+    .server-status {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.8rem;
+      padding: 0.25rem 0.6rem;
+      border-radius: 999px;
+    }
+
+    .server-status.online {
+      background: rgba(0, 184, 148, 0.15);
+      color: var(--success);
+    }
+
+    .server-status.offline {
+      background: rgba(219, 38, 54, 0.15);
+      color: var(--danger);
+    }
+
+    .server-status.connecting {
+      background: rgba(255, 179, 71, 0.15);
+      color: var(--warning);
+    }
+
+    .server-status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .server-status.connecting .server-status-dot {
+      animation: pulse 1s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    header > div:first-child {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    @media (max-width: 768px) {
+      .server-selector {
+        width: 100%;
+        justify-content: space-between;
+      }
+      
+      .server-select {
+        flex: 1;
+      }
+    }
+
+    @media (max-width: 1024px) {
+      .field-grid {
+        grid-template-columns: repeat(6, 1fr);
+      }
+      .field-grid label {
+        grid-column: span 2;
+      }
+      .field-grid label.field-small {
+        grid-column: span 1;
+      }
+      .field-grid label.field-large,
+      .field-grid label.field-xlarge {
+        grid-column: span 3;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .field-grid {
+        grid-template-columns: 1fr;
+      }
+      .field-grid label,
+      .field-grid label.field-small,
+      .field-grid label.field-medium,
+      .field-grid label.field-large,
+      .field-grid label.field-xlarge {
+        grid-column: span 1;
+      }
+    }
+
+    label {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--lumi-muted);
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+
+    input,
+    select {
+      border-radius: 12px;
+      border: 1px solid var(--lumi-border);
+      padding: 0.75rem;
+      font-size: 1rem;
+      transition: border 0.2s ease, box-shadow 0.2s ease;
+      background-color: #fff;
+      color: #222222;
+    }
+
+    input:focus,
+    select:focus {
+      outline: none;
+      border-color: var(--lumi-primary);
+      box-shadow: 0 0 0 3px rgba(200, 16, 46, 0.25);
+    }
+
+    input::placeholder {
+      color: #a0a8c4;
+      opacity: 1;
+    }
+
+    .form-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      justify-content: flex-end;
+    }
+
+    button {
+      border: none;
+      border-radius: 12px;
+      padding: 0.85rem 1.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-strong));
+      color: #fff;
+      box-shadow: 0 12px 30px rgba(200, 16, 46, 0.35);
+    }
+
+    .btn-secondary {
+      background: rgba(200, 16, 46, 0.08);
+      color: var(--lumi-dark);
+    }
+
+    .btn-ghost {
+      background: #fff;
+      color: var(--lumi-primary-strong);
+      border: 1px solid rgba(200, 16, 46, 0.4);
+      box-shadow: none;
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      color: #fff;
+    }
+
+    .btn-ghost:disabled,
+    .btn-outline:disabled {
+      opacity: 0.5;
+    }
+
+    .status-banner {
+      border-radius: 12px;
+      padding: 0.65rem 1rem;
+      font-size: 0.95rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .status-info {
+      background-color: var(--lumi-secondary-soft);
+      color: var(--lumi-primary-strong);
+    }
+
+    .status-success {
+      background-color: rgba(31, 157, 105, 0.15);
+      color: var(--success);
+    }
+
+    .status-error {
+      background-color: rgba(217, 70, 239, 0.15);
+      color: var(--danger);
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+
+    .stat-card {
+      background: var(--lumi-surface-muted);
+      border-radius: 18px;
+      padding: 1.25rem;
+      border: 1px solid rgba(200, 16, 46, 0.08);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .stat-card span {
+      font-size: 0.9rem;
+      color: var(--lumi-muted);
+    }
+
+    .stat-card strong {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--lumi-dark);
+    }
+
+    .table-wrapper {
+      position: relative;
+      overflow: auto;
+      border-radius: 20px;
+      border: 1px solid rgba(200, 16, 46, 0.08);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0 12px;
+      min-width: 720px;
+      table-layout: fixed;
+    }
+
+    thead {
+      background-color: rgba(200, 16, 46, 0.06);
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 0.85rem 0.85rem;
+      font-size: 0.92rem;
+      vertical-align: middle;
+      border: none;
+    }
+
+    tbody tr {
+      background-color: #fff;
+      box-shadow: 0 10px 20px rgba(34, 34, 34, 0.05);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    tbody tr:nth-child(even) {
+      background: rgba(200, 16, 46, 0.05);
+    }
+
+    tbody tr:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 16px 26px rgba(34, 34, 34, 0.12);
+    }
+
+    tbody td:first-child {
+      border-top-left-radius: 18px;
+      border-bottom-left-radius: 18px;
+    }
+
+    tbody td:last-child {
+      border-top-right-radius: 18px;
+      border-bottom-right-radius: 18px;
+    }
+
+    .col-emissao { width: 9%; }
+    .col-cnpj { width: 13%; }
+    .col-razao { width: 17%; font-size: 0.9rem; }
+    .col-estab { width: 15%; font-size: 0.9rem; }
+    .col-chave { width: 20%; font-size: 0.85rem; white-space: normal; }
+
+    .cell-key {
+      font-family: "Space Mono", "Fira Code", monospace;
+      letter-spacing: 0.02em;
+      word-break: break-all;
+    }
+    .col-valor { width: 9%; text-align: right; }
+    .col-numero { width: 9%; text-align: right; }
+    .col-usuario { width: 8%; text-align: center; }
+    .col-status { width: 14%; text-align: center; }
+
+    .cell-text {
+      display: block;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cell-text--wrap {
+      white-space: normal;
+      line-height: 1.35;
+    }
+
+    .cell-text--nowrap {
+      white-space: nowrap;
+      overflow: visible;
+      text-overflow: initial;
+    }
+
+    .cell-subtle {
+      font-size: 0.82rem;
+      color: var(--lumi-muted);
+    }
+
+    .cell-strong {
+      font-weight: 600;
+      color: var(--lumi-dark);
+    }
+
+    .cell-key {
+      font-family: "Space Mono", "Fira Code", monospace;
+      letter-spacing: 0.02em;
+    }
+
+    .cell-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .value-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      font-weight: 600;
+      background: rgba(200, 16, 46, 0.12);
+      color: var(--lumi-primary-strong);
+      min-width: 110px;
+    }
+
+    .numero-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.35rem 0.65rem;
+      border-radius: 10px;
+      font-family: "Space Mono", monospace;
+      background: rgba(17, 19, 38, 0.06);
+      color: var(--lumi-dark);
+    }
+
+    tbody tr:not(:last-child) td {
+      border-bottom: 1px solid rgba(34, 34, 34, 0.06);
+    }
+
+    tbody tr:hover {
+      background-color: rgba(200, 16, 46, 0.08);
+    }
+
+    .badge {
+      font-size: 0.8rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      background-color: rgba(200, 16, 46, 0.15);
+      color: var(--lumi-dark);
+      font-weight: 600;
+    }
+
+    .actions-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .btn-ghost.btn-small {
+      padding: 0.35rem 0.9rem;
+      font-size: 0.85rem;
+    }
+
+    .btn-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(200, 16, 46, 0.08);
+      border: 1px solid rgba(200, 16, 46, 0.18);
+      color: var(--lumi-primary-strong);
+      transition: transform 0.15s ease, background 0.15s ease;
+    }
+
+    .btn-icon:hover {
+      transform: scale(1.05);
+      background: rgba(200, 16, 46, 0.15);
+    }
+
+    .btn-icon svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      border: 0;
+    }
+
+    @media (min-width: 768px) {
+      .actions-group {
+        flex-direction: row;
+        flex-wrap: wrap;
+      }
+      .actions-group button {
+        flex: 1 1 auto;
+      }
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.25rem 0.85rem;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .status-pill--ok {
+      background-color: rgba(200, 16, 46, 0.18);
+      color: var(--lumi-dark);
+    }
+
+    .status-pill--warn {
+      background-color: rgba(217, 70, 239, 0.12);
+      color: var(--danger);
+    }
+
+    .valor {
+      font-variant-numeric: tabular-nums;
+      font-weight: 600;
+      color: #222222;
+    }
+
+    .empty-state {
+      border: 1px dashed rgba(200, 16, 46, 0.35);
+      border-radius: 16px;
+      padding: 2rem;
+      text-align: center;
+      color: var(--lumi-muted);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      background-color: var(--text);
+      color: #fff;
+      padding: 0.9rem 1.2rem;
+      border-radius: 12px;
+      box-shadow: 0 20px 30px rgba(34, 34, 34, 0.2);
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .toast.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .loading-bar {
+      height: 3px;
+      background: linear-gradient(90deg, var(--lumi-primary), var(--lumi-secondary));
+      width: 0;
+      border-radius: 999px;
+      transition: width 0.4s ease;
+      margin-top: 0.75rem;
+    }
+
+    .loading-bar.active {
+      width: 100%;
+    }
+
+    /* Seletor de Período */
+    .periodo-selector {
+      position: relative;
+    }
+
+    .periodo-display {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem;
+      border: 1px solid var(--lumi-border);
+      border-radius: 12px;
+      background: #fff;
+      cursor: pointer;
+      transition: border 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .periodo-display:hover {
+      border-color: var(--lumi-primary);
+    }
+
+    .periodo-display:focus-within {
+      border-color: var(--lumi-primary);
+      box-shadow: 0 0 0 3px rgba(200, 16, 46, 0.25);
+    }
+
+    .periodo-icon {
+      font-size: 1.1rem;
+    }
+
+    .periodo-text {
+      flex: 1;
+      font-size: 1rem;
+      color: var(--lumi-text);
+    }
+
+    .periodo-arrow {
+      font-size: 0.7rem;
+      color: var(--lumi-muted);
+      transition: transform 0.2s ease;
+    }
+
+    .periodo-selector.active .periodo-arrow {
+      transform: rotate(180deg);
+    }
+
+    /* Modal do período */
+    .periodo-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+      padding: 1rem;
+    }
+
+    .periodo-modal.active {
+      display: flex;
+    }
+
+    .periodo-modal-content {
+      background: #fff;
+      border-radius: 20px;
+      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+      max-width: 700px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      animation: modalSlideIn 0.3s ease;
+    }
+
+    @keyframes modalSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .periodo-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--lumi-border);
+    }
+
+    .periodo-header h3 {
+      margin: 0;
+      font-size: 1.2rem;
+      color: var(--lumi-dark);
+    }
+
+    .periodo-close {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      color: var(--lumi-muted);
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+      transition: color 0.2s ease;
+    }
+
+    .periodo-close:hover {
+      color: var(--lumi-primary);
+    }
+
+    /* Tabs */
+    .periodo-tabs {
+      display: flex;
+      gap: 0.5rem;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--lumi-border);
+    }
+
+    .periodo-tab {
+      padding: 0.6rem 1.2rem;
+      border: none;
+      background: rgba(200, 16, 46, 0.08);
+      border-radius: 999px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--lumi-muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .periodo-tab:hover {
+      background: rgba(200, 16, 46, 0.15);
+    }
+
+    .periodo-tab.active {
+      background: var(--lumi-primary);
+      color: #fff;
+    }
+
+    /* Conteúdo das tabs */
+    .periodo-tab-content {
+      padding: 1.5rem;
+    }
+
+    .periodo-tab-content.hidden {
+      display: none;
+    }
+
+    /* Inputs de período */
+    .periodo-inputs {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .periodo-input-group {
+      flex: 1;
+    }
+
+    .periodo-input-group label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--lumi-muted);
+      margin-bottom: 0.4rem;
+    }
+
+    .periodo-input {
+      width: 100%;
+      padding: 0.7rem 1rem;
+      border: 2px solid var(--lumi-border);
+      border-radius: 10px;
+      font-size: 1rem;
+      text-align: center;
+      background: #fff;
+      cursor: pointer;
+      transition: border-color 0.2s ease;
+    }
+
+    .periodo-input:focus,
+    .periodo-input.active {
+      border-color: var(--lumi-primary);
+      outline: none;
+    }
+
+    /* Calendários */
+    .periodo-calendarios {
+      display: flex;
+      gap: 1.5rem;
+      justify-content: center;
+    }
+
+    .calendario {
+      flex: 1;
+      max-width: 280px;
+    }
+
+    .calendario-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+
+    .calendario-titulo {
+      font-weight: 600;
+      font-size: 1rem;
+      color: var(--lumi-dark);
+      text-transform: capitalize;
+    }
+
+    .calendario-nav {
+      width: 32px;
+      height: 32px;
+      border: none;
+      background: rgba(200, 16, 46, 0.08);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1rem;
+      color: var(--lumi-dark);
+      transition: background 0.2s ease;
+    }
+
+    .calendario-nav:hover {
+      background: rgba(200, 16, 46, 0.15);
+    }
+
+    .calendario-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 2px;
+    }
+
+    .calendario-dia-semana {
+      text-align: center;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--lumi-muted);
+      padding: 0.5rem 0;
+    }
+
+    .calendario-dias {
+      display: contents;
+    }
+
+    .calendario-dia {
+      aspect-ratio: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9rem;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      color: var(--lumi-text);
+    }
+
+    .calendario-dia:hover:not(.disabled):not(.selected):not(.in-range) {
+      background: rgba(200, 16, 46, 0.1);
+    }
+
+    .calendario-dia.disabled {
+      color: #ccc;
+      cursor: default;
+    }
+
+    .calendario-dia.today {
+      border: 2px solid var(--lumi-primary);
+    }
+
+    .calendario-dia.selected {
+      background: var(--lumi-primary);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .calendario-dia.in-range {
+      background: rgba(200, 16, 46, 0.15);
+      border-radius: 0;
+    }
+
+    .calendario-dia.range-start {
+      border-radius: 50% 0 0 50%;
+    }
+
+    .calendario-dia.range-end {
+      border-radius: 0 50% 50% 0;
+    }
+
+    .calendario-dia.range-start.range-end {
+      border-radius: 50%;
+    }
+
+    /* Períodos rápidos */
+    .periodos-rapidos {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+    }
+
+    .periodo-rapido {
+      padding: 1rem;
+      border: 1px solid var(--lumi-border);
+      background: #fff;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--lumi-dark);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .periodo-rapido:hover {
+      border-color: var(--lumi-primary);
+      background: rgba(200, 16, 46, 0.05);
+    }
+
+    .periodo-rapido:active {
+      background: var(--lumi-primary);
+      color: #fff;
+    }
+
+    /* Footer do modal */
+    .periodo-footer {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: flex-end;
+      padding: 1rem 1.5rem;
+      border-top: 1px solid var(--lumi-border);
+    }
+
+    @media (max-width: 720px) {
+      body {
+        padding: 1.5rem 1rem;
+      }
+
+      .card {
+        padding: 1.25rem;
+      }
+
+      .card-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .form-actions {
+        justify-content: stretch;
+      }
+
+      .form-actions button {
+        width: 100%;
+      }
+
+      .periodo-calendarios {
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .periodo-inputs {
+        flex-direction: column;
+      }
+
+      .periodos-rapidos {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .nav-links { max-width: 1200px; margin: 0 auto 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap; }
+    .nav-links a { color: var(--lumi-muted); text-decoration: none; font-size: 0.95rem; padding: 0.4rem 0.8rem; border-radius: 10px; transition: background 0.2s, color 0.2s; }
+    .nav-links a:hover { color: var(--lumi-primary); background: var(--lumi-secondary-soft); }
+    .nav-links a.active { color: var(--lumi-primary); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <nav class="nav-links">
+    <a href="index.html" class="active">Consulta NF-e</a>
+    <a href="autorizacao-recepcao-xml.html">Autorização de Recepção de XML</a>
+    <a href="confnf.html">ConfNF</a>
+  </nav>
+  <header>
+    <div>
+      <h1>Consulta NF-e</h1>
+      <p>Filtre notas por período, fornecedor ou chave e exporte o resultado.</p>
+    </div>
+    <div class="server-selector" id="server-selector">
+      <span class="server-selector-label">
+        <span class="server-icon">🖥️</span>
+        Servidor:
+      </span>
+      <select class="server-select" id="server-select">
+        <option value="">Carregando...</option>
+      </select>
+      <span class="server-status online" id="server-status">
+        <span class="server-status-dot"></span>
+        <span id="server-status-text">Conectado</span>
+      </span>
+    </div>
+  </header>
+
+  <main>
+    <section class="card" id="card-filtros">
+      <div class="card-header">
+        <div>
+          <h2>Filtros inteligentes</h2>
+          <span>Informe o período obrigatório e utilize filtros adicionais para refinar o resultado.</span>
+          <div class="filtros-resumo" id="filtros-resumo"></div>
+        </div>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button type="button" class="btn-toggle-filtros" id="btn-toggle-filtros">
+            <span class="toggle-icon">▲</span>
+            <span class="toggle-text">Ocultar</span>
+          </button>
+          <button type="button" class="btn-secondary" id="btn-clear">Limpar filtros</button>
+        </div>
+      </div>
+
+      <div class="filtros-content" id="filtros-content">
+      <form id="consulta-form">
+        <div class="field-grid">
+          <!-- Linha 1: Estabelecimento (linha inteira) -->
+          <label style="grid-column: span 12;">
+            Estabelecimento
+            <select id="estabelecimento" name="estabelecimento">
+              <option value="">Todos</option>
+            </select>
+          </label>
+          
+          <!-- Linha 2: Tipo NF, Período, Fornecedor -->
+          <label class="field-medium field-row-start">
+            Tipo de NF
+            <select id="tipo_nf" name="tipo_nf">
+              <option value="1" selected>Saída</option>
+              <option value="0">Entrada</option>
+              <option value="">Todas</option>
+            </select>
+          </label>
+          <label class="field-xlarge">
+            Período
+            <div class="periodo-selector" id="periodo-selector">
+              <div class="periodo-display" id="periodo-display">
+                <span class="periodo-icon">📅</span>
+                <span class="periodo-text" id="periodo-text">Selecione o período</span>
+                <span class="periodo-arrow">▼</span>
+              </div>
+              <input type="date" id="data_inicial" name="data_inicial" required style="display: none;">
+              <input type="date" id="data_final" name="data_final" required style="display: none;">
+            </div>
+          </label>
+          
+          <!-- Modal do seletor de período -->
+          <div class="periodo-modal" id="periodo-modal">
+            <div class="periodo-modal-content">
+              <div class="periodo-header">
+                <h3>Selecionar Período</h3>
+                <button type="button" class="periodo-close" id="periodo-close">&times;</button>
+              </div>
+              
+              <div class="periodo-tabs">
+                <button type="button" class="periodo-tab active" data-tab="especificas">Datas específicas</button>
+                <button type="button" class="periodo-tab" data-tab="rapidas">Períodos rápidos</button>
+              </div>
+              
+              <div class="periodo-tab-content" id="tab-especificas">
+                <div class="periodo-inputs">
+                  <div class="periodo-input-group">
+                    <label>Data Inicial</label>
+                    <input type="text" id="periodo-inicio-display" class="periodo-input" readonly placeholder="dd/mm/aaaa">
+                  </div>
+                  <div class="periodo-input-group">
+                    <label>Data Final</label>
+                    <input type="text" id="periodo-fim-display" class="periodo-input" readonly placeholder="dd/mm/aaaa">
+                  </div>
+                </div>
+                
+                <div class="periodo-calendarios">
+                  <div class="calendario" id="calendario-esquerdo">
+                    <div class="calendario-header">
+                      <button type="button" class="calendario-nav" id="cal-prev">&lt;</button>
+                      <span class="calendario-titulo" id="cal-titulo-esq"></span>
+                    </div>
+                    <div class="calendario-grid">
+                      <div class="calendario-dia-semana">D</div>
+                      <div class="calendario-dia-semana">S</div>
+                      <div class="calendario-dia-semana">T</div>
+                      <div class="calendario-dia-semana">Q</div>
+                      <div class="calendario-dia-semana">Q</div>
+                      <div class="calendario-dia-semana">S</div>
+                      <div class="calendario-dia-semana">S</div>
+                      <div class="calendario-dias" id="dias-esq"></div>
+                    </div>
+                  </div>
+                  
+                  <div class="calendario" id="calendario-direito">
+                    <div class="calendario-header">
+                      <span class="calendario-titulo" id="cal-titulo-dir"></span>
+                      <button type="button" class="calendario-nav" id="cal-next">&gt;</button>
+                    </div>
+                    <div class="calendario-grid">
+                      <div class="calendario-dia-semana">D</div>
+                      <div class="calendario-dia-semana">S</div>
+                      <div class="calendario-dia-semana">T</div>
+                      <div class="calendario-dia-semana">Q</div>
+                      <div class="calendario-dia-semana">Q</div>
+                      <div class="calendario-dia-semana">S</div>
+                      <div class="calendario-dia-semana">S</div>
+                      <div class="calendario-dias" id="dias-dir"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="periodo-tab-content hidden" id="tab-rapidas">
+                <div class="periodos-rapidos">
+                  <button type="button" class="periodo-rapido" data-periodo="hoje">Hoje</button>
+                  <button type="button" class="periodo-rapido" data-periodo="ontem">Ontem</button>
+                  <button type="button" class="periodo-rapido" data-periodo="7dias">Últimos 7 dias</button>
+                  <button type="button" class="periodo-rapido" data-periodo="15dias">Últimos 15 dias</button>
+                  <button type="button" class="periodo-rapido" data-periodo="30dias">Últimos 30 dias</button>
+                  <button type="button" class="periodo-rapido" data-periodo="estemes">Este mês</button>
+                  <button type="button" class="periodo-rapido" data-periodo="mespassado">Mês passado</button>
+                  <button type="button" class="periodo-rapido" data-periodo="90dias">Últimos 90 dias</button>
+                  <button type="button" class="periodo-rapido" data-periodo="esteano">Este ano</button>
+                </div>
+              </div>
+              
+              <div class="periodo-footer">
+                <button type="button" class="btn-secondary" id="periodo-limpar">Limpar</button>
+                <button type="button" class="btn-primary" id="periodo-aplicar">Aplicar</button>
+              </div>
+            </div>
+          </div>
+          <label style="grid-column: span 6;">
+            Fornecedor
+            <input type="text" id="fornecedor" name="fornecedor" placeholder="CNPJ ou nome do fornecedor">
+          </label>
+          
+          <!-- Linha 3: Número NF e Chave de acesso -->
+          <label class="field-medium field-row-start">
+            Número NF
+            <input type="text" id="numero" name="numero" placeholder="000000000">
+          </label>
+          <label style="grid-column: span 10;">
+            Chave de acesso
+            <input type="text" id="chave" name="chave" placeholder="Digite parte ou toda a chave (44 caracteres)">
+          </label>
+          
+          <!-- Linha 4: Status da NF, Status da compra, Usuário -->
+          <label class="field-large field-row-start">
+            Status da NF
+            <select id="status" name="status">
+              <option value="">Todas</option>
+              <option value="pendente">Pendentes</option>
+              <option value="lancada">Lançadas</option>
+            </select>
+          </label>
+          <label style="grid-column: span 5;">
+            Status da compra
+            <select id="status_compra" name="status_compra">
+              <option value="">Todos</option>
+              <option value="pendente">Pendente (não lançada)</option>
+              <option value="0">Não Conferida</option>
+              <option value="1">Em Conferência</option>
+              <option value="2">Na Recepção</option>
+              <option value="3">Com Divergência</option>
+              <option value="4">NF Recebida</option>
+            </select>
+          </label>
+          <label class="field-xlarge">
+            Usuário (código ou nome)
+            <input type="text" id="usuario" name="usuario" list="usuarios-list" placeholder="Ex.: 12345-6 ou João">
+          </label>
+        </div>
+        <datalist id="usuarios-list"></datalist>
+
+        <div class="form-actions">
+          <span class="status-banner status-info" id="status-banner">Pronto para consultar.</span>
+          <div>
+            <button type="submit" class="btn-primary">Consultar notas</button>
+          </div>
+        </div>
+        <div class="loading-bar" id="loading-bar"></div>
+      </form>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <div>
+          <h2>Resultado da consulta</h2>
+          <span id="resultado-descricao">Nenhuma consulta realizada.</span>
+        </div>
+        <div class="actions-group" style="flex-direction:row;gap:0.6rem;">
+          <button type="button" class="btn-secondary" id="btn-export-pdf" disabled>Exportar PDF</button>
+          <button type="button" class="btn-secondary" id="btn-export" disabled>Exportar CSV</button>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <article class="stat-card">
+          <span>Total exibido</span>
+          <strong><span id="stat-total">0</span> registros</strong>
+          <span id="stat-total-global"></span>
+        </article>
+        <article class="stat-card">
+          <span>Somatório do período</span>
+          <strong id="stat-valor">R$ 0,00</strong>
+          <span id="stat-valor-extra"></span>
+        </article>
+        <article class="stat-card">
+          <span>Status no sistema</span>
+          <strong><span id="stat-lancadas">0</span> lançadas</strong>
+          <span id="stat-lancadas-extra"></span>
+        </article>
+      </div>
+
+      <div class="table-wrapper" id="tabela-container">
+        <table>
+    <thead>
+      <tr>
+              <th class="col-emissao">Emissão</th>
+              <th class="col-cnpj">CNPJ/CPF</th>
+              <th class="col-razao">Razão social</th>
+              <th class="col-estab">Estab. destino</th>
+              <th class="col-chave">Chave</th>
+              <th class="col-valor">Valor</th>
+              <th class="col-numero">Número NF</th>
+              <th class="col-usuario">Usuário</th>
+              <th class="col-status">Status</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+      </div>
+
+      <div class="empty-state hidden" id="empty-state">
+        <p>Nenhum resultado encontrado para os filtros informados.</p>
+        <small>Dica: ajuste datas ou remova filtros específicos.</small>
+        <div id="sefaz-area" class="hidden" style="margin-top: 1rem; padding: 1rem; background: #fff8e1; border: 1px solid #ffcc80; border-radius: 6px; display: inline-block; text-align: left;">
+          <p style="margin: 0 0 0.5rem 0;">
+            <strong>Chave não encontrada na base.</strong><br>
+            Deseja consultar diretamente na SEFAZ usando o certificado digital do estabelecimento?
+          </p>
+          <p id="sefaz-info" style="margin: 0 0 0.75rem 0; font-size: 0.85rem; color: #555;"></p>
+          <button type="button" class="btn-primary" id="btn-sefaz">Consultar SEFAZ</button>
+          <button type="button" class="btn-secondary" id="btn-sefaz-escolher-cert" style="margin-left: 0.5rem;">Selecionar certificado manualmente…</button>
+          <span id="sefaz-loading" class="hidden" style="margin-left: 0.75rem;">Consultando SEFAZ, aguarde…</span>
+          <p id="sefaz-cert-selecionado" class="hidden" style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: #1565c0;"></p>
+          <p id="sefaz-erro" class="hidden" style="color: #c62828; margin: 0.5rem 0 0 0; font-size: 0.9rem; white-space: pre-wrap;"></p>
+          <p id="sefaz-sucesso" class="hidden" style="color: #2e7d32; margin: 0.5rem 0 0 0; font-size: 0.9rem;"></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal: seleção manual de certificado -->
+  <div id="cert-modal" class="hidden" style="position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 9999; display: flex; align-items: center; justify-content: center;">
+    <div style="background: #fff; border-radius: 8px; width: min(720px, 92vw); max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0,0,0,0.25);">
+      <div style="padding: 1rem 1.25rem; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="margin: 0; font-size: 1.1rem;">Selecione o certificado digital</h3>
+        <button type="button" id="cert-modal-close" style="background: none; border: none; font-size: 1.4rem; cursor: pointer; line-height: 1;">&times;</button>
+      </div>
+      <div style="padding: 1rem 1.25rem; overflow-y: auto; flex: 1;">
+        <p style="margin: 0 0 0.75rem 0; color: #555; font-size: 0.9rem;">
+          Abaixo estão os certificados instalados no Windows. Selecione o A1 que deseja usar para consultar a SEFAZ.
+        </p>
+        <label id="cert-modal-filtro-wrapper" class="hidden" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; padding: 0.5rem 0.75rem; background: #f0f7ff; border-radius: 4px; font-size: 0.85rem; cursor: pointer;">
+          <input type="checkbox" id="cert-modal-apenas-estab" checked />
+          <span>Mostrar apenas certificados do estabelecimento (<strong id="cert-modal-cnpj-estab"></strong>)</span>
+        </label>
+        <div id="cert-modal-loading" style="color: #666;">Carregando certificados…</div>
+        <div id="cert-modal-erro" class="hidden" style="color: #c62828; white-space: pre-wrap;"></div>
+        <div id="cert-modal-lista"></div>
+      </div>
+      <div style="padding: 0.75rem 1.25rem; border-top: 1px solid #eee; display: flex; justify-content: flex-end; gap: 0.5rem;">
+        <button type="button" class="btn-secondary" id="cert-modal-cancelar">Cancelar</button>
+        <button type="button" class="btn-primary" id="cert-modal-confirmar" disabled>Usar este certificado</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+  <script>
+    const form = document.getElementById('consulta-form');
+    const tbody = document.getElementById('tbody');
+    const statusBanner = document.getElementById('status-banner');
+    const loadingBar = document.getElementById('loading-bar');
+    const statusSelect = document.getElementById('status');
+    const statusCompraSelect = document.getElementById('status_compra');
+    const resultadoDescricao = document.getElementById('resultado-descricao');
+    const statTotal = document.getElementById('stat-total');
+    const statTotalGlobal = document.getElementById('stat-total-global');
+    const statValor = document.getElementById('stat-valor');
+    const statValorExtra = document.getElementById('stat-valor-extra');
+    const statLancadas = document.getElementById('stat-lancadas');
+    const statLancadasExtra = document.getElementById('stat-lancadas-extra');
+    const emptyState = document.getElementById('empty-state');
+    const tabelaContainer = document.getElementById('tabela-container');
+    const btnExport = document.getElementById('btn-export');
+    const btnExportPdf = document.getElementById('btn-export-pdf');
+    const btnClear = document.getElementById('btn-clear');
+    const btnToggleFiltros = document.getElementById('btn-toggle-filtros');
+    const filtrosContent = document.getElementById('filtros-content');
+    const filtrosResumo = document.getElementById('filtros-resumo');
+    const toast = document.getElementById('toast');
+    const usuarioInput = document.getElementById('usuario');
+    const usuariosDatalist = document.getElementById('usuarios-list');
+    const estabelecimentoSelect = document.getElementById('estabelecimento');
+    const tipoNfSelect = document.getElementById('tipo_nf');
+    const dataInicialInput = document.getElementById('data_inicial');
+    const dataFinalInput = document.getElementById('data_final');
+    const computedStyles = getComputedStyle(document.documentElement);
+    const toastColors = {
+      danger: computedStyles.getPropertyValue('--danger')?.trim() || '#d946ef',
+      neutral: computedStyles.getPropertyValue('--lumi-dark')?.trim() || '#111322'
+    };
+
+    const serverSelect = document.getElementById('server-select');
+    const serverStatus = document.getElementById('server-status');
+    const serverStatusText = document.getElementById('server-status-text');
+
+    const state = {
+      rows: [],
+      filtered: [],
+      lastQuery: {},
+      usuarios: [],
+      estabelecimentos: [],
+      servidores: [],
+      servidorAtual: null
+    };
+
+    // Carregar servidores primeiro, depois os outros dados
+    carregarServidores().then(() => {
+      definirPeriodoPadrao(true);
+      carregarUsuarios();
+      carregarEstabelecimentos();
+      carregarContagemStatusCompra();
+      atualizarResumo();
+      toggleEmptyState(true);
+      atualizarExportacao();
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      await consultarNotas();
+    });
+
+    // Toggle dos filtros
+    btnToggleFiltros.addEventListener('click', toggleFiltros);
+
+    function toggleFiltros() {
+      const isCollapsed = filtrosContent.classList.contains('collapsed');
+      if (isCollapsed) {
+        mostrarFiltros();
+      } else {
+        ocultarFiltros();
+      }
+    }
+
+    function ocultarFiltros() {
+      filtrosContent.classList.add('collapsed');
+      btnToggleFiltros.classList.add('collapsed');
+      btnToggleFiltros.querySelector('.toggle-text').textContent = 'Mostrar';
+      btnToggleFiltros.querySelector('.toggle-icon').textContent = '▼';
+      
+      // Mostrar resumo dos filtros aplicados
+      atualizarResumoFiltros();
+      filtrosResumo.classList.add('visible');
+    }
+
+    function mostrarFiltros() {
+      filtrosContent.classList.remove('collapsed');
+      btnToggleFiltros.classList.remove('collapsed');
+      btnToggleFiltros.querySelector('.toggle-text').textContent = 'Ocultar';
+      btnToggleFiltros.querySelector('.toggle-icon').textContent = '▲';
+      
+      // Ocultar resumo
+      filtrosResumo.classList.remove('visible');
+    }
+
+    function atualizarResumoFiltros() {
+      const params = obterParametrosConsulta();
+      const tags = [];
+      
+      // Período (sempre mostrar)
+      if (params.data_inicial && params.data_final) {
+        tags.push(`<span class="filtro-tag"><strong>Período:</strong> ${formatarDataHumana(params.data_inicial)} → ${formatarDataHumana(params.data_final)}</span>`);
+      }
+      
+      // Estabelecimento
+      const estabSelect = document.getElementById('estabelecimento');
+      if (params.estabelecimento && estabSelect.selectedOptions[0]) {
+        const nome = estabSelect.selectedOptions[0].textContent;
+        tags.push(`<span class="filtro-tag"><strong>Estab.:</strong> ${nome.substring(0, 20)}${nome.length > 20 ? '...' : ''}</span>`);
+      }
+      
+      // Tipo NF
+      const tipoNfSelect = document.getElementById('tipo_nf');
+      if (params.tipo_nf !== '' && tipoNfSelect.selectedOptions[0]) {
+        tags.push(`<span class="filtro-tag"><strong>Tipo:</strong> ${tipoNfSelect.selectedOptions[0].textContent}</span>`);
+      }
+      
+      // Fornecedor
+      if (params.fornecedor) {
+        tags.push(`<span class="filtro-tag"><strong>Fornecedor:</strong> ${params.fornecedor.substring(0, 15)}${params.fornecedor.length > 15 ? '...' : ''}</span>`);
+      }
+      
+      // Número NF
+      if (params.numero) {
+        tags.push(`<span class="filtro-tag"><strong>Nº NF:</strong> ${params.numero}</span>`);
+      }
+      
+      // Chave
+      if (params.chave) {
+        tags.push(`<span class="filtro-tag"><strong>Chave:</strong> ${params.chave.substring(0, 10)}...</span>`);
+      }
+      
+      // Status NF
+      if (params.status) {
+        const statusLabel = params.status === 'lancada' ? 'Lançadas' : 'Pendentes';
+        tags.push(`<span class="filtro-tag"><strong>Status:</strong> ${statusLabel}</span>`);
+      }
+      
+      // Status Compra
+      const statusCompraSelect = document.getElementById('status_compra');
+      if (params.status_compra && statusCompraSelect.selectedOptions[0]) {
+        const label = statusCompraSelect.selectedOptions[0].textContent.split('(')[0].trim();
+        tags.push(`<span class="filtro-tag"><strong>Compra:</strong> ${label}</span>`);
+      }
+      
+      // Usuário
+      if (params.usuario) {
+        tags.push(`<span class="filtro-tag"><strong>Usuário:</strong> ${params.usuario}</span>`);
+      }
+      
+      filtrosResumo.innerHTML = tags.join('');
+    }
+
+    btnClear.addEventListener('click', () => {
+      form.reset();
+      definirPeriodoPadrao();
+      statusSelect.value = '';
+      statusCompraSelect.value = '';
+      estabelecimentoSelect.value = '';
+      tipoNfSelect.value = '1'; // Padrão: Saída
+      state.rows = [];
+      state.filtered = [];
+      atualizarTabela();
+      atualizarResumo();
+      toggleEmptyState(true);
+      atualizarExportacao();
+      atualizarStatus('Filtros limpos. Informe um novo período.', 'info');
+      carregarContagemStatusCompra();
+      
+      // Mostrar filtros ao limpar
+      mostrarFiltros();
+      
+      // Resetar o estado do calendário
+      if (typeof calendarState !== 'undefined') {
+        calendarState.dataInicio = null;
+        calendarState.dataFim = null;
+      }
+      // Atualizar display do período
+      if (typeof atualizarDisplayPeriodo === 'function') {
+        setTimeout(atualizarDisplayPeriodo, 0);
+      }
+    });
+
+    statusSelect.addEventListener('change', () => {
+      aplicarFiltrosStatus();
+      atualizarTabela();
+      atualizarResumo();
+      toggleEmptyState(state.filtered.length === 0);
+    });
+
+    statusCompraSelect.addEventListener('change', () => {
+      aplicarFiltrosStatus();
+      atualizarTabela();
+      atualizarResumo();
+      toggleEmptyState(state.filtered.length === 0);
+    });
+
+    // Atualizar contagem de status quando filtros relevantes mudarem
+    dataInicialInput.addEventListener('change', () => carregarContagemStatusCompra());
+    dataFinalInput.addEventListener('change', () => carregarContagemStatusCompra());
+    estabelecimentoSelect.addEventListener('change', () => carregarContagemStatusCompra());
+    tipoNfSelect.addEventListener('change', () => carregarContagemStatusCompra());
+    btnExport.addEventListener('click', () => {
+      if (!state.filtered.length) return;
+      const linhas = [
+        ['Emissao', 'CNPJ_CPF', 'Razao', 'Chave', 'Valor', 'NumeroNF', 'Status'].join(';'),
+        ...state.filtered.map((row) => {
+          const statusInfo = obterStatusLancamento(row);
+          return [
+            resolverDataLinha(row),
+            formatarDocumento(row.CNPJ_CPF),
+            row.RAZAO,
+            row.CHAVE,
+            normalizarValor(row.VALOR).toFixed(2).replace('.', ','),
+            row.NUMERO_NF,
+            statusInfo.label.toUpperCase()
+          ].map((campo) => `"${(campo ?? '').toString().replace(/"/g, '""')}"`).join(';');
+        })
+      ];
+      const blob = new Blob([linhas.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `consulta-nfe-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      mostrarToast('Arquivo CSV exportado com sucesso.');
+    });
+
+    btnExportPdf.addEventListener('click', gerarRelatorioPdf);
+
+    tbody.addEventListener('click', async (event) => {
+      const detalhesBtn = event.target.closest('[data-detalhes]');
+      if (detalhesBtn) {
+        const chave = detalhesBtn.getAttribute('data-detalhes');
+        window.location.href = `/detalhes.html?chave=${chave}`;
+        return;
+      }
+
+      const copiaBtn = event.target.closest('[data-copy]');
+      if (copiaBtn) {
+        const valor = copiaBtn.getAttribute('data-copy');
+        navigator.clipboard?.writeText(valor).then(() => {
+          mostrarToast('Chave copiada para a área de transferência.');
+        }).catch(() => {
+          mostrarToast('Não foi possível copiar a chave.', true);
+        });
+        return;
+      }
+
+      const danfeBtn = event.target.closest('[data-danfe]');
+      if (danfeBtn) {
+        await gerarDanfe(danfeBtn);
+        return;
+      }
+
+      const xmlBtn = event.target.closest('[data-xml]');
+      if (xmlBtn) {
+        await baixarXml(xmlBtn);
+        return;
+      }
+
+      const manutencaoBtn = event.target.closest('[data-manutencao]');
+      if (manutencaoBtn) {
+        const chave = manutencaoBtn.getAttribute('data-manutencao');
+        window.location.href = `/manutencao.html?chave=${chave}`;
+        return;
+      }
+
+      const autorizacaoBtn = event.target.closest('[data-autorizacao]');
+      if (autorizacaoBtn) {
+        const chave = autorizacaoBtn.getAttribute('data-autorizacao');
+        const params = obterParametrosConsulta();
+        const query = new URLSearchParams();
+        query.append('chave', chave);
+        Object.entries(params).forEach(([k, v]) => { if (v) query.append(k, v); });
+        window.location.href = 'autorizacao-recepcao-xml.html?' + query.toString();
+        return;
+      }
+    });
+
+    async function consultarNotas() {
+      const params = obterParametrosConsulta();
+      if (!params.data_inicial || !params.data_final) {
+        atualizarStatus('Informe as duas datas para realizar a consulta.', 'error');
+        return;
+      }
+
+      const query = new URLSearchParams();
+      Object.entries(params).forEach(([chave, valor]) => {
+        if (valor) query.append(chave, valor);
+      });
+
+      atualizarStatus('Buscando notas fiscais...', 'info');
+      setLoading(true);
+      try {
+        const resposta = await fetch(`/consulta?${query.toString()}`);
+        if (!resposta.ok) {
+          throw new Error('Erro ao consultar notas.');
+        }
+        const payload = await resposta.json();
+        state.rows = payload?.data ?? [];
+        state.filtered = [...state.rows];
+        aplicarFiltrosStatus();
+        state.lastQuery = params;
+        atualizarTabela();
+        atualizarResumo(payload?.meta);
+        toggleEmptyState(state.rows.length === 0);
+        atualizarExportacao();
+        resultadoDescricao.textContent = `Última atualização: ${new Date().toLocaleString('pt-BR')}`;
+        atualizarStatus(`Exibindo ${state.rows.length} registro(s).`, 'success');
+        
+        // Ocultar filtros após consulta bem-sucedida com resultados
+        if (state.rows.length > 0) {
+          ocultarFiltros();
+        }
+      } catch (error) {
+        console.error(error);
+        state.rows = [];
+        state.filtered = [];
+        atualizarTabela();
+        atualizarResumo();
+        toggleEmptyState(true);
+        atualizarExportacao();
+        atualizarStatus('Não foi possível completar a consulta. Tente novamente.', 'error');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function obterParametrosConsulta() {
+      const formData = new FormData(form);
+      const rawEstab = formData.get('estabelecimento');
+      return {
+        data_inicial: formData.get('data_inicial'),
+        data_final: formData.get('data_final'),
+        fornecedor: (formData.get('fornecedor') || '').trim(),
+        numero: (formData.get('numero') || '').trim(),
+        chave: (formData.get('chave') || '').trim(),
+        status: formData.get('status'),
+        status_compra: formData.get('status_compra'),
+        usuario: (formData.get('usuario') || '').trim(),
+        estabelecimento: (rawEstab != null && String(rawEstab).trim() !== '') ? String(rawEstab).trim() : '',
+        tipo_nf: formData.get('tipo_nf')
+      };
+    }
+
+    function atualizarTabela() {
+      tbody.innerHTML = '';
+      state.filtered.forEach((row) => {
+        const tr = document.createElement('tr');
+        const emissao = resolverDataLinha(row);
+        const chave = row.CHAVE ?? '';
+        const possuiChave = Boolean(chave);
+        const statusInfo = obterStatusLancamento(row);
+        const razao = row.RAZAO ?? '-';
+        const estabFantasia = row.ESTAB_FANTASIA ?? '-';
+        const numeroNF = row.NUMERO_NF ?? '-';
+        const valorFormatado = formatarMoeda(normalizarValor(row.VALOR));
+        const chaveTexto = chave || '-';
+        const usuarioCodigo = row.USUARIO_CODIGO ?? '-';
+        const usuarioNome = row.USUARIO_NOME ?? '';
+        tr.innerHTML = `
+          <td class="col-emissao"><span class="cell-text cell-text--nowrap" title="${escaparHtml(formatarDataHumana(emissao))}">${formatarDataHumana(emissao)}</span></td>
+          <td class="col-cnpj"><span class="badge cell-text--nowrap" title="${escaparHtml(formatarDocumento(row.CNPJ_CPF))}">${formatarDocumento(row.CNPJ_CPF)}</span></td>
+          <td class="col-razao">
+            <div class="cell-stack">
+              <span class="cell-text cell-text--wrap cell-strong" title="${escaparHtml(razao)}">${razao}</span>
+              <span class="cell-subtle">Fornecedor</span>
+            </div>
+          </td>
+          <td class="col-estab">
+            <div class="cell-stack">
+              <span class="cell-text cell-text--wrap" title="${escaparHtml(estabFantasia)}">${escaparHtml(estabFantasia)}</span>
+              <span class="cell-subtle">Estabelecimento destino</span>
+            </div>
+          </td>
+          <td class="col-chave">
+            <div class="cell-stack">
+              <span class="cell-text cell-text--wrap cell-key" title="${escaparHtml(chaveTexto)}">${chaveTexto}</span>
+              <span class="cell-subtle">Chave completa</span>
+            </div>
+          </td>
+          <td class="col-valor valor"><span class="value-chip" title="${escaparHtml(valorFormatado)}">${valorFormatado}</span></td>
+          <td class="col-numero"><span class="numero-pill" title="${escaparHtml(numeroNF)}">${numeroNF}</span></td>
+          <td class="col-usuario">
+            <span class="badge cell-text--nowrap" title="${escaparHtml(usuarioNome)}">${escaparHtml(usuarioCodigo)}</span>
+          </td>
+          <td class="col-status">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem;">
+              <span class="status-pill ${statusInfo.className}">${statusInfo.label}</span>
+              ${
+                possuiChave
+                  ? `
+                    <div class="actions-group" style="flex-direction:row; gap:0.4rem;">
+                      <button type="button" class="btn-icon" data-detalhes="${chave}" title="Detalhar NFe">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                        <span class="sr-only">Detalhar NFe</span>
+                      </button>
+                      <button type="button" class="btn-icon" data-copy="${chave}" title="Copiar chave">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h11a2 2 0 0 1 2 2v11h-2V5H8V3Zm8 4a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h11Zm0 2H5v11h11V9Z"/></svg>
+                        <span class="sr-only">Copiar chave</span>
+                      </button>
+                      <button type="button" class="btn-icon" data-danfe="${chave}" title="Imprimir DANFE">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v4H6V3Zm11 2V5H7v1h10ZM6 9h12a3 3 0 0 1 3 3v5H18v4H6v-4H3v-5a3 3 0 0 1 3-3Zm10 8H8v2h8v-2Zm4-3v-2a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v2h2v-2h12v2h2Z"/></svg>
+                        <span class="sr-only">Imprimir DANFE</span>
+                      </button>
+                      <button type="button" class="btn-icon" data-xml="${chave}" title="Baixar XML">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
+                        <span class="sr-only">Baixar XML</span>
+                      </button>
+                      <button type="button" class="btn-icon" data-manutencao="${chave}" title="Manutenção XML">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.82,11.69,4.82,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
+                        <span class="sr-only">Manutenção XML</span>
+                      </button>
+                      <button type="button" class="btn-icon" data-autorizacao="${chave}" title="Autorizar recepção de XML (incluir no sistema após análise)">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                        <span class="sr-only">Autorizar recepção de XML</span>
+                      </button>
+                    </div>
+                  `
+                  : ''
+              }
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function atualizarResumo(meta = { total: 0 }) {
+      const exibidos = state.filtered.length;
+      const total = state.rows.length;
+      statTotal.textContent = exibidos;
+      statTotalGlobal.textContent = total
+        ? (total !== exibidos ? `de ${total} registros retornados.` : 'Sem filtro local aplicado.')
+        : 'Sem dados para exibir.';
+
+      const soma = state.filtered.reduce((acc, row) => acc + normalizarValor(row.VALOR), 0);
+      statValor.textContent = formatarMoeda(soma);
+      const somaTotal = state.rows.reduce((acc, row) => acc + normalizarValor(row.VALOR), 0);
+      statValorExtra.textContent = somaTotal && somaTotal !== soma
+        ? `Total bruto do período: ${formatarMoeda(somaTotal)}`
+        : '';
+
+      const lancadas = state.filtered.filter((row) => Number(row.LANCADA) === 1).length;
+      const pendentes = exibidos - lancadas;
+      statLancadas.textContent = lancadas;
+      statLancadasExtra.textContent = exibidos
+        ? (pendentes
+            ? `${pendentes} nota(s) pendente(s) de lançamento.`
+            : 'Todas as notas exibidas já estão no sistema.')
+        : 'Sem dados para exibir.';
+    }
+
+    function toggleEmptyState(mostrar) {
+      emptyState.classList.toggle('hidden', !mostrar);
+      tabelaContainer.classList.toggle('hidden', mostrar);
+      atualizarAreaSefaz(mostrar);
+    }
+
+    function atualizarAreaSefaz(emptyVisivel) {
+      const area = document.getElementById('sefaz-area');
+      const info = document.getElementById('sefaz-info');
+      const erro = document.getElementById('sefaz-erro');
+      const sucesso = document.getElementById('sefaz-sucesso');
+      const loading = document.getElementById('sefaz-loading');
+      const btn = document.getElementById('btn-sefaz');
+      if (!area) return;
+
+      erro.classList.add('hidden');
+      sucesso.classList.add('hidden');
+      loading.classList.add('hidden');
+      if (btn) btn.disabled = false;
+
+      const chave = ((state.lastQuery && state.lastQuery.chave) || '').replace(/\D/g, '');
+      const estab = ((state.lastQuery && state.lastQuery.estabelecimento) || '').replace(/\D/g, '');
+
+      if (!emptyVisivel || chave.length !== 44 || !estab) {
+        area.classList.add('hidden');
+        return;
+      }
+      area.classList.remove('hidden');
+      info.textContent = `Chave ${chave} • Estab. ${estab}`;
+    }
+
+    // Certificado selecionado manualmente (thumbprint). Persistido no sessionStorage.
+    const CERT_STORAGE_KEY = 'sefaz.certSelecionado';
+    let certSelecionado = null;
+    try {
+      const raw = sessionStorage.getItem(CERT_STORAGE_KEY);
+      if (raw) certSelecionado = JSON.parse(raw);
+    } catch (_e) { certSelecionado = null; }
+
+    function renderCertSelecionado() {
+      const el = document.getElementById('sefaz-cert-selecionado');
+      if (!el) return;
+      if (certSelecionado && certSelecionado.thumbprint) {
+        el.textContent = `Certificado selecionado: ${certSelecionado.nome || certSelecionado.thumbprint}`;
+        el.classList.remove('hidden');
+      } else {
+        el.classList.add('hidden');
+      }
+    }
+    renderCertSelecionado();
+
+    async function executarConsultaSefaz(thumbprint) {
+      const btn = document.getElementById('btn-sefaz');
+      const loading = document.getElementById('sefaz-loading');
+      const erro = document.getElementById('sefaz-erro');
+      const sucesso = document.getElementById('sefaz-sucesso');
+      const chave = ((state.lastQuery && state.lastQuery.chave) || '').replace(/\D/g, '');
+      const estab = ((state.lastQuery && state.lastQuery.estabelecimento) || '').replace(/\D/g, '');
+
+      erro.classList.add('hidden');
+      sucesso.classList.add('hidden');
+      if (chave.length !== 44 || !estab) {
+        erro.textContent = 'Chave (44 dígitos) e estabelecimento são obrigatórios.';
+        erro.classList.remove('hidden');
+        return;
+      }
+
+      btn.disabled = true;
+      loading.classList.remove('hidden');
+      try {
+        const payload = { chave, estab };
+        if (thumbprint) payload.thumbprint = thumbprint;
+        const resp = await fetch('/api/nfe/consultar-sefaz', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          const err = new Error(data?.erro || 'Erro desconhecido na consulta.');
+          err.permiteSelecaoManual = Boolean(data?.permiteSelecaoManual);
+          throw err;
+        }
+        const msg = data.origem === 'banco'
+          ? `Chave já existia (ID ${data.idNfe}). Recarregando resultados...`
+          : `NF-e gravada com sucesso (ID ${data.idInserido}, NSU ${data.nsuInserido}). Recarregando resultados...`;
+        sucesso.textContent = msg;
+        sucesso.classList.remove('hidden');
+        setTimeout(() => { consultarNotas(); }, 900);
+      } catch (e) {
+        console.error(e);
+        let msg = e?.message || 'Falha ao consultar SEFAZ.';
+        if (e?.permiteSelecaoManual) {
+          msg += '\n\nDica: clique em "Selecionar certificado manualmente…" abaixo e escolha o A1 desejado.';
+        }
+        erro.textContent = msg;
+        erro.classList.remove('hidden');
+      } finally {
+        loading.classList.add('hidden');
+        btn.disabled = false;
+      }
+    }
+
+    document.getElementById('btn-sefaz')?.addEventListener('click', () => {
+      executarConsultaSefaz(certSelecionado?.thumbprint || null);
+    });
+
+    // ────── Modal de seleção de certificado ──────
+    const certModal = document.getElementById('cert-modal');
+    const certModalLoading = document.getElementById('cert-modal-loading');
+    const certModalErro = document.getElementById('cert-modal-erro');
+    const certModalLista = document.getElementById('cert-modal-lista');
+    const certModalConfirmar = document.getElementById('cert-modal-confirmar');
+    let thumbEscolhidoNaModal = null;
+    let certsCarregados = [];
+
+    function formatarData(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return iso;
+      return d.toLocaleDateString('pt-BR');
+    }
+
+    function renderListaCerts(certs, debug) {
+      if (!certs || certs.length === 0) {
+        const apenasEstab = document.getElementById('cert-modal-apenas-estab');
+        const filtroAtivo = apenasEstab && !apenasEstab.classList.contains('hidden') && apenasEstab.checked;
+        const totalBruto = certsCarregados.length;
+        const cnpjEst = cnpjEstabelecimentoAtual();
+        let html = filtroAtivo && totalBruto > 0
+          ? `<p style="color:#888;">Nenhum certificado encontrado para o estabelecimento <strong>${cnpjEst}</strong> (incluindo certificados da matriz com mesma raiz <strong>${raizCnpj(cnpjEst)}</strong>).<br>Há ${totalBruto} certificado(s) instalado(s) no Windows. Desmarque o filtro acima para ver todos.</p>`
+          : '<p style="color:#888;">Nenhum certificado encontrado no Windows.</p>';
+        if (debug) {
+          const dbgStr = [
+            debug.code != null ? `exit code: ${debug.code}` : '',
+            debug.stdout ? `stdout:\n${debug.stdout}` : '',
+            debug.stderr ? `stderr:\n${debug.stderr}` : '',
+            debug.erroExec ? `erro exec: ${debug.erroExec}` : '',
+            debug.parseError ? `parse: ${debug.parseError}` : '',
+            debug.motivo ? `motivo: ${debug.motivo}` : '',
+          ].filter(Boolean).join('\n\n');
+          html += `<details style="margin-top:0.75rem;"><summary style="cursor:pointer;color:#555;">Diagnóstico do PowerShell</summary>
+            <pre style="background:#f5f5f5;padding:0.5rem;border-radius:4px;font-size:0.75rem;white-space:pre-wrap;word-break:break-all;max-height:260px;overflow:auto;">${dbgStr.replace(/[<>&]/g, (s) => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[s]))}</pre>
+          </details>`;
+        }
+        certModalLista.innerHTML = html;
+        return;
+      }
+      const hoje = Date.now();
+      const html = certs.map((c, i) => {
+        const venc = c.notAfter ? new Date(c.notAfter).getTime() : 0;
+        const vencido = venc && venc < hoje;
+        const cor = vencido ? '#c62828' : (c.hasPrivateKey ? '#2e7d32' : '#ef6c00');
+        const badge = vencido ? 'VENCIDO' : (c.hasPrivateKey ? 'com chave privada' : 'sem chave privada');
+        const cnpjEstLista = cnpjEstabelecimentoAtual();
+        const cnpjCert = (c.cnpj || '').replace(/\D/g, '');
+        const ehMatrizParaFilial = cnpjEstLista && certificadoCompativelComEstabelecimento(c, cnpjEstLista)
+          && cnpjCert && cnpjCert !== cnpjEstLista && raizCnpj(cnpjCert) === raizCnpj(cnpjEstLista);
+        const avisoMatriz = ehMatrizParaFilial
+          ? '<div style="font-size:0.78rem;color:#1565c0;margin-top:0.2rem;">Certificado da matriz — válido para esta filial (mesma raiz CNPJ)</div>'
+          : '';
+        const idInput = `cert-opt-${i}`;
+        return `
+          <label for="${idInput}" style="display:flex; gap:0.75rem; padding: 0.6rem 0.75rem; border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 0.5rem; cursor: pointer; align-items: flex-start;">
+            <input type="radio" name="cert-opt" id="${idInput}" value="${c.thumbprint}" style="margin-top:0.25rem;" />
+            <div style="flex:1; min-width:0;">
+              <div style="font-weight:600; word-break:break-word;">${c.nome || c.subject}</div>
+              <div style="font-size:0.82rem; color:#666; margin-top:0.15rem;">Emissor: ${c.issuer || '—'}</div>
+              <div style="font-size:0.82rem; color:#666;">Válido até: ${formatarData(c.notAfter)} • Store: ${c.store}</div>
+              <div style="font-size:0.78rem; color:${cor}; margin-top:0.2rem;">${badge}</div>
+              ${avisoMatriz}
+              <div style="font-size:0.72rem; color:#999; font-family: monospace; margin-top:0.15rem;">${c.thumbprint}</div>
+            </div>
+          </label>
+        `;
+      }).join('');
+      certModalLista.innerHTML = html;
+      certModalLista.querySelectorAll('input[name="cert-opt"]').forEach((inp) => {
+        inp.addEventListener('change', (ev) => {
+          thumbEscolhidoNaModal = ev.target.value;
+          certModalConfirmar.disabled = false;
+        });
+      });
+    }
+
+    function cnpjEstabelecimentoAtual() {
+      return ((state.lastQuery && state.lastQuery.estabelecimento) || '').replace(/\D/g, '');
+    }
+
+    function raizCnpj(cnpj) {
+      return (cnpj || '').replace(/\D/g, '').slice(0, 8);
+    }
+
+    /** e-CNPJ da matriz vale para filiais com a mesma raiz (8 primeiros dígitos). */
+    function certificadoCompativelComEstabelecimento(cert, cnpjEstab) {
+      const estab = (cnpjEstab || '').replace(/\D/g, '');
+      if (estab.length !== 14) return false;
+      const raizEstab = estab.slice(0, 8);
+      const textos = [cert.subject, cert.nome, ...(cert.cnpjs || [])].filter(Boolean);
+      for (const texto of textos) {
+        const encontrados = String(texto).match(/\d{14}/g) || [];
+        if (encontrados.some((c) => c === estab || c.slice(0, 8) === raizEstab)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function aplicarFiltroEstab(certs) {
+      const filtroWrapper = document.getElementById('cert-modal-filtro-wrapper');
+      const apenasEstab = document.getElementById('cert-modal-apenas-estab');
+      const cnpj = cnpjEstabelecimentoAtual();
+
+      if (!cnpj) {
+        filtroWrapper.classList.add('hidden');
+        return certs;
+      }
+      document.getElementById('cert-modal-cnpj-estab').textContent = cnpj;
+      filtroWrapper.classList.remove('hidden');
+
+      if (!apenasEstab.checked) return certs;
+      return certs.filter((c) => certificadoCompativelComEstabelecimento(c, cnpj));
+    }
+
+    async function abrirModalCerts() {
+      thumbEscolhidoNaModal = null;
+      certModalConfirmar.disabled = true;
+      certModalLista.innerHTML = '';
+      certModalErro.classList.add('hidden');
+      certModalErro.textContent = '';
+      certModalLoading.style.display = '';
+      certModalLoading.textContent = 'Carregando certificados…';
+      certModal.classList.remove('hidden');
+
+      try {
+        const resp = await fetch('/api/sefaz/certificados');
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data?.erro || 'Falha ao listar certificados.');
+        certsCarregados = data.certificados || [];
+        certsCarregados.sort((a, b) => {
+          if (a.hasPrivateKey !== b.hasPrivateKey) return a.hasPrivateKey ? -1 : 1;
+          return String(b.notAfter || '').localeCompare(String(a.notAfter || ''));
+        });
+        certModalLoading.style.display = 'none';
+        renderListaCerts(aplicarFiltroEstab(certsCarregados), data.debug);
+      } catch (e) {
+        certModalLoading.style.display = 'none';
+        certModalErro.textContent = e?.message || 'Falha ao listar certificados.';
+        certModalErro.classList.remove('hidden');
+      }
+    }
+
+    document.getElementById('cert-modal-apenas-estab')?.addEventListener('change', () => {
+      thumbEscolhidoNaModal = null;
+      certModalConfirmar.disabled = true;
+      renderListaCerts(aplicarFiltroEstab(certsCarregados));
+    });
+
+    function fecharModalCerts() {
+      certModal.classList.add('hidden');
+    }
+
+    document.getElementById('btn-sefaz-escolher-cert')?.addEventListener('click', abrirModalCerts);
+    document.getElementById('cert-modal-close')?.addEventListener('click', fecharModalCerts);
+    document.getElementById('cert-modal-cancelar')?.addEventListener('click', fecharModalCerts);
+    certModal.addEventListener('click', (ev) => {
+      if (ev.target === certModal) fecharModalCerts();
+    });
+
+    certModalConfirmar.addEventListener('click', () => {
+      if (!thumbEscolhidoNaModal) return;
+      const cert = certsCarregados.find((c) => c.thumbprint === thumbEscolhidoNaModal);
+      certSelecionado = cert
+        ? { thumbprint: cert.thumbprint, nome: cert.nome || cert.subject }
+        : { thumbprint: thumbEscolhidoNaModal, nome: thumbEscolhidoNaModal };
+      try { sessionStorage.setItem(CERT_STORAGE_KEY, JSON.stringify(certSelecionado)); } catch (_e) { /* ignora */ }
+      renderCertSelecionado();
+      fecharModalCerts();
+      executarConsultaSefaz(certSelecionado.thumbprint);
+    });
+
+    function atualizarExportacao() {
+      const semDados = state.filtered.length === 0;
+      btnExport.disabled = semDados;
+      btnExportPdf.disabled = semDados;
+    }
+
+    function atualizarStatus(mensagem, tipo = 'info') {
+      statusBanner.textContent = mensagem;
+      statusBanner.className = `status-banner status-${tipo}`;
+    }
+
+    function setLoading(ativo) {
+      loadingBar.classList.toggle('active', ativo);
+    }
+
+    function formatarDataInput(date) {
+      const offset = date.getTimezoneOffset();
+      const ajustada = new Date(date.getTime() - offset * 60000);
+      return ajustada.toISOString().slice(0, 10);
+    }
+
+    function definirPeriodoPadrao(silent = false) {
+      const hoje = new Date();
+      const inicio = new Date();
+      // Período padrão: últimos 30 dias
+      inicio.setDate(hoje.getDate() - 29);
+      dataInicialInput.value = formatarDataInput(inicio);
+      dataFinalInput.value = formatarDataInput(hoje);
+      
+      // Atualizar o display do seletor de período
+      if (typeof atualizarDisplayPeriodo === 'function') {
+        atualizarDisplayPeriodo();
+      }
+
+      if (!silent) {
+        atualizarStatus(
+          `Período padrão aplicado: ${formatarDataHumana(dataInicialInput.value)} até ${formatarDataHumana(dataFinalInput.value)}.`,
+          'info'
+        );
+      }
+    }
+
+    function formatarMoeda(valor = 0) {
+      return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function formatarDocumento(documento = '') {
+      if (!documento) return '-';
+      const digits = documento.toString().replace(/\D/g, '');
+      if (digits.length === 14) {
+        return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+      }
+      if (digits.length === 11) {
+        return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+      }
+      return documento;
+    }
+
+    function aplicarFiltrosStatus() {
+      const filtroStatusNF = statusSelect.value;
+      const filtroStatusCompra = statusCompraSelect.value;
+      
+      // Se não há filtros, mostra todos
+      if (!filtroStatusNF && !filtroStatusCompra) {
+        state.filtered = [...state.rows];
+        return;
+      }
+
+      state.filtered = state.rows.filter((row) => {
+        const lancada = Number(row.LANCADA) === 1;
+        let passaFiltroNF = true;
+        let passaFiltroCompra = true;
+
+        // Filtro de status da NF (lançada/pendente)
+        if (filtroStatusNF) {
+          const desejaLancada = filtroStatusNF === 'lancada';
+          passaFiltroNF = desejaLancada ? lancada : !lancada;
+        }
+
+        // Filtro de status da compra
+        if (filtroStatusCompra) {
+          if (filtroStatusCompra === 'pendente') {
+            // Pendente = não lançada
+            passaFiltroCompra = !lancada;
+          } else {
+            // Para status específicos da compra, precisa estar lançada
+            if (!lancada) {
+              passaFiltroCompra = false;
+            } else {
+              // Busca o campo COMPRA_STATUS da tabela compra
+              const statusCompra = row.COMPRA_STATUS !== null && row.COMPRA_STATUS !== undefined && row.COMPRA_STATUS !== ''
+                ? Number(row.COMPRA_STATUS)
+                : null;
+              
+              // Compara com o filtro selecionado
+              const filtroNum = Number(filtroStatusCompra);
+              passaFiltroCompra = statusCompra === filtroNum;
+            }
+          }
+        }
+
+        return passaFiltroNF && passaFiltroCompra;
+      });
+    }
+
+    function normalizarValor(valor) {
+      if (valor === null || valor === undefined) return 0;
+      if (typeof valor === 'number') return valor;
+
+      let texto = valor.toString().trim();
+      if (!texto) return 0;
+
+      const hasComma = texto.includes(',');
+      const hasDot = texto.includes('.');
+      if (hasComma && hasDot) {
+        if (texto.lastIndexOf(',') > texto.lastIndexOf('.')) {
+          texto = texto.replace(/\./g, '').replace(',', '.');
+        } else {
+          texto = texto.replace(/,/g, '');
+        }
+      } else if (hasComma) {
+        texto = texto.replace(/\./g, '').replace(',', '.');
+      } else {
+        texto = texto.replace(/,/g, '');
+      }
+
+      const numero = parseFloat(texto);
+      return Number.isNaN(numero) ? 0 : numero;
+    }
+
+    function obterStatusLancamento(row = {}) {
+      const lancada = Number(row.LANCADA) === 1;
+      
+      if (!lancada) {
+        return {
+          lancada: false,
+          label: 'Pendente',
+          className: 'status-pill--warn',
+          statusCompra: null
+        };
+      }
+
+      // Busca o campo COMPRA_STATUS da tabela compra
+      let statusCompra = null;
+      if (row.COMPRA_STATUS !== null && row.COMPRA_STATUS !== undefined && row.COMPRA_STATUS !== '') {
+        const statusNum = Number(row.COMPRA_STATUS);
+        if (!isNaN(statusNum)) {
+          statusCompra = statusNum;
+        }
+      }
+
+      let label = 'Lançada';
+      let className = 'status-pill--ok';
+
+      if (statusCompra !== null) {
+        switch (statusCompra) {
+          case 0:
+            label = 'Não Conferida';
+            className = 'status-pill--ok';
+            break;
+          case 1:
+            label = 'Em Conferência';
+            className = 'status-pill--warn';
+            break;
+          case 2:
+            label = 'Na Recepção';
+            className = 'status-pill--warn';
+            break;
+          case 4:
+            label = 'NF Recebida';
+            className = 'status-pill--ok';
+            break;
+          default:
+            label = 'Lançada';
+            className = 'status-pill--ok';
+        }
+      }
+
+      return {
+        lancada: true,
+        label,
+        className,
+        statusCompra
+      };
+    }
+
+    function formatarDataHumana(dataTexto) {
+      const iso = extrairDataIso(dataTexto);
+      if (!iso) return dataTexto || '-';
+      const [ano, mes, dia] = iso.split('-');
+      return `${dia}/${mes}/${ano}`;
+    }
+
+    function extrairDataIso(dataTexto) {
+      if (!dataTexto) return null;
+      if (/^\d{4}-\d{2}-\d{2}/.test(dataTexto)) {
+        return dataTexto.slice(0, 10);
+      }
+      if (/^\d{4}-\d{2}-\d{2}T/.test(dataTexto)) {
+        return dataTexto.slice(0, 10);
+      }
+      if (dataTexto.includes('/')) {
+        const [dia, mes, ano] = dataTexto.split('/');
+        if (dia && mes && ano) {
+          return `${ano.padStart(4, '0')}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+        }
+      }
+      const data = new Date(dataTexto);
+      if (Number.isNaN(data.valueOf())) return null;
+      return data.toISOString().slice(0, 10);
+    }
+
+    function resolverDataLinha(row) {
+      return row?.EMISSAO_NORMALIZADA || row?.EMISSAO_ORIGINAL || row?.EMISSAO || '';
+    }
+
+    function escaparHtml(texto = '') {
+      return texto
+        ?.toString()
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;') || '';
+    }
+
+    async function carregarUsuarios() {
+      try {
+        const resp = await fetch('/usuarios');
+        if (!resp.ok) return;
+        const lista = await resp.json();
+        state.usuarios = Array.isArray(lista) ? lista : [];
+        usuariosDatalist.innerHTML = '';
+        state.usuarios.forEach((u) => {
+          const opt = document.createElement('option');
+          const codigo = u.codigo ?? '';
+          const nome = u.nome ?? '';
+          opt.value = codigo || nome;
+          opt.label = nome && codigo ? `${nome} (${codigo})` : (nome || codigo);
+          usuariosDatalist.appendChild(opt);
+        });
+      } catch (error) {
+        console.error('Falha ao carregar usuarios:', error);
+      }
+    }
+
+    async function carregarEstabelecimentos() {
+      try {
+        const resp = await fetch('/estabelecimentos');
+        if (!resp.ok) {
+          console.error('Erro ao buscar estabelecimentos:', resp.status, resp.statusText);
+          const erro = await resp.json().catch(() => ({}));
+          console.error('Detalhes do erro:', erro);
+          return;
+        }
+        const lista = await resp.json();
+        state.estabelecimentos = Array.isArray(lista) ? lista : [];
+        console.log('Estabelecimentos carregados:', state.estabelecimentos.length);
+        estabelecimentoSelect.innerHTML = '<option value="">Todos</option>';
+        state.estabelecimentos.forEach((e) => {
+          const opt = document.createElement('option');
+          opt.value = e.cnpj ?? '';
+          const cnpjFormatado = formatarDocumento(e.cnpj ?? '');
+          const nome = e.nome ?? '';
+          if (nome && cnpjFormatado !== '-') {
+            opt.textContent = `${nome} - ${cnpjFormatado}`;
+          } else if (nome) {
+            opt.textContent = nome;
+          } else {
+            opt.textContent = cnpjFormatado !== '-' ? cnpjFormatado : (e.cnpj ?? '');
+          }
+          estabelecimentoSelect.appendChild(opt);
+        });
+        if (state.estabelecimentos.length === 0) {
+          console.warn('Nenhum estabelecimento encontrado no banco de dados.');
+        }
+      } catch (error) {
+        console.error('Falha ao carregar estabelecimentos:', error);
+        console.error('Stack:', error.stack);
+      }
+    }
+
+    // Função para carregar contagem de status da compra
+    async function carregarContagemStatusCompra() {
+      try {
+        const params = obterParametrosConsulta();
+        const query = new URLSearchParams();
+        if (params.data_inicial) query.append('data_inicial', params.data_inicial);
+        if (params.data_final) query.append('data_final', params.data_final);
+        if (params.estabelecimento) query.append('estabelecimento', params.estabelecimento);
+        if (params.tipo_nf) query.append('tipo_nf', params.tipo_nf);
+
+        const resp = await fetch(`/status-compra-contagem?${query.toString()}`);
+        if (!resp.ok) {
+          console.error('Erro ao buscar contagem de status:', resp.status);
+          return;
+        }
+        const contagens = await resp.json();
+        
+        // Atualizar as opções do select com as contagens
+        const statusLabels = {
+          '': { label: 'Todos', key: 'total' },
+          'pendente': { label: 'Pendente (não lançada)', key: 'pendente' },
+          '0': { label: 'Não Conferida', key: '0' },
+          '1': { label: 'Em Conferência', key: '1' },
+          '2': { label: 'Na Recepção', key: '2' },
+          '3': { label: 'Com Divergência', key: '3' },
+          '4': { label: 'NF Recebida', key: '4' }
+        };
+        
+        const valorAtual = statusCompraSelect.value;
+        statusCompraSelect.innerHTML = '';
+        
+        Object.entries(statusLabels).forEach(([value, config]) => {
+          const opt = document.createElement('option');
+          opt.value = value;
+          const qtd = contagens[config.key] || 0;
+          opt.textContent = `${config.label} (${qtd})`;
+          statusCompraSelect.appendChild(opt);
+        });
+        
+        statusCompraSelect.value = valorAtual;
+      } catch (error) {
+        console.error('Falha ao carregar contagem de status:', error);
+      }
+    }
+
+    async function gerarRelatorioPdf() {
+      if (!state.filtered.length) {
+        mostrarToast('Nenhum registro para exportar.', true);
+        return;
+      }
+      if (!window.jspdf || !window.jspdf.jsPDF) {
+        mostrarToast('Biblioteca de PDF não carregada.', true);
+        return;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'landscape' });
+      const margemInicial = 14;
+
+      doc.setFontSize(16);
+      doc.setTextColor(34, 34, 34);
+      doc.text('Relatório NF-e · Lumi Software', margemInicial, 18);
+      doc.setFontSize(11);
+
+      const paramsConsulta = obterParametrosConsulta();
+      const periodoTexto = `Período: ${formatarDataHumana(paramsConsulta.data_inicial)} até ${formatarDataHumana(paramsConsulta.data_final)}`;
+      doc.text(periodoTexto, margemInicial, 26);
+      doc.text(`Gerado em: ${formatarDataHumana(formatarDataInput(new Date()))}`, margemInicial, 33);
+
+      const tabela = state.filtered.map((row) => {
+        const status = obterStatusLancamento(row);
+        return [
+          formatarDataHumana(resolverDataLinha(row)),
+          formatarDocumento(row.CNPJ_CPF),
+          (row.RAZAO || '-').toUpperCase(),
+          row.CHAVE || '',
+          formatarMoeda(normalizarValor(row.VALOR)),
+          row.NUMERO_NF || '-',
+          status.label.toUpperCase()
+        ];
+      });
+
+      doc.autoTable({
+        startY: 40,
+        head: [['Emissão', 'CNPJ/CPF', 'Razão social', 'Chave', 'Valor', 'Número NF', 'Status']],
+        body: tabela,
+        styles: {
+          fontSize: 9,
+          textColor: [34, 34, 34],
+          cellPadding: 2,
+          overflow: 'linebreak'
+        },
+        headStyles: {
+          fillColor: [200, 16, 46],
+          textColor: 255,
+          fontStyle: 'bold'
+        },
+        alternateRowStyles: {
+          fillColor: [255, 248, 244]
+        },
+        columnStyles: {
+          0: { cellWidth: 22, halign: 'center' },
+          1: { cellWidth: 36 },
+          2: { cellWidth: 55 },
+          3: { cellWidth: 85 },
+          4: { cellWidth: 28, halign: 'right' },
+          5: { cellWidth: 25, halign: 'right' },
+          6: { cellWidth: 20, halign: 'center', fontSize: 8 }
+        },
+        theme: 'grid'
+      });
+
+      const total = state.filtered.length;
+      const soma = state.filtered.reduce((acc, row) => acc + normalizarValor(row.VALOR), 0);
+      const lancadas = state.filtered.filter((row) => Number(row.LANCADA) === 1).length;
+      const finalY = doc.lastAutoTable.finalY + 10;
+
+      doc.setFontSize(11);
+      doc.text(`Total exibido: ${total} · Lançadas: ${lancadas} · Pendentes: ${total - lancadas}`, margemInicial, finalY);
+      doc.text(`Somatório: ${formatarMoeda(soma)}`, margemInicial, finalY + 7);
+
+      doc.save(`relatorio-nfe-${new Date().toISOString().slice(0, 10)}.pdf`);
+      mostrarToast('Relatório PDF gerado com sucesso.');
+    }
+
+    async function gerarDanfe(botao) {
+      const chave = botao.getAttribute('data-danfe');
+      if (!chave) return;
+      const conteudoOriginal = botao.innerHTML;
+      botao.disabled = true;
+      
+      // Adiciona um indicador visual sutil durante o carregamento
+      const svgOriginal = botao.querySelector('svg');
+      if (svgOriginal) {
+        svgOriginal.style.opacity = '0.5';
+      }
+
+      try {
+        const resposta = await fetch(`/danfe/${chave}`);
+        if (!resposta.ok) {
+          const erro = await resposta.json().catch(() => ({}));
+          throw new Error(erro?.error || 'Falha ao gerar DANFE');
+        }
+        const blob = await resposta.blob();
+        const url = URL.createObjectURL(blob);
+        const novaJanela = window.open(url, '_blank');
+        if (!novaJanela) {
+          const link = document.createElement('a');
+          link.href = url;
+          link.target = '_blank';
+          link.rel = 'noopener';
+          link.click();
+        }
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        mostrarToast('DANFE gerado em uma nova guia.');
+      } catch (error) {
+        console.error(error);
+        mostrarToast('Não foi possível gerar o DANFE.', true);
+      } finally {
+        botao.disabled = false;
+        botao.innerHTML = conteudoOriginal;
+      }
+    }
+
+    async function baixarXml(botao) {
+      const chave = botao.getAttribute('data-xml');
+      if (!chave) return;
+      const conteudoOriginal = botao.innerHTML;
+      botao.disabled = true;
+      
+      // Adiciona um indicador visual sutil durante o carregamento
+      const svgOriginal = botao.querySelector('svg');
+      if (svgOriginal) {
+        svgOriginal.style.opacity = '0.5';
+      }
+
+      try {
+        const resposta = await fetch(`/xml/${chave}`);
+        if (!resposta.ok) {
+          const erro = await resposta.json().catch(() => ({}));
+          throw new Error(erro?.error || 'Falha ao baixar XML');
+        }
+        const blob = await resposta.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const contentDisposition = resposta.headers.get('Content-Disposition');
+        const filename = contentDisposition 
+          ? contentDisposition.split('filename=')[1]?.replace(/"/g, '') || `nfe-${chave}.xml`
+          : `nfe-${chave}.xml`;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        mostrarToast('XML baixado com sucesso.');
+      } catch (error) {
+        console.error(error);
+        mostrarToast(error.message || 'Não foi possível baixar o XML.', true);
+      } finally {
+        botao.disabled = false;
+        botao.innerHTML = conteudoOriginal;
+      }
+    }
+
+    function mostrarToast(mensagem, isError = false) {
+      toast.textContent = mensagem;
+      toast.style.backgroundColor = isError ? toastColors.danger : toastColors.neutral;
+      toast.classList.add('visible');
+      setTimeout(() => toast.classList.remove('visible'), 2600);
+    }
+
+    // ============================================
+    // GERENCIAMENTO DE SERVIDORES
+    // ============================================
+
+    async function carregarServidores() {
+      try {
+        atualizarStatusServidor('connecting', 'Conectando...');
+        
+        const resp = await fetch('/servidores');
+        if (!resp.ok) {
+          throw new Error('Erro ao carregar servidores');
+        }
+        
+        const data = await resp.json();
+        state.servidores = data.servidores || [];
+        state.servidorAtual = data.atual;
+        
+        // Preencher select de servidores
+        serverSelect.innerHTML = '';
+        state.servidores.forEach(servidor => {
+          const opt = document.createElement('option');
+          opt.value = servidor.id;
+          opt.textContent = servidor.name;
+          if (servidor.atual) {
+            opt.selected = true;
+          }
+          serverSelect.appendChild(opt);
+        });
+        
+        // Se só tem um servidor, desabilitar o select
+        if (state.servidores.length <= 1) {
+          serverSelect.disabled = true;
+        }
+        
+        atualizarStatusServidor('online', 'Conectado');
+        
+        console.log('Servidores carregados:', state.servidores);
+        console.log('Servidor atual:', state.servidorAtual);
+        
+      } catch (error) {
+        console.error('Erro ao carregar servidores:', error);
+        serverSelect.innerHTML = '<option value="">Erro ao carregar</option>';
+        atualizarStatusServidor('offline', 'Desconectado');
+      }
+    }
+
+    function atualizarStatusServidor(status, texto) {
+      serverStatus.className = `server-status ${status}`;
+      serverStatusText.textContent = texto;
+    }
+
+    async function trocarServidor(serverId) {
+      if (!serverId || serverId === state.servidorAtual) return;
+      
+      try {
+        atualizarStatusServidor('connecting', 'Conectando...');
+        serverSelect.disabled = true;
+        
+        const resp = await fetch('/trocar-servidor', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ serverId })
+        });
+        
+        const data = await resp.json();
+        
+        if (!resp.ok) {
+          throw new Error(data.error || 'Erro ao trocar servidor');
+        }
+        
+        state.servidorAtual = serverId;
+        atualizarStatusServidor('online', 'Conectado');
+        
+        // Limpar dados atuais e recarregar
+        state.rows = [];
+        state.filtered = [];
+        atualizarTabela();
+        atualizarResumo();
+        toggleEmptyState(true);
+        atualizarExportacao();
+        
+        // Recarregar dados do novo servidor
+        await Promise.all([
+          carregarUsuarios(),
+          carregarEstabelecimentos(),
+          carregarContagemStatusCompra()
+        ]);
+        
+        mostrarToast(`Conectado ao servidor: ${data.servidor.name}`);
+        atualizarStatus(`Servidor alterado para: ${data.servidor.name}. Realize uma nova consulta.`, 'success');
+        
+        // Mostrar filtros para nova consulta
+        mostrarFiltros();
+        
+      } catch (error) {
+        console.error('Erro ao trocar servidor:', error);
+        atualizarStatusServidor('offline', 'Erro');
+        mostrarToast(error.message || 'Erro ao trocar servidor', true);
+        
+        // Reverter seleção
+        serverSelect.value = state.servidorAtual;
+      } finally {
+        serverSelect.disabled = state.servidores.length <= 1;
+      }
+    }
+
+    // Event listener para troca de servidor
+    serverSelect.addEventListener('change', (e) => {
+      trocarServidor(e.target.value);
+    });
+
+    // ============================================
+    // SELETOR DE PERÍODO
+    // ============================================
+    
+    const periodoSelector = document.getElementById('periodo-selector');
+    const periodoDisplay = document.getElementById('periodo-display');
+    const periodoText = document.getElementById('periodo-text');
+    const periodoModal = document.getElementById('periodo-modal');
+    const periodoClose = document.getElementById('periodo-close');
+    const periodoAplicar = document.getElementById('periodo-aplicar');
+    const periodoLimpar = document.getElementById('periodo-limpar');
+    const periodoInicioDisplay = document.getElementById('periodo-inicio-display');
+    const periodoFimDisplay = document.getElementById('periodo-fim-display');
+    const diasEsq = document.getElementById('dias-esq');
+    const diasDir = document.getElementById('dias-dir');
+    const calTituloEsq = document.getElementById('cal-titulo-esq');
+    const calTituloDir = document.getElementById('cal-titulo-dir');
+    const calPrev = document.getElementById('cal-prev');
+    const calNext = document.getElementById('cal-next');
+    const tabEspecificas = document.getElementById('tab-especificas');
+    const tabRapidas = document.getElementById('tab-rapidas');
+
+    const mesesNomes = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 
+                        'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+
+    let calendarState = {
+      mesAtualEsq: new Date().getMonth(),
+      anoAtualEsq: new Date().getFullYear(),
+      dataInicio: null,
+      dataFim: null,
+      selecionando: 'inicio' // 'inicio' ou 'fim'
+    };
+
+    // Abrir modal
+    periodoDisplay.addEventListener('click', () => {
+      periodoModal.classList.add('active');
+      periodoSelector.classList.add('active');
+      
+      // Inicializar calendários com o mês atual
+      const hoje = new Date();
+      calendarState.mesAtualEsq = hoje.getMonth();
+      calendarState.anoAtualEsq = hoje.getFullYear();
+      
+      // Carregar datas atuais se existirem
+      if (dataInicialInput.value) {
+        calendarState.dataInicio = new Date(dataInicialInput.value + 'T00:00:00');
+        periodoInicioDisplay.value = formatarDataHumana(dataInicialInput.value);
+      }
+      if (dataFinalInput.value) {
+        calendarState.dataFim = new Date(dataFinalInput.value + 'T00:00:00');
+        periodoFimDisplay.value = formatarDataHumana(dataFinalInput.value);
+      }
+      
+      renderizarCalendarios();
+    });
+
+    // Fechar modal
+    periodoClose.addEventListener('click', fecharModalPeriodo);
+    periodoModal.addEventListener('click', (e) => {
+      if (e.target === periodoModal) fecharModalPeriodo();
+    });
+
+    function fecharModalPeriodo() {
+      periodoModal.classList.remove('active');
+      periodoSelector.classList.remove('active');
+    }
+
+    // Navegação do calendário
+    calPrev.addEventListener('click', () => {
+      calendarState.mesAtualEsq--;
+      if (calendarState.mesAtualEsq < 0) {
+        calendarState.mesAtualEsq = 11;
+        calendarState.anoAtualEsq--;
+      }
+      renderizarCalendarios();
+    });
+
+    calNext.addEventListener('click', () => {
+      calendarState.mesAtualEsq++;
+      if (calendarState.mesAtualEsq > 11) {
+        calendarState.mesAtualEsq = 0;
+        calendarState.anoAtualEsq++;
+      }
+      renderizarCalendarios();
+    });
+
+    // Tabs
+    document.querySelectorAll('.periodo-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.periodo-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        
+        const tabId = tab.dataset.tab;
+        tabEspecificas.classList.toggle('hidden', tabId !== 'especificas');
+        tabRapidas.classList.toggle('hidden', tabId !== 'rapidas');
+      });
+    });
+
+    // Períodos rápidos
+    document.querySelectorAll('.periodo-rapido').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const periodo = btn.dataset.periodo;
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+        
+        let inicio, fim;
+        
+        switch (periodo) {
+          case 'hoje':
+            inicio = fim = new Date(hoje);
+            break;
+          case 'ontem':
+            inicio = fim = new Date(hoje);
+            inicio.setDate(inicio.getDate() - 1);
+            break;
+          case '7dias':
+            fim = new Date(hoje);
+            inicio = new Date(hoje);
+            inicio.setDate(inicio.getDate() - 6);
+            break;
+          case '15dias':
+            fim = new Date(hoje);
+            inicio = new Date(hoje);
+            inicio.setDate(inicio.getDate() - 14);
+            break;
+          case '30dias':
+            fim = new Date(hoje);
+            inicio = new Date(hoje);
+            inicio.setDate(inicio.getDate() - 29);
+            break;
+          case 'estemes':
+            inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+            fim = new Date(hoje);
+            break;
+          case 'mespassado':
+            inicio = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+            fim = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+            break;
+          case '90dias':
+            fim = new Date(hoje);
+            inicio = new Date(hoje);
+            inicio.setDate(inicio.getDate() - 89);
+            break;
+          case 'esteano':
+            inicio = new Date(hoje.getFullYear(), 0, 1);
+            fim = new Date(hoje);
+            break;
+        }
+        
+        calendarState.dataInicio = inicio;
+        calendarState.dataFim = fim;
+        
+        aplicarPeriodo();
+      });
+    });
+
+    // Clique nos inputs de data para alternar seleção
+    periodoInicioDisplay.addEventListener('click', () => {
+      calendarState.selecionando = 'inicio';
+      periodoInicioDisplay.classList.add('active');
+      periodoFimDisplay.classList.remove('active');
+    });
+
+    periodoFimDisplay.addEventListener('click', () => {
+      calendarState.selecionando = 'fim';
+      periodoFimDisplay.classList.add('active');
+      periodoInicioDisplay.classList.remove('active');
+    });
+
+    // Limpar período
+    periodoLimpar.addEventListener('click', () => {
+      calendarState.dataInicio = null;
+      calendarState.dataFim = null;
+      periodoInicioDisplay.value = '';
+      periodoFimDisplay.value = '';
+      renderizarCalendarios();
+    });
+
+    // Aplicar período
+    periodoAplicar.addEventListener('click', aplicarPeriodo);
+
+    function aplicarPeriodo() {
+      if (calendarState.dataInicio && calendarState.dataFim) {
+        // Garantir que início <= fim
+        if (calendarState.dataInicio > calendarState.dataFim) {
+          const temp = calendarState.dataInicio;
+          calendarState.dataInicio = calendarState.dataFim;
+          calendarState.dataFim = temp;
+        }
+        
+        dataInicialInput.value = formatarDataInput(calendarState.dataInicio);
+        dataFinalInput.value = formatarDataInput(calendarState.dataFim);
+        
+        atualizarDisplayPeriodo();
+        fecharModalPeriodo();
+        carregarContagemStatusCompra();
+        
+        atualizarStatus(`Período selecionado: ${formatarDataHumana(dataInicialInput.value)} até ${formatarDataHumana(dataFinalInput.value)}`, 'success');
+      } else {
+        mostrarToast('Selecione as duas datas do período.', true);
+      }
+    }
+
+    function atualizarDisplayPeriodo() {
+      // Verificar se o elemento existe (pode ser chamada antes da inicialização)
+      const periodoTextEl = document.getElementById('periodo-text');
+      if (!periodoTextEl) return;
+      
+      if (dataInicialInput.value && dataFinalInput.value) {
+        const inicio = formatarDataHumana(dataInicialInput.value);
+        const fim = formatarDataHumana(dataFinalInput.value);
+        periodoTextEl.textContent = `${inicio} → ${fim}`;
+      } else {
+        periodoTextEl.textContent = 'Selecione o período';
+      }
+    }
+
+    function renderizarCalendarios() {
+      const mesEsq = calendarState.mesAtualEsq;
+      const anoEsq = calendarState.anoAtualEsq;
+      
+      // Mês direito é sempre o próximo
+      let mesDir = mesEsq + 1;
+      let anoDir = anoEsq;
+      if (mesDir > 11) {
+        mesDir = 0;
+        anoDir++;
+      }
+      
+      calTituloEsq.textContent = `${mesesNomes[mesEsq]} ${anoEsq}`;
+      calTituloDir.textContent = `${mesesNomes[mesDir]} ${anoDir}`;
+      
+      diasEsq.innerHTML = renderizarDiasMes(mesEsq, anoEsq);
+      diasDir.innerHTML = renderizarDiasMes(mesDir, anoDir);
+      
+      // Adicionar event listeners aos dias
+      document.querySelectorAll('.calendario-dia:not(.disabled)').forEach(dia => {
+        dia.addEventListener('click', () => selecionarDia(dia));
+      });
+      
+      // Atualizar inputs de display
+      if (calendarState.dataInicio) {
+        periodoInicioDisplay.value = formatarDataHumana(formatarDataInput(calendarState.dataInicio));
+      }
+      if (calendarState.dataFim) {
+        periodoFimDisplay.value = formatarDataHumana(formatarDataInput(calendarState.dataFim));
+      }
+    }
+
+    function renderizarDiasMes(mes, ano) {
+      const primeiroDia = new Date(ano, mes, 1);
+      const ultimoDia = new Date(ano, mes + 1, 0);
+      const diasNoMes = ultimoDia.getDate();
+      const diaSemanaInicio = primeiroDia.getDay();
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      
+      let html = '';
+      
+      // Dias vazios antes do primeiro dia
+      for (let i = 0; i < diaSemanaInicio; i++) {
+        html += '<div class="calendario-dia disabled"></div>';
+      }
+      
+      // Dias do mês
+      for (let dia = 1; dia <= diasNoMes; dia++) {
+        const dataAtual = new Date(ano, mes, dia);
+        dataAtual.setHours(0, 0, 0, 0);
+        
+        let classes = ['calendario-dia'];
+        
+        // Hoje
+        if (dataAtual.getTime() === hoje.getTime()) {
+          classes.push('today');
+        }
+        
+        // Verificar seleção
+        const inicioTime = calendarState.dataInicio?.getTime();
+        const fimTime = calendarState.dataFim?.getTime();
+        const atualTime = dataAtual.getTime();
+        
+        if (inicioTime && atualTime === inicioTime) {
+          classes.push('selected', 'range-start');
+        }
+        if (fimTime && atualTime === fimTime) {
+          classes.push('selected', 'range-end');
+        }
+        if (inicioTime && fimTime && atualTime > inicioTime && atualTime < fimTime) {
+          classes.push('in-range');
+        }
+        
+        html += `<div class="${classes.join(' ')}" data-date="${ano}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}">${dia}</div>`;
+      }
+      
+      return html;
+    }
+
+    function selecionarDia(elemento) {
+      const dateStr = elemento.dataset.date;
+      const [ano, mes, dia] = dateStr.split('-').map(Number);
+      const dataSelecionada = new Date(ano, mes - 1, dia);
+      dataSelecionada.setHours(0, 0, 0, 0);
+      
+      if (calendarState.selecionando === 'inicio') {
+        calendarState.dataInicio = dataSelecionada;
+        calendarState.selecionando = 'fim';
+        periodoInicioDisplay.classList.remove('active');
+        periodoFimDisplay.classList.add('active');
+        
+        // Se a data de início for maior que a de fim, limpar a de fim
+        if (calendarState.dataFim && dataSelecionada > calendarState.dataFim) {
+          calendarState.dataFim = null;
+          periodoFimDisplay.value = '';
+        }
+      } else {
+        calendarState.dataFim = dataSelecionada;
+        calendarState.selecionando = 'inicio';
+        periodoFimDisplay.classList.remove('active');
+        periodoInicioDisplay.classList.add('active');
+        
+        // Se a data de fim for menor que a de início, trocar
+        if (calendarState.dataInicio && dataSelecionada < calendarState.dataInicio) {
+          const temp = calendarState.dataInicio;
+          calendarState.dataInicio = dataSelecionada;
+          calendarState.dataFim = temp;
+        }
+      }
+      
+      renderizarCalendarios();
+    }
+
+    // Inicializar display do período
+    atualizarDisplayPeriodo();
+  </script>
+</body>
+</html>
