@@ -2380,16 +2380,44 @@ app.get('/admin/versao', (req, res) => {
     res.json({ versao, node: process.version, plataforma: process.platform });
 });
 
-app.post('/admin/atualizar', async (req, res) => {
-    if (!UPDATE_TOKEN_ADMIN) {
-        return res.status(503).json({ error: 'UPDATE_ADMIN_TOKEN nao configurado no .env.' });
-    }
-    const token = req.get('X-Update-Token') || req.query.token;
-    if (token !== UPDATE_TOKEN_ADMIN) {
-        return res.status(401).json({ error: 'Token invalido.' });
-    }
+/**
+ * Status leve usado pela UI (badge "atualização disponível").
+ * Não baixa nada e não exige token; só compara local x release pública.
+ */
+app.get('/admin/verificar-atualizacao', async (req, res) => {
     if (!updater) {
         return res.status(503).json({ error: 'Modulo updater nao disponivel.' });
+    }
+    try {
+        const status = await updater.consultarStatus();
+        res.json(status);
+    } catch (e) {
+        console.error('[ADMIN] Erro no /admin/verificar-atualizacao:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+/**
+ * Requisição vinda da máquina onde o serviço roda (loopback 127.0.0.1 / ::1).
+ * Permite que a UI local dispare a atualização sem precisar do token administrativo.
+ */
+function vemDoLoopback(req) {
+    const ip = (req.ip || req.socket?.remoteAddress || '').replace(/^::ffff:/, '');
+    return ip === '127.0.0.1' || ip === '::1' || ip === 'localhost';
+}
+
+app.post('/admin/atualizar', async (req, res) => {
+    if (!updater) {
+        return res.status(503).json({ error: 'Modulo updater nao disponivel.' });
+    }
+    const token = req.get('X-Update-Token') || req.query.token;
+    const autorizadoToken = !!UPDATE_TOKEN_ADMIN && token === UPDATE_TOKEN_ADMIN;
+    const autorizadoLocal = vemDoLoopback(req);
+    if (!autorizadoToken && !autorizadoLocal) {
+        if (!UPDATE_TOKEN_ADMIN) {
+            return res.status(503).json({ error: 'UPDATE_ADMIN_TOKEN nao configurado no .env (necessário para chamadas remotas).' });
+        }
+        return res.status(401).json({ error: 'Token invalido.' });
     }
     try {
         const forcar = String(req.query.force || req.body?.force || '').toLowerCase() === 'true';

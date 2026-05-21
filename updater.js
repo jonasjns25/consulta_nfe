@@ -6,7 +6,7 @@
  *  2. Consulta a release mais recente no GitHub (API publica - sem auth).
  *  3. Se a versao remota for maior (semver), baixa o asset .zip da release.
  *  4. Faz backup da instalacao atual em ./backups/<versao>-<timestamp>/.
- *  5. Extrai o zip por cima, preservando .env, node_modules, logs e backups.
+ *  5. Extrai o zip por cima, preservando .env e demais dados sensiveis (ver SECURITY.md).
  *  6. Roda npm install --omit=dev se package.json mudou.
  *  7. Encerra o processo com exit code 75. O servico Windows (nssm) reinicia.
  *
@@ -30,6 +30,7 @@ const semver = require('semver');
 const AdmZip = require('adm-zip');
 
 const ROOT = __dirname;
+/** Pastas/arquivos na raiz da instalação que nunca são substituídos pelo ZIP da release */
 const PRESERVE = new Set([
     '.env',
     'node_modules',
@@ -40,6 +41,31 @@ const PRESERVE = new Set([
     '.git',
     '.gitignore'
 ]);
+
+/**
+ * Caminhos que nunca podem ser extraídos do ZIP sobre a instalação (segurança do cliente).
+ * Inclui .env em qualquer nível e certificados/chaves comuns — mesmo que o pacote esteja malicioso/errado.
+ */
+function caminhoNuncaSobrescrever(nomeRelativo) {
+    const norm = String(nomeRelativo).replace(/\\/g, '/');
+    const partes = norm.split('/').filter(Boolean);
+    if (partes.length === 0) return true;
+    const primeira = partes[0];
+    if (PRESERVE.has(primeira)) return true;
+
+    const arquivo = partes[partes.length - 1];
+    const aLower = arquivo.toLowerCase();
+    if (arquivo.startsWith('.env') || aLower.endsWith('.env')) return true;
+    if (aLower === 'config.env' || aLower === 'credentials.json' || aLower === 'credentials.config.json')
+        return true;
+    if (/\.(pfx|p12|cer|crt|pem|key|keystore|jks)$/i.test(aLower)) return true;
+
+    const caminhoCompletoLower = norm.toLowerCase();
+    if (caminhoCompletoLower.includes('/certificados/') || caminhoCompletoLower.startsWith('certificados/'))
+        return true;
+
+    return false;
+}
 
 function lerVersaoLocal() {
     try {
@@ -151,30 +177,38 @@ async function aplicarZip(caminhoZip) {
     let prefixoComum = null;
     const nomesRaiz = new Set();
     for (const e of entradas) {
-        const partes = e.entryName.split('/').filter(Boolean);
+        const partes = String(e.entryName).replace(/\\/g, '/').split('/').filter(Boolean);
         if (partes.length > 0) nomesRaiz.add(partes[0]);
     }
     if (nomesRaiz.size === 1) {
         prefixoComum = [...nomesRaiz][0] + '/';
     }
 
+    let ignoradosSeguranca = 0;
     for (const entrada of entradas) {
-        let nomeRelativo = entrada.entryName;
+        let nomeRelativo = String(entrada.entryName).replace(/\\/g, '/');
         if (prefixoComum && nomeRelativo.startsWith(prefixoComum)) {
             nomeRelativo = nomeRelativo.slice(prefixoComum.length);
         }
         if (!nomeRelativo) continue;
 
-        const primeiraParte = nomeRelativo.split('/')[0];
-        if (PRESERVE.has(primeiraParte)) continue;
+        if (caminhoNuncaSobrescrever(nomeRelativo)) {
+            ignoradosSeguranca++;
+            continue;
+        }
 
-        const destino = path.join(ROOT, nomeRelativo);
+        const destino = path.join(ROOT, ...nomeRelativo.split('/').filter(Boolean));
         if (entrada.isDirectory) {
             await fsp.mkdir(destino, { recursive: true });
         } else {
             await fsp.mkdir(path.dirname(destino), { recursive: true });
             await fsp.writeFile(destino, entrada.getData());
         }
+    }
+    if (ignoradosSeguranca > 0) {
+        console.log(
+            `[UPDATER] ${ignoradosSeguranca} entrada(s) do ZIP ignoradas (protecao: .env, certificados, pastas preservadas).`
+        );
     }
 }
 
@@ -213,6 +247,58 @@ function escolherAsset(release) {
         assets.find((a) => a.name.toLowerCase().endsWith('.zip')) ||
         null
     );
+}
+
+/**
+ * Apenas consulta a release remota e compara com a versão local.
+ * Não baixa nem aplica nada. Usado pela UI para mostrar "atualização disponível".
+ */
+async function consultarStatus() {
+    const versaoLocal = lerVersaoLocal();
+    const owner = process.env.UPDATE_REPO_OWNER;
+    const repo = process.env.UPDATE_REPO_NAME;
+    const configurado = !!(owner && repo);
+    if (!configurado) {
+        return {
+            versaoLocal,
+            versaoRemota: null,
+            atualizacaoDisponivel: false,
+            configurado: false,
+            motivo: 'UPDATE_REPO_OWNER/NAME ausentes no .env'
+        };
+    }
+    try {
+        const release = await obterReleaseRemota();
+        const tag = (release.tag_name || '').replace(/^v/i, '');
+        const versaoRemota = semver.valid(tag) || semver.coerce(tag)?.version || null;
+        const atualizacaoDisponivel = !!(versaoRemota && semver.gt(versaoRemota, versaoLocal));
+        return {
+            versaoLocal,
+            versaoRemota,
+            atualizacaoDisponivel,
+            configurado: true,
+            tag: release.tag_name || null,
+            publicadoEm: release.published_at || null,
+            notas: release.body || '',
+            urlRelease: release.html_url || null
+        };
+    } catch (e) {
+        const msg = String(e.message || e);
+        // Classifica os erros mais comuns para a UI exibir um texto preciso.
+        let tipoErro = 'rede';
+        if (/HTTP 404/i.test(msg)) tipoErro = 'sem_release';
+        else if (/HTTP 401/i.test(msg)) tipoErro = 'auth';
+        else if (/HTTP 403/i.test(msg)) tipoErro = 'limite';
+        return {
+            versaoLocal,
+            versaoRemota: null,
+            atualizacaoDisponivel: false,
+            configurado: true,
+            erro: msg,
+            tipoErro,
+            repo: `${owner}/${repo}`
+        };
+    }
 }
 
 async function verificarEAtualizar({ forcar = false } = {}) {
@@ -312,6 +398,7 @@ async function executarNoBoot() {
 
 module.exports = {
     verificarEAtualizar,
+    consultarStatus,
     executarNoBoot,
     agendarVerificacoes,
     reiniciarProcesso,

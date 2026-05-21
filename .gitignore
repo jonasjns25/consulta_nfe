@@ -1,7 +1,31 @@
+# Secrets e ambientes — nunca versionar
 .env
+.env.*
+!.env.sample
+**/config.env
+**/credentials.json
+*.pfx
+*.p12
+*.pem
+*.key
+*.keystore
+*.jks
+
+# Dependencies e artefatos
 node_modules/
 backups/
 logs/
 dist/
 nssm/
 update_*.zip
+
+# Build / IDE / SO
+**/bin/
+**/obj/
+**/Debug/
+**/Release/
+.cursor/
+*.rar
+*.zip
+*.user
+*.suo

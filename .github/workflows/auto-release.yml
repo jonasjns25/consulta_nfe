@@ -1,0 +1,76 @@
+# Empacota dist/consulta_nfe.zip, sobe bump de patch em package.json e publica GitHub Release.
+# Ignora commits feitos pelo bot ([release-bot]) para evitar loop.
+#
+# Requisitos: branch default = main (ajuste branches abaixo se usar outra).
+
+name: Release automático
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    # workflow_dispatch permite re-disparar; push com commit do bot tem [release-bot] para não repetir em loop.
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch'
+      || (github.event.head_commit != null
+      && !contains(github.event.head_commit.message, '[release-bot]')) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Instalar deps e aumentar patch (semver)
+        run: |
+          npm ci
+          npm version patch --no-git-tag-version
+
+      - name: Gerar ZIP da release (lista scripts/release-manifest.json)
+        run: node scripts/pack-release.cjs
+
+      - name: Commit da versão e push para main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "REL_VERSION=${VERSION}" >> "$GITHUB_ENV"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          if git diff --staged --quiet; then
+            echo "Sem alterações de versão — abortando."
+            exit 1
+          fi
+          git commit -m "ci(release): v${VERSION} [release-bot]"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:${GITHUB_REF_NAME}
+
+      - name: Criar release com o asset ZIP
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          COMMIT_SHA=$(git rev-parse HEAD)
+          VERSION="${REL_VERSION}"
+          gh release create "v${VERSION}" \
+            --target "${COMMIT_SHA}" \
+            --title "v${VERSION}" \
+            --notes "Pacote principal: consulta_nfe.zip. Atualização automática (clientes): releases/latest — .env não entra no zip. SHA: ${COMMIT_SHA}" \
+            "dist/consulta_nfe.zip"

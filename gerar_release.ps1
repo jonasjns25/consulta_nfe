@@ -1,8 +1,13 @@
 # =============================================================================
-# Consulta NF-e (Desktop) - Empacota release completa para clientes
+# Consulta NF-e (Desktop) — Empacota release (mesmo conteúdo do GitHub Actions)
+#
+# Lista de arquivos: scripts/release-manifest.json
 #
 #   .\gerar_release.ps1 -Bump patch
 #   .\gerar_release.ps1 -Bump patch -Publicar -RepoOwner usuario -RepoName consulta_nfe
+#
+# Ou só o ZIP atual (sem bump):
+#   npm run release:pack
 # =============================================================================
 
 param(
@@ -32,41 +37,28 @@ if ($Bump -ne 'none') {
     Write-Host "[INFO] Versao: $($pkg.version)" -ForegroundColor Cyan
 }
 
+$pkg = Get-Content $pkgPath -Raw | ConvertFrom-Json
 $versao = $pkg.version
-$distDir = Join-Path $PSScriptRoot 'dist'
-if (-not (Test-Path $distDir)) { New-Item -ItemType Directory -Path $distDir | Out-Null }
-$zipFinal = Join-Path $distDir 'consulta_nfe.zip'
-if (Test-Path $zipFinal) { Remove-Item $zipFinal -Force }
 
-$staging = Join-Path $env:TEMP "consulta_nfe_desktop_$(Get-Random)"
-New-Item -ItemType Directory -Path $staging | Out-Null
-
-$incluir = @(
-    'server.js', 'updater.js', 'sefaz-service.js', 'nfe-parser.js', 'confnf-api.js',
-    'index.html', 'detalhes.html', 'manutencao.html', 'autorizacao-recepcao-xml.html',
-    'confnf.html', 'lumi.html',
-    'package.json', 'package-lock.json', 'env.sample',
-    'iniciar_servidor.bat', 'instalar_servico.bat', 'desinstalar_servico.bat',
-    'atualizar_agora.bat', 'atualizar-consulta-nfe.bat',
-    'verificar_configuracao.js',
-    'MANUAL_INSTALACAO.md', 'MANUAL_ATUALIZACAO_REMOTA.md', 'SOLUCAO_ERRO_CONEXAO.md'
-)
-
-foreach ($item in $incluir) {
-    $src = Join-Path $PSScriptRoot $item
-    if (Test-Path $src) {
-        Copy-Item $src -Destination $staging -Recurse -Force
-        Write-Host "  + $item"
-    }
+Write-Host "[INFO] Empacotando manifest -> dist\consulta_nfe.zip" -ForegroundColor Cyan
+Push-Location $PSScriptRoot
+try {
+    npm run release:pack
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+finally {
+    Pop-Location
 }
 
-Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $zipFinal -Force
-Remove-Item $staging -Recurse -Force
+$zipFinal = Join-Path $PSScriptRoot 'dist\consulta_nfe.zip'
+if (-not (Test-Path $zipFinal)) {
+    Write-Error "ZIP nao gerado em $zipFinal"
+}
 Write-Host "[OK] $zipFinal ($([math]::Round((Get-Item $zipFinal).Length / 1MB, 2)) MB)" -ForegroundColor Green
 
 $gitOk = Test-Path (Join-Path $PSScriptRoot '.git')
 if ($Bump -ne 'none' -and $gitOk) {
-    git add package.json
+    git add package.json package-lock.json
     git commit -m "release: v$versao" 2>$null | Out-Null
     git tag -f "v$versao" 2>$null | Out-Null
     Write-Host "[INFO] Tag v$versao (git local). Push: git push --follow-tags" -ForegroundColor Cyan
@@ -83,7 +75,8 @@ if ($Publicar) {
     $repoArg = @()
     if ($RepoOwner) {
         $repoArg = @('--repo', "${RepoOwner}/${RepoName}")
-    } elseif ($gitOk) {
+    }
+    elseif ($gitOk) {
         $remote = (git remote get-url origin 2>$null)
         if ($remote -match 'github\.com[:/]([^/]+)/([^/.]+)') {
             $repoArg = @('--repo', "$($Matches[1])/$($Matches[2])")

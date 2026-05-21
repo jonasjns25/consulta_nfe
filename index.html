@@ -299,6 +299,144 @@
       gap: 0.25rem;
     }
 
+    .version-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.85rem;
+      border-radius: 999px;
+      border: 1px solid var(--lumi-border);
+      background: var(--lumi-surface);
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--lumi-muted);
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s;
+      user-select: none;
+      white-space: nowrap;
+    }
+    .version-chip:hover {
+      background: var(--lumi-secondary-soft);
+      border-color: var(--lumi-primary);
+      color: var(--lumi-primary);
+    }
+    .version-chip .dot {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: #9aa0a6;
+      box-shadow: 0 0 0 0 rgba(0,0,0,0);
+      transition: background 0.2s;
+    }
+    .version-chip .dot-label { line-height: 1; }
+    .version-chip .v-num { color: var(--lumi-dark); }
+    .version-chip[data-estado="ok"] { color: #0a7d4f; border-color: rgba(0, 184, 148, 0.45); background: rgba(0, 184, 148, 0.08); }
+    .version-chip[data-estado="ok"] .dot { background: var(--success); }
+    .version-chip[data-estado="ok"] .v-num { color: #0a7d4f; }
+    .version-chip[data-estado="atualizar"] {
+      color: #fff;
+      background: var(--lumi-primary);
+      border-color: var(--lumi-primary);
+      box-shadow: 0 6px 20px rgba(219, 38, 54, 0.25);
+      animation: pulse-update 1.8s ease-in-out infinite;
+    }
+    .version-chip[data-estado="atualizar"] .dot { background: #fff; animation: pulse-dot 1.4s ease-in-out infinite; }
+    .version-chip[data-estado="atualizar"] .v-num { color: #fff; }
+    .version-chip[data-estado="atualizar"]:hover { background: var(--lumi-primary-strong); color: #fff; }
+    .version-chip[data-estado="erro"] { color: var(--warning); border-color: rgba(255, 179, 71, 0.6); background: rgba(255, 179, 71, 0.12); }
+    .version-chip[data-estado="erro"] .dot { background: var(--warning); }
+    .version-chip[data-estado="verificando"] .dot {
+      background: var(--lumi-primary);
+      animation: pulse-dot 1.1s ease-in-out infinite;
+    }
+    @keyframes pulse-dot { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+    @keyframes pulse-update {
+      0%, 100% { box-shadow: 0 6px 20px rgba(219, 38, 54, 0.25); }
+      50% { box-shadow: 0 6px 28px rgba(219, 38, 54, 0.55); }
+    }
+
+    .update-banner {
+      max-width: 1200px;
+      margin: 0 auto 1rem;
+      padding: 0.85rem 1.1rem;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #fff4e6, #ffe9d6);
+      border: 1px solid rgba(219, 38, 54, 0.25);
+      box-shadow: 0 8px 24px rgba(34, 34, 34, 0.08);
+      display: none;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .update-banner.visivel { display: flex; }
+    .update-banner .update-icon {
+      width: 38px; height: 38px; flex: 0 0 38px;
+      border-radius: 50%;
+      background: var(--lumi-primary);
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem; font-weight: 700;
+    }
+    .update-banner .update-info { flex: 1; min-width: 220px; line-height: 1.35; }
+    .update-banner .update-info strong { color: var(--lumi-primary); }
+    .update-banner .update-info small { color: var(--lumi-muted); display: block; margin-top: 2px; }
+    .update-banner .update-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .update-banner button {
+      border: none; cursor: pointer;
+      padding: 0.55rem 1rem; border-radius: 10px;
+      font-weight: 600; font-size: 0.92rem;
+    }
+    .update-banner .btn-update {
+      background: var(--lumi-primary); color: #fff;
+    }
+    .update-banner .btn-update:hover { background: var(--lumi-primary-strong); }
+    .update-banner .btn-update[disabled] { opacity: 0.6; cursor: not-allowed; }
+    .update-banner .btn-update-later {
+      background: transparent; color: var(--lumi-muted);
+      border: 1px solid var(--lumi-border);
+    }
+    .update-banner .btn-update-later:hover { background: var(--lumi-secondary-soft); color: var(--lumi-primary); }
+
+    .update-modal {
+      position: fixed; inset: 0; z-index: 9999;
+      background: rgba(34, 34, 34, 0.55);
+      display: none; align-items: center; justify-content: center;
+      padding: 1rem;
+    }
+    .update-modal.visivel { display: flex; }
+    .update-modal-card {
+      background: #fff; border-radius: 18px; padding: 1.6rem 1.8rem;
+      max-width: 460px; width: 100%;
+      box-shadow: 0 30px 70px rgba(0, 0, 0, 0.25);
+      text-align: center;
+    }
+    .update-modal-card h3 { margin: 0 0 0.4rem; color: var(--lumi-dark); }
+    .update-modal-card p { margin: 0.3rem 0; color: var(--lumi-muted); }
+    .update-modal-card .update-spinner {
+      width: 46px; height: 46px; margin: 0.6rem auto 1rem;
+      border: 4px solid rgba(200, 16, 46, 0.2);
+      border-top-color: var(--lumi-primary);
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+    .update-modal-card.sucesso .update-spinner {
+      border: 4px solid rgba(0, 184, 148, 0.2);
+      border-top-color: var(--success);
+    }
+    .update-modal-card.erro .update-spinner {
+      border: 4px solid rgba(219, 38, 54, 0.25);
+      border-top-color: var(--danger);
+      animation: none;
+    }
+    .update-modal-card .update-modal-actions {
+      margin-top: 1rem;
+      display: flex; justify-content: center; gap: 0.5rem;
+    }
+    .update-modal-card .update-modal-actions button {
+      border: none; cursor: pointer; padding: 0.5rem 1rem;
+      border-radius: 10px; font-weight: 600; font-size: 0.92rem;
+      background: var(--lumi-primary); color: #fff;
+    }
+    @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+
     @media (max-width: 768px) {
       .server-selector {
         width: 100%;
@@ -1138,20 +1276,57 @@
       <h1>Consulta NF-e</h1>
       <p>Filtre notas por período, fornecedor ou chave e exporte o resultado.</p>
     </div>
-    <div class="server-selector" id="server-selector">
-      <span class="server-selector-label">
-        <span class="server-icon">🖥️</span>
-        Servidor:
-      </span>
-      <select class="server-select" id="server-select">
-        <option value="">Carregando...</option>
-      </select>
-      <span class="server-status online" id="server-status">
-        <span class="server-status-dot"></span>
-        <span id="server-status-text">Conectado</span>
-      </span>
+    <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+      <button type="button" class="version-chip" id="version-chip" data-estado="verificando"
+              title="Clique para verificar atualizações">
+        <span class="dot" aria-hidden="true"></span>
+        <span class="dot-label">
+          <span class="v-num" id="version-chip-num">v—</span>
+          <span id="version-chip-label">Verificando atualização…</span>
+        </span>
+      </button>
+      <div class="server-selector" id="server-selector">
+        <span class="server-selector-label">
+          <span class="server-icon">🖥️</span>
+          Servidor:
+        </span>
+        <select class="server-select" id="server-select">
+          <option value="">Carregando...</option>
+        </select>
+        <span class="server-status online" id="server-status">
+          <span class="server-status-dot"></span>
+          <span id="server-status-text">Conectado</span>
+        </span>
+      </div>
     </div>
   </header>
+
+  <div class="update-banner" id="update-banner" role="status" aria-live="polite">
+    <div class="update-icon" aria-hidden="true">⬆</div>
+    <div class="update-info">
+      <strong>Nova versão disponível: <span id="update-versao-remota">-</span></strong>
+      <small>
+        Versão atual: <span id="update-versao-local">-</span>
+        <span id="update-publicado-em"></span>
+      </small>
+    </div>
+    <div class="update-actions">
+      <button type="button" class="btn-update-later" id="btn-update-later">Lembrar depois</button>
+      <button type="button" class="btn-update" id="btn-update-now">Atualizar agora</button>
+    </div>
+  </div>
+
+  <div class="update-modal" id="update-modal" role="dialog" aria-modal="true" aria-labelledby="update-modal-titulo">
+    <div class="update-modal-card" id="update-modal-card">
+      <div class="update-spinner" id="update-modal-spinner"></div>
+      <h3 id="update-modal-titulo">Atualizando o sistema</h3>
+      <p id="update-modal-mensagem">Baixando e instalando a nova versão. Não feche esta janela.</p>
+      <p id="update-modal-detalhe" style="font-size:0.85rem;"></p>
+      <div class="update-modal-actions" id="update-modal-actions" style="display:none;">
+        <button type="button" id="btn-update-fechar">Fechar</button>
+      </div>
+    </div>
+  </div>
 
   <main>
     <section class="card" id="card-filtros">
@@ -1497,6 +1672,238 @@
       toggleEmptyState(true);
       atualizarExportacao();
     });
+
+    // ============================================
+    // Verificação de atualização do sistema
+    // ============================================
+    const updateBanner = document.getElementById('update-banner');
+    const updateModal = document.getElementById('update-modal');
+    const updateModalCard = document.getElementById('update-modal-card');
+    const updateModalSpinner = document.getElementById('update-modal-spinner');
+    const updateModalTitulo = document.getElementById('update-modal-titulo');
+    const updateModalMsg = document.getElementById('update-modal-mensagem');
+    const updateModalDetalhe = document.getElementById('update-modal-detalhe');
+    const updateModalActions = document.getElementById('update-modal-actions');
+    const btnUpdateNow = document.getElementById('btn-update-now');
+    const btnUpdateLater = document.getElementById('btn-update-later');
+    const btnUpdateFechar = document.getElementById('btn-update-fechar');
+    const updateVersaoLocalEl = document.getElementById('update-versao-local');
+    const updateVersaoRemotaEl = document.getElementById('update-versao-remota');
+    const updatePublicadoEmEl = document.getElementById('update-publicado-em');
+    const versionChip = document.getElementById('version-chip');
+    const versionChipNum = document.getElementById('version-chip-num');
+    const versionChipLabel = document.getElementById('version-chip-label');
+
+    const UPDATE_DISMISS_KEY = 'consulta_nfe_update_dismiss';
+    let ultimoStatusUpdate = null;
+
+    function lerDismiss() {
+      try {
+        const raw = sessionStorage.getItem(UPDATE_DISMISS_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch (e) { return null; }
+    }
+    function gravarDismiss(versao) {
+      try {
+        sessionStorage.setItem(UPDATE_DISMISS_KEY, JSON.stringify({ versao, em: Date.now() }));
+      } catch (e) {}
+    }
+    function limparDismiss() {
+      try { sessionStorage.removeItem(UPDATE_DISMISS_KEY); } catch (e) {}
+    }
+    function formatarData(iso) {
+      if (!iso) return '';
+      try { return ' · publicado em ' + new Date(iso).toLocaleString('pt-BR'); }
+      catch (e) { return ''; }
+    }
+
+    function aplicarEstadoChip(estado, versaoLocal, label, titulo) {
+      versionChip.dataset.estado = estado;
+      versionChipNum.textContent = versaoLocal ? ('v' + versaoLocal) : 'v—';
+      versionChipLabel.textContent = label;
+      if (titulo) versionChip.title = titulo;
+    }
+
+    async function verificarAtualizacao({ silencioso = true } = {}) {
+      if (!silencioso) aplicarEstadoChip('verificando', ultimoStatusUpdate?.versaoLocal, 'Verificando atualização…', 'Consultando GitHub Releases…');
+      try {
+        const resp = await fetch('/admin/verificar-atualizacao', { cache: 'no-store' });
+        if (!resp.ok) {
+          aplicarEstadoChip('erro', ultimoStatusUpdate?.versaoLocal, 'Falha ao verificar', 'HTTP ' + resp.status);
+          return;
+        }
+        const status = await resp.json();
+        ultimoStatusUpdate = status;
+        if (!status.configurado) {
+          aplicarEstadoChip('erro', status.versaoLocal, 'Atualização não configurada', status.motivo || 'Defina UPDATE_REPO_OWNER / UPDATE_REPO_NAME no .env');
+          updateBanner.classList.remove('visivel');
+          return;
+        }
+        if (status.erro) {
+          let label = 'Sem conexão com o GitHub';
+          let estado = 'erro';
+          let titulo = status.erro;
+          switch (status.tipoErro) {
+            case 'sem_release':
+              estado = 'ok';
+              label = 'Sistema atualizado';
+              titulo = 'Nenhuma release publicada ainda em ' + (status.repo || 'GitHub') + '.';
+              break;
+            case 'auth':
+              label = 'Repositório privado (sem token)';
+              titulo = 'Configure UPDATE_TOKEN no .env para repositórios privados.';
+              break;
+            case 'limite':
+              label = 'Limite da API do GitHub atingido';
+              titulo = 'Tente novamente em alguns minutos. ' + status.erro;
+              break;
+            default:
+              label = 'Sem conexão com o GitHub';
+              titulo = status.erro;
+          }
+          aplicarEstadoChip(estado, status.versaoLocal, label, titulo);
+          updateBanner.classList.remove('visivel');
+          return;
+        }
+        if (status.atualizacaoDisponivel && status.versaoRemota) {
+          aplicarEstadoChip(
+            'atualizar',
+            status.versaoLocal,
+            'Nova versão: v' + status.versaoRemota,
+            'Clique para atualizar para v' + status.versaoRemota
+          );
+          updateVersaoLocalEl.textContent = status.versaoLocal || '-';
+          updateVersaoRemotaEl.textContent = 'v' + status.versaoRemota;
+          updatePublicadoEmEl.textContent = formatarData(status.publicadoEm);
+          const dismiss = lerDismiss();
+          if (!(dismiss && dismiss.versao === status.versaoRemota)) {
+            updateBanner.classList.add('visivel');
+          }
+        } else {
+          aplicarEstadoChip(
+            'ok',
+            status.versaoLocal,
+            'Sistema atualizado',
+            'Versão ' + (status.versaoLocal || '?') + ' instalada. Clique para verificar novamente.'
+          );
+          updateBanner.classList.remove('visivel');
+        }
+      } catch (e) {
+        aplicarEstadoChip('erro', ultimoStatusUpdate?.versaoLocal, 'Sem conexão', e.message || 'Falha ao verificar');
+      }
+    }
+
+    versionChip.addEventListener('click', () => {
+      if (versionChip.dataset.estado === 'atualizar') {
+        limparDismiss();
+        updateBanner.classList.add('visivel');
+        updateBanner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
+      }
+      verificarAtualizacao({ silencioso: false });
+    });
+
+    function abrirModalUpdate(msg, detalhe) {
+      updateModalCard.classList.remove('sucesso', 'erro');
+      updateModalSpinner.style.display = '';
+      updateModalActions.style.display = 'none';
+      updateModalTitulo.textContent = 'Atualizando o sistema';
+      updateModalMsg.textContent = msg || 'Baixando e instalando a nova versão. Não feche esta janela.';
+      updateModalDetalhe.textContent = detalhe || '';
+      updateModal.classList.add('visivel');
+    }
+    function modalConcluido(titulo, msg) {
+      updateModalCard.classList.add('sucesso');
+      updateModalCard.classList.remove('erro');
+      updateModalSpinner.style.display = '';
+      updateModalTitulo.textContent = titulo;
+      updateModalMsg.textContent = msg;
+      updateModalDetalhe.textContent = '';
+      updateModalActions.style.display = 'none';
+    }
+    function modalErro(titulo, msg) {
+      updateModalCard.classList.add('erro');
+      updateModalCard.classList.remove('sucesso');
+      updateModalSpinner.style.display = '';
+      updateModalTitulo.textContent = titulo;
+      updateModalMsg.textContent = msg;
+      updateModalDetalhe.textContent = '';
+      updateModalActions.style.display = 'flex';
+    }
+
+    async function aguardarServidorVoltar(versaoEsperada, tentativas = 90) {
+      // Tenta por ~3 minutos (90 × 2s). NSSM/serviço deve reiniciar antes disso.
+      for (let i = 0; i < tentativas; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        try {
+          const resp = await fetch('/admin/versao', { cache: 'no-store' });
+          if (resp.ok) {
+            const dados = await resp.json();
+            if (!versaoEsperada || dados.versao === versaoEsperada) {
+              return dados.versao;
+            }
+          }
+        } catch (e) { /* servidor ainda reiniciando */ }
+      }
+      return null;
+    }
+
+    async function aplicarAtualizacao() {
+      btnUpdateNow.disabled = true;
+      btnUpdateLater.disabled = true;
+      const versaoAlvo = ultimoStatusUpdate?.versaoRemota || null;
+      abrirModalUpdate(
+        'Baixando a nova versão e aplicando arquivos...',
+        versaoAlvo ? 'Atualizando para v' + versaoAlvo : ''
+      );
+      let resposta = null;
+      try {
+        const resp = await fetch('/admin/atualizar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        // Pode ser que o servidor reinicie ANTES de responder; tratamos os dois casos.
+        try { resposta = await resp.json(); } catch (e) { resposta = null; }
+        if (resp.status === 401 || resp.status === 503) {
+          const msg = (resposta && resposta.error) || ('HTTP ' + resp.status);
+          modalErro('Não foi possível atualizar', msg);
+          btnUpdateNow.disabled = false;
+          btnUpdateLater.disabled = false;
+          return;
+        }
+      } catch (e) {
+        // Provavelmente o servidor já reiniciou — ok, vamos aguardar voltar.
+      }
+      updateModalMsg.textContent = 'Reiniciando o servidor. Aguarde alguns segundos...';
+      updateModalDetalhe.textContent = versaoAlvo ? 'Voltando online em v' + versaoAlvo : '';
+      const versaoNova = await aguardarServidorVoltar(versaoAlvo);
+      if (versaoNova) {
+        limparDismiss();
+        modalConcluido(
+          'Atualizado com sucesso!',
+          'Sistema na versão ' + versaoNova + '. Recarregando a página...'
+        );
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        modalErro(
+          'Servidor não respondeu após o reinício',
+          'Verifique o serviço Consulta NF-e e tente novamente.'
+        );
+        btnUpdateNow.disabled = false;
+        btnUpdateLater.disabled = false;
+      }
+    }
+
+    btnUpdateNow.addEventListener('click', aplicarAtualizacao);
+    btnUpdateLater.addEventListener('click', () => {
+      if (ultimoStatusUpdate?.versaoRemota) gravarDismiss(ultimoStatusUpdate.versaoRemota);
+      updateBanner.classList.remove('visivel');
+    });
+    btnUpdateFechar.addEventListener('click', () => updateModal.classList.remove('visivel'));
+
+    verificarAtualizacao();
+    setInterval(verificarAtualizacao, 15 * 60 * 1000); // a cada 15 min
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault();

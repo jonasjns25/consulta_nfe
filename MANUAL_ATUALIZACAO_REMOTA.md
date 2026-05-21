@@ -125,7 +125,23 @@ Ver `updater.js`. Resumidamente:
 
 ## 5. Forçar atualização imediata em um cliente específico
 
-### Modo A — no próprio servidor do cliente
+### Modo A — pela tela do sistema (recomendado)
+
+Ao abrir `http://localhost:3000/` (ou o IP do cliente), o sistema verifica a release
+mais recente a cada 15 minutos. Quando há versão nova, aparece um banner no topo:
+
+> **Nova versão disponível: vX.Y.Z** — versão atual `vA.B.C`
+> [ Lembrar depois ] [ **Atualizar agora** ]
+
+Clicar em **Atualizar agora** dispara o download/instalação, aguarda o serviço
+reiniciar e recarrega a página automaticamente. Isso usa o endpoint
+`POST /admin/atualizar`, que aceita requisições **vindas do próprio servidor
+(loopback `127.0.0.1` / `::1`) sem token** — então o cliente final não precisa
+saber/inserir o `UPDATE_ADMIN_TOKEN`.
+
+> Para acesso via outro IP da rede, continua valendo o token (próxima seção).
+
+### Modo B — no próprio servidor do cliente, pelo bat
 
 Como admin no PowerShell/CMD:
 
@@ -134,7 +150,7 @@ cd C:\consulta_nfe
 atualizar_agora.bat
 ```
 
-### Modo B — remotamente via HTTP (se o cliente estiver acessível)
+### Modo C — remotamente via HTTP (outra máquina)
 
 Configure `UPDATE_ADMIN_TOKEN` no `.env` do cliente. Depois:
 
@@ -150,10 +166,11 @@ curl -X POST "http://IP_DO_CLIENTE:3000/admin/atualizar?force=true" \
      -H "X-Update-Token: seuTokenSecreto"
 ```
 
-Consultar versão atual:
+Consultar versão atual ou checar se há nova:
 
 ```bash
 curl http://IP_DO_CLIENTE:3000/admin/versao
+curl http://IP_DO_CLIENTE:3000/admin/verificar-atualizacao
 ```
 
 ---
