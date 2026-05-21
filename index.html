@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Validador de NF-e</title>
+  <title>Consulta NFe</title>
   <style>
     :root {
       color-scheme: light;
@@ -1267,13 +1267,13 @@
 </head>
 <body>
   <nav class="nav-links">
-    <a href="index.html" class="active">Validador de NF-e</a>
+    <a href="index.html" class="active">Consulta NFe</a>
     <a href="autorizacao-recepcao-xml.html">Autorização de Recepção de XML</a>
     <a href="confnf.html">ConfNF</a>
   </nav>
   <header>
     <div>
-      <h1>Validador de NF-e</h1>
+      <h1>Consulta NFe</h1>
       <p>Filtre notas por período, fornecedor ou chave e exporte o resultado.</p>
     </div>
     <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
@@ -1888,7 +1888,7 @@
       } else {
         modalErro(
           'Servidor não respondeu após o reinício',
-          'Verifique o serviço do Validador de NF-e (ConsultaNFE no Windows) e tente novamente.'
+          'Verifique o serviço Consulta NFe (ConsultaNFE no Windows) e tente novamente.'
         );
         btnUpdateNow.disabled = false;
         btnUpdateLater.disabled = false;
