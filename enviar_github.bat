@@ -101,9 +101,7 @@ if errorlevel 1 (
 
 echo [3/5] git commit -m "%MSG%"
 git commit -m "%MSG%"
-if errorlevel 1 (
-    echo [AVISO] Nada para commitar (talvez todos os arquivos estejam ignorados).
-)
+if errorlevel 1 echo [AVISO] Nada novo para commitar -- talvez tudo esteja ignorado.
 echo.
 
 REM -- 6. pull com rebase (agora seguro, working tree limpo)
