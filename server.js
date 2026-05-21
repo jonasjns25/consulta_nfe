@@ -2398,26 +2398,49 @@ app.get('/admin/verificar-atualizacao', async (req, res) => {
 });
 
 /**
- * Requisição vinda da máquina onde o serviço roda (loopback 127.0.0.1 / ::1).
- * Permite que a UI local dispare a atualização sem precisar do token administrativo.
+ * Reconhece IPs "internos" considerados confiáveis para acionar atualização sem token:
+ *  - Loopback (127.x, ::1)
+ *  - LAN privada: 10/8, 172.16/12, 192.168/16
+ *  - Link-local: 169.254/16, fe80::/10
+ * Em ambiente desktop o servidor roda na rede local da empresa, então é seguro
+ * permitir que a UI dispare update sem o token. Para fechar isso, defina
+ * UPDATE_REQUIRE_TOKEN=true no .env — passa a exigir token de qualquer origem.
  */
-function vemDoLoopback(req) {
-    const ip = (req.ip || req.socket?.remoteAddress || '').replace(/^::ffff:/, '');
-    return ip === '127.0.0.1' || ip === '::1' || ip === 'localhost';
+function ipOrigem(req) {
+    let ip = req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress || '';
+    return String(ip).replace(/^::ffff:/, '');
+}
+function vemDeRedeInterna(req) {
+    const ip = ipOrigem(req);
+    if (!ip) return false;
+    if (ip === '::1' || ip === 'localhost') return true;
+    if (/^127\./.test(ip)) return true;
+    if (/^10\./.test(ip)) return true;
+    if (/^192\.168\./.test(ip)) return true;
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(ip)) return true;
+    if (/^169\.254\./.test(ip)) return true;
+    if (/^fe80:/i.test(ip)) return true;
+    return false;
 }
 
 app.post('/admin/atualizar', async (req, res) => {
     if (!updater) {
         return res.status(503).json({ error: 'Modulo updater nao disponivel.' });
     }
+    const exigirToken = String(process.env.UPDATE_REQUIRE_TOKEN || '').toLowerCase() === 'true';
     const token = req.get('X-Update-Token') || req.query.token;
     const autorizadoToken = !!UPDATE_TOKEN_ADMIN && token === UPDATE_TOKEN_ADMIN;
-    const autorizadoLocal = vemDoLoopback(req);
+    const autorizadoLocal = !exigirToken && vemDeRedeInterna(req);
     if (!autorizadoToken && !autorizadoLocal) {
+        const ipDetectado = ipOrigem(req);
+        console.warn(`[ADMIN] /admin/atualizar bloqueado. IP origem=${ipDetectado} exigirToken=${exigirToken} tokenPresente=${!!token}`);
         if (!UPDATE_TOKEN_ADMIN) {
-            return res.status(503).json({ error: 'UPDATE_ADMIN_TOKEN nao configurado no .env (necessário para chamadas remotas).' });
+            return res.status(503).json({
+                error: 'UPDATE_ADMIN_TOKEN nao configurado no .env (necessário para chamadas remotas).',
+                ipOrigem: ipDetectado
+            });
         }
-        return res.status(401).json({ error: 'Token invalido.' });
+        return res.status(401).json({ error: 'Token invalido.', ipOrigem: ipDetectado });
     }
     try {
         const forcar = String(req.query.force || req.body?.force || '').toLowerCase() === 'true';

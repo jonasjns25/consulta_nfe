@@ -135,11 +135,21 @@ mais recente a cada 15 minutos. Quando há versão nova, aparece um banner no to
 
 Clicar em **Atualizar agora** dispara o download/instalação, aguarda o serviço
 reiniciar e recarrega a página automaticamente. Isso usa o endpoint
-`POST /admin/atualizar`, que aceita requisições **vindas do próprio servidor
-(loopback `127.0.0.1` / `::1`) sem token** — então o cliente final não precisa
-saber/inserir o `UPDATE_ADMIN_TOKEN`.
+`POST /admin/atualizar`, que aceita por padrão requisições vindas de **IPs
+internos da máquina/empresa**:
 
-> Para acesso via outro IP da rede, continua valendo o token (próxima seção).
+- loopback (`127.0.0.1`, `::1`);
+- LAN privada: `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`;
+- link-local: `169.254.0.0/16`, `fe80::/10`.
+
+Ou seja, qualquer estação dentro da rede do cliente pode usar o botão sem
+saber/inserir token.
+
+> Para **fechar** isso e exigir token sempre (inclusive na LAN), defina no `.env`:
+> ```env
+> UPDATE_REQUIRE_TOKEN=true
+> UPDATE_ADMIN_TOKEN=algumaCoisaLongaAleatoria
+> ```
 
 ### Modo B — no próprio servidor do cliente, pelo bat
 
