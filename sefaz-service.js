@@ -536,9 +536,23 @@ async function criarDistribuicao(cnpj, uf, tpAmb, thumbprint) {
     });
 }
 
+/**
+ * SEFAZ informa cancelamento sem enviar XML (ex.: cStat 653 — arquivo indisponível para download).
+ * Nesse caso a NF está cancelada; basta atualizar SITNFE no banco.
+ */
+function nfCanceladaNaRespostaSefaz(cStat, xMotivo) {
+    const stat = String(cStat ?? '').trim();
+    const motivo = String(xMotivo ?? '').toLowerCase();
+    if (stat === '653') return true;
+    if (/nf-?e\s+cancelad/i.test(motivo) || /nfe\s+cancelad/i.test(motivo)) return true;
+    if (motivo.includes('cancelad') && motivo.includes('indisponivel')) return true;
+    if (motivo.includes('cancelad') && motivo.includes('arquivo indisponivel')) return true;
+    return false;
+}
+
 /** Executa consultaChNFe na SEFAZ (certificado igual ao fluxo de download de XML). */
 async function consultarDistribuicaoPorChave(chave, dnCert, uf, opts = {}) {
-    const { tpAmb = '1', thumbprint } = opts || {};
+    const { tpAmb = '1', thumbprint, tratarCanceladaSemDoc = false } = opts || {};
     const chaveLimpa = String(chave || '').replace(/\D/g, '');
     if (chaveLimpa.length !== 44) {
         throw new Error('Chave de acesso inválida. Deve conter exatamente 44 dígitos.');
@@ -553,13 +567,25 @@ async function consultarDistribuicaoPorChave(chave, dnCert, uf, opts = {}) {
     const xMotivo = resultado.data?.xMotivo;
     const docs = resultado.data?.docZip || [];
     if (!docs.length) {
+        if (tratarCanceladaSemDoc && nfCanceladaNaRespostaSefaz(cStat, xMotivo)) {
+            return {
+                chaveLimpa,
+                cnpj,
+                cStat,
+                xMotivo,
+                docs: [],
+                canceladaSemDocumento: true,
+            };
+        }
+        const prefixo = `Nenhum documento retornado pela SEFAZ (cStat=${cStat || '-'} ${xMotivo || ''}).`;
+        if (nfCanceladaNaRespostaSefaz(cStat, xMotivo)) {
+            throw new Error(`${prefixo} A NF-e está cancelada; o XML não está disponível para download.`);
+        }
         throw new Error(
-            `Nenhum documento retornado pela SEFAZ (cStat=${cStat || '-'} ${xMotivo || ''}). ` +
-            'Verifique se a chave está correta e se o CNPJ do estabelecimento é o ' +
-            'destinatário desta NF-e.'
+            `${prefixo} Verifique se a chave está correta e se o CNPJ do estabelecimento é o destinatário desta NF-e.`
         );
     }
-    return { chaveLimpa, cnpj, cStat, xMotivo, docs };
+    return { chaveLimpa, cnpj, cStat, xMotivo, docs, canceladaSemDocumento: false };
 }
 
 /** Percorre o XML parseado e coleta nós infEvento (cancelamento, etc.). */
@@ -681,12 +707,31 @@ async function consultarXmlPorChave(chave, dnCert, uf, opts = {}) {
  * Usa o mesmo certificado/estabelecimento do download de XML.
  */
 async function consultarStatusPorChave(chave, dnCert, uf, opts = {}) {
-    const { chaveLimpa, cnpj, cStat, xMotivo, docs } = await consultarDistribuicaoPorChave(chave, dnCert, uf, opts);
+    const { chaveLimpa, cnpj, cStat, xMotivo, docs, canceladaSemDocumento } =
+        await consultarDistribuicaoPorChave(chave, dnCert, uf, { ...opts, tratarCanceladaSemDoc: true });
+
+    if (canceladaSemDocumento) {
+        return {
+            chave: chaveLimpa,
+            cnpj,
+            situacao: 'cancelada',
+            label: 'Cancelado',
+            cancelada: true,
+            denegada: false,
+            autorizada: false,
+            detalhe: `SEFAZ cStat=${cStat || '-'}: ${xMotivo || 'NF-e cancelada (sem XML na distribuição)'}`,
+            cStat: cStat != null ? String(cStat) : null,
+            xMotivo: xMotivo != null ? String(xMotivo) : null,
+            origemDeteccao: 'resposta_sefaz_653',
+        };
+    }
+
     const analise = analisarSituacaoNFeSefaz(docs, cStat, xMotivo);
     return {
         chave: chaveLimpa,
         cnpj,
         ...analise,
+        origemDeteccao: 'documento_distribuicao',
     };
 }
 
@@ -761,6 +806,7 @@ module.exports = {
     consultarXmlPorChave,
     consultarStatusPorChave,
     analisarSituacaoNFeSefaz,
+    nfCanceladaNaRespostaSefaz,
     extrairCnpjDoDN,
     diagnosticarCertificados,
     listarCertificadosParaUI,
