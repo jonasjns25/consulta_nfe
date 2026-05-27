@@ -17,7 +17,14 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
+const { XMLParser } = require('fast-xml-parser');
 const { DistribuicaoDFe } = require('node-mde');
+
+const parserStatusXml = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: '_',
+    parseAttributeValue: false,
+});
 
 let winca = null;
 try {
@@ -430,6 +437,131 @@ async function criarDistribuicao(cnpj, uf, tpAmb, thumbprint) {
     });
 }
 
+/** Executa consultaChNFe na SEFAZ (certificado igual ao fluxo de download de XML). */
+async function consultarDistribuicaoPorChave(chave, dnCert, uf, opts = {}) {
+    const { tpAmb = '1', thumbprint } = opts || {};
+    const chaveLimpa = String(chave || '').replace(/\D/g, '');
+    if (chaveLimpa.length !== 44) {
+        throw new Error('Chave de acesso inválida. Deve conter exatamente 44 dígitos.');
+    }
+    const cnpj = extrairCnpjDoDN(dnCert);
+    const distribuicao = await criarDistribuicao(cnpj, uf, tpAmb, thumbprint);
+    const resultado = await distribuicao.consultaChNFe(chaveLimpa);
+    if (resultado.error) {
+        throw new Error(`Erro ao consultar SEFAZ: ${resultado.error}`);
+    }
+    const cStat = resultado.data?.cStat;
+    const xMotivo = resultado.data?.xMotivo;
+    const docs = resultado.data?.docZip || [];
+    if (!docs.length) {
+        throw new Error(
+            `Nenhum documento retornado pela SEFAZ (cStat=${cStat || '-'} ${xMotivo || ''}). ` +
+            'Verifique se a chave está correta e se o CNPJ do estabelecimento é o ' +
+            'destinatário desta NF-e.'
+        );
+    }
+    return { chaveLimpa, cnpj, cStat, xMotivo, docs };
+}
+
+/** Percorre o XML parseado e coleta nós infEvento (cancelamento, etc.). */
+function coletarInfEventos(obj, lista = []) {
+    if (!obj || typeof obj !== 'object') return lista;
+    if (obj.tpEvento !== undefined && (obj.chNFe !== undefined || obj.detEvento !== undefined)) {
+        lista.push(obj);
+    }
+    for (const chave of Object.keys(obj)) {
+        const val = obj[chave];
+        if (Array.isArray(val)) {
+            val.forEach((item) => coletarInfEventos(item, lista));
+        } else if (val && typeof val === 'object') {
+            coletarInfEventos(val, lista);
+        }
+    }
+    return lista;
+}
+
+/**
+ * Interpreta documentos retornados pela Distribuição DFe (resNFe, procNFe, eventos).
+ * Situação "cancelada" quando cSitNFe=3 ou evento tpEvento 110111 (cancelamento homologado).
+ */
+function analisarSituacaoNFeSefaz(docs, cStat, xMotivo) {
+    let cancelada = false;
+    let denegada = false;
+    let autorizada = false;
+    const detalhes = [];
+
+    for (const doc of docs || []) {
+        const xml = doc.xml;
+        if (!xml) continue;
+        let obj;
+        try {
+            obj = parserStatusXml.parse(xml);
+        } catch (_e) {
+            continue;
+        }
+
+        const resNFe = obj.resNFe;
+        if (resNFe) {
+            const sit = String(resNFe.cSitNFe ?? '').trim();
+            if (sit === '3') {
+                cancelada = true;
+                detalhes.push('resNFe: cSitNFe=3 (Cancelada)');
+            } else if (sit === '2') {
+                denegada = true;
+                detalhes.push('resNFe: cSitNFe=2 (Denegada)');
+            } else if (sit === '1') {
+                autorizada = true;
+                detalhes.push('resNFe: cSitNFe=1 (Autorizada)');
+            }
+        }
+
+        const prot = obj.nfeProc?.protNFe?.infProt || obj.protNFe?.infProt;
+        if (prot) {
+            const cStatProt = String(prot.cStat ?? '').trim();
+            if (cStatProt === '100' && !cancelada) {
+                autorizada = true;
+                detalhes.push('protNFe: cStat=100 (Uso autorizado)');
+            }
+            if (cStatProt === '101') {
+                cancelada = true;
+                detalhes.push('protNFe: cStat=101 (Cancelamento homologado)');
+            }
+        }
+
+        for (const ev of coletarInfEventos(obj)) {
+            const tp = String(ev.tpEvento ?? '').trim();
+            if (tp === '110111') {
+                cancelada = true;
+                detalhes.push('Evento tpEvento=110111 (Cancelamento de NF-e)');
+            }
+        }
+    }
+
+    let situacao = 'indefinida';
+    let label = 'Indefinida';
+    if (cancelada) {
+        situacao = 'cancelada';
+        label = 'Cancelado';
+    } else if (denegada) {
+        situacao = 'denegada';
+        label = 'Denegado';
+    } else if (autorizada) {
+        situacao = 'autorizada';
+        label = 'Autorizado';
+    }
+
+    return {
+        situacao,
+        label,
+        cancelada,
+        denegada,
+        autorizada,
+        detalhe: detalhes.join('; ') || null,
+        cStat: cStat != null ? String(cStat) : null,
+        xMotivo: xMotivo != null ? String(xMotivo) : null,
+    };
+}
+
 /**
  * Consulta o XML de uma NF-e na SEFAZ a partir da chave.
  * @param {string} chave   44 dígitos
@@ -438,32 +570,25 @@ async function criarDistribuicao(cnpj, uf, tpAmb, thumbprint) {
  * @param {object} [opts]  { tpAmb, thumbprint }
  */
 async function consultarXmlPorChave(chave, dnCert, uf, opts = {}) {
-    const { tpAmb = '1', thumbprint } = opts || {};
-    const chaveLimpa = String(chave || '').replace(/\D/g, '');
-    if (chaveLimpa.length !== 44) {
-        throw new Error('Chave de acesso inválida. Deve conter exatamente 44 dígitos.');
-    }
-    const cnpj = extrairCnpjDoDN(dnCert);
-    const distribuicao = await criarDistribuicao(cnpj, uf, tpAmb, thumbprint);
-
-    const resultado = await distribuicao.consultaChNFe(chaveLimpa);
-    if (resultado.error) {
-        throw new Error(`Erro ao consultar SEFAZ: ${resultado.error}`);
-    }
-    const cStat = resultado.data?.cStat;
-    const xMotivo = resultado.data?.xMotivo;
-    const docs = resultado.data?.docZip;
-    if (!docs || docs.length === 0) {
-        throw new Error(
-            `Nenhum documento retornado pela SEFAZ (cStat=${cStat || '-'} ${xMotivo || ''}). ` +
-            'Verifique se a chave está correta e se o CNPJ do estabelecimento é o ' +
-            'destinatário desta NF-e.'
-        );
-    }
+    const { cnpj, docs } = await consultarDistribuicaoPorChave(chave, dnCert, uf, opts);
     const doc = docs.find((d) => String(d.schema || '').startsWith('procNFe'))
         || docs.find((d) => String(d.schema || '').startsWith('resNFe'))
         || docs[0];
     return { xml: doc.xml, cnpj, schema: doc.schema };
+}
+
+/**
+ * Consulta a situação da NF-e na SEFAZ (Distribuição DFe por chave).
+ * Usa o mesmo certificado/estabelecimento do download de XML.
+ */
+async function consultarStatusPorChave(chave, dnCert, uf, opts = {}) {
+    const { chaveLimpa, cnpj, cStat, xMotivo, docs } = await consultarDistribuicaoPorChave(chave, dnCert, uf, opts);
+    const analise = analisarSituacaoNFeSefaz(docs, cStat, xMotivo);
+    return {
+        chave: chaveLimpa,
+        cnpj,
+        ...analise,
+    };
 }
 
 /** Diagnóstico: lista certificados disponíveis + info de ambiente. */
@@ -513,6 +638,8 @@ module.exports = {
     certificadoCompativelComEstabelecimento,
     extrairCnpjsDoTexto,
     consultarXmlPorChave,
+    consultarStatusPorChave,
+    analisarSituacaoNFeSefaz,
     extrairCnpjDoDN,
     diagnosticarCertificados,
     listarCertificadosParaUI,

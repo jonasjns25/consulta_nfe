@@ -1563,22 +1563,34 @@
   </table>
       </div>
 
+      <div id="sefaz-area" class="hidden" style="margin-top: 1rem; padding: 1rem; background: #fff8e1; border: 1px solid #ffcc80; border-radius: 6px; text-align: left; max-width: 100%;">
+        <p id="sefaz-info" style="margin: 0 0 0.75rem 0; font-size: 0.85rem; color: #555;"></p>
+        <div id="sefaz-xml-block" class="hidden" style="margin-bottom: 0.85rem;">
+          <p style="margin: 0 0 0.5rem 0;">
+            <strong>Chave não encontrada na base.</strong><br>
+            Deseja baixar o XML na SEFAZ com o certificado digital do estabelecimento?
+          </p>
+          <button type="button" class="btn-primary" id="btn-sefaz">Consultar SEFAZ (baixar XML)</button>
+        </div>
+        <div id="sefaz-status-block">
+          <p style="margin: 0 0 0.5rem 0;">
+            <strong>Verificar situação na SEFAZ</strong><br>
+            <span style="font-size: 0.85rem; color: #555;">Consulta o status da NF-e. Se estiver <strong>Cancelada</strong>, atualiza <code>SITNFE = 2</code> em <code>NFE_XML</code> (somente nesse caso).</span>
+          </p>
+          <button type="button" class="btn-secondary" id="btn-sefaz-status">Verificar status na SEFAZ</button>
+        </div>
+        <div style="margin-top: 0.65rem;">
+          <button type="button" class="btn-secondary" id="btn-sefaz-escolher-cert">Selecionar certificado manualmente…</button>
+          <span id="sefaz-loading" class="hidden" style="margin-left: 0.75rem;">Consultando SEFAZ, aguarde…</span>
+        </div>
+        <p id="sefaz-cert-selecionado" class="hidden" style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: #1565c0;"></p>
+        <p id="sefaz-erro" class="hidden" style="color: #c62828; margin: 0.5rem 0 0 0; font-size: 0.9rem; white-space: pre-wrap;"></p>
+        <p id="sefaz-sucesso" class="hidden" style="color: #2e7d32; margin: 0.5rem 0 0 0; font-size: 0.9rem;"></p>
+      </div>
+
       <div class="empty-state hidden" id="empty-state">
         <p>Nenhum resultado encontrado para os filtros informados.</p>
         <small>Dica: ajuste datas ou remova filtros específicos.</small>
-        <div id="sefaz-area" class="hidden" style="margin-top: 1rem; padding: 1rem; background: #fff8e1; border: 1px solid #ffcc80; border-radius: 6px; display: inline-block; text-align: left;">
-          <p style="margin: 0 0 0.5rem 0;">
-            <strong>Chave não encontrada na base.</strong><br>
-            Deseja consultar diretamente na SEFAZ usando o certificado digital do estabelecimento?
-          </p>
-          <p id="sefaz-info" style="margin: 0 0 0.75rem 0; font-size: 0.85rem; color: #555;"></p>
-          <button type="button" class="btn-primary" id="btn-sefaz">Consultar SEFAZ</button>
-          <button type="button" class="btn-secondary" id="btn-sefaz-escolher-cert" style="margin-left: 0.5rem;">Selecionar certificado manualmente…</button>
-          <span id="sefaz-loading" class="hidden" style="margin-left: 0.75rem;">Consultando SEFAZ, aguarde…</span>
-          <p id="sefaz-cert-selecionado" class="hidden" style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: #1565c0;"></p>
-          <p id="sefaz-erro" class="hidden" style="color: #c62828; margin: 0.5rem 0 0 0; font-size: 0.9rem; white-space: pre-wrap;"></p>
-          <p id="sefaz-sucesso" class="hidden" style="color: #2e7d32; margin: 0.5rem 0 0 0; font-size: 0.9rem;"></p>
-        </div>
       </div>
     </section>
   </main>
@@ -2314,27 +2326,36 @@
     function atualizarAreaSefaz(emptyVisivel) {
       const area = document.getElementById('sefaz-area');
       const info = document.getElementById('sefaz-info');
+      const blocoXml = document.getElementById('sefaz-xml-block');
       const erro = document.getElementById('sefaz-erro');
       const sucesso = document.getElementById('sefaz-sucesso');
       const loading = document.getElementById('sefaz-loading');
-      const btn = document.getElementById('btn-sefaz');
+      const btnXml = document.getElementById('btn-sefaz');
+      const btnStatus = document.getElementById('btn-sefaz-status');
       if (!area) return;
 
       erro.classList.add('hidden');
       sucesso.classList.add('hidden');
       loading.classList.add('hidden');
-      if (btn) btn.disabled = false;
+      if (btnXml) btnXml.disabled = false;
+      if (btnStatus) btnStatus.disabled = false;
 
       const chave = ((state.lastQuery && state.lastQuery.chave) || '').replace(/\D/g, '');
       const estab = ((state.lastQuery && state.lastQuery.estabelecimento) || '').replace(/\D/g, '');
 
-      if (!emptyVisivel || chave.length !== 44 || !estab) {
+      if (chave.length !== 44 || !estab) {
         area.classList.add('hidden');
         return;
       }
       area.classList.remove('hidden');
-      info.textContent = `Chave ${chave} • Estab. ${estab}`;
+      if (blocoXml) blocoXml.classList.toggle('hidden', !emptyVisivel);
+      const temRegistro = !emptyVisivel && state.rows.length > 0;
+      info.textContent = temRegistro
+        ? `Chave ${chave} • Estab. ${estab} — registro encontrado na base.`
+        : `Chave ${chave} • Estab. ${estab} — não encontrada na base (filtro atual).`;
     }
+
+    let modoSefazPendente = 'xml';
 
     // Certificado selecionado manualmente (thumbprint). Persistido no sessionStorage.
     const CERT_STORAGE_KEY = 'sefaz.certSelecionado';
@@ -2408,8 +2429,70 @@
       }
     }
 
+    async function executarConsultaStatusSefaz(thumbprint) {
+      const btnStatus = document.getElementById('btn-sefaz-status');
+      const btnXml = document.getElementById('btn-sefaz');
+      const loading = document.getElementById('sefaz-loading');
+      const erro = document.getElementById('sefaz-erro');
+      const sucesso = document.getElementById('sefaz-sucesso');
+      const chave = ((state.lastQuery && state.lastQuery.chave) || '').replace(/\D/g, '');
+      const estab = ((state.lastQuery && state.lastQuery.estabelecimento) || '').replace(/\D/g, '');
+
+      erro.classList.add('hidden');
+      sucesso.classList.add('hidden');
+      if (chave.length !== 44 || !estab) {
+        erro.textContent = 'Chave (44 dígitos) e estabelecimento são obrigatórios.';
+        erro.classList.remove('hidden');
+        return;
+      }
+
+      if (btnStatus) btnStatus.disabled = true;
+      if (btnXml) btnXml.disabled = true;
+      loading.classList.remove('hidden');
+      loading.textContent = 'Consultando status na SEFAZ, aguarde…';
+      try {
+        const payload = { chave, estab };
+        if (thumbprint) payload.thumbprint = thumbprint;
+        const resp = await fetch('/api/nfe/consultar-status-sefaz', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          const err = new Error(data?.erro || 'Erro desconhecido na consulta de status.');
+          err.permiteSelecaoManual = Boolean(data?.permiteSelecaoManual);
+          throw err;
+        }
+        sucesso.textContent = data.mensagem || `Situação: ${data.situacaoLabel || '-'}`;
+        sucesso.classList.remove('hidden');
+        if (data.atualizado) {
+          setTimeout(() => { consultarNotas(); }, 900);
+        }
+      } catch (e) {
+        console.error(e);
+        let msg = e?.message || 'Falha ao consultar status na SEFAZ.';
+        if (e?.permiteSelecaoManual) {
+          msg += '\n\nDica: clique em "Selecionar certificado manualmente…" e escolha o A1 desejado.';
+        }
+        erro.textContent = msg;
+        erro.classList.remove('hidden');
+      } finally {
+        loading.classList.add('hidden');
+        loading.textContent = 'Consultando SEFAZ, aguarde…';
+        if (btnStatus) btnStatus.disabled = false;
+        if (btnXml) btnXml.disabled = false;
+      }
+    }
+
     document.getElementById('btn-sefaz')?.addEventListener('click', () => {
+      modoSefazPendente = 'xml';
       executarConsultaSefaz(certSelecionado?.thumbprint || null);
+    });
+
+    document.getElementById('btn-sefaz-status')?.addEventListener('click', () => {
+      modoSefazPendente = 'status';
+      executarConsultaStatusSefaz(certSelecionado?.thumbprint || null);
     });
 
     // ────── Modal de seleção de certificado ──────
@@ -2583,7 +2666,11 @@
       try { sessionStorage.setItem(CERT_STORAGE_KEY, JSON.stringify(certSelecionado)); } catch (_e) { /* ignora */ }
       renderCertSelecionado();
       fecharModalCerts();
-      executarConsultaSefaz(certSelecionado.thumbprint);
+      if (modoSefazPendente === 'status') {
+        executarConsultaStatusSefaz(certSelecionado.thumbprint);
+      } else {
+        executarConsultaSefaz(certSelecionado.thumbprint);
+      }
     });
 
     function atualizarExportacao() {

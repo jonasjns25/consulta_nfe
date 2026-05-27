@@ -2,7 +2,7 @@ const express = require('express');
 const mysql = require('mysql2/promise');
 const axios = require('axios');
 const path = require('path');
-const { consultarXmlPorChave, diagnosticarCertificados, listarCertificadosParaUI } = require('./sefaz-service');
+const { consultarXmlPorChave, consultarStatusPorChave, diagnosticarCertificados, listarCertificadosParaUI } = require('./sefaz-service');
 const { extrairDadosNFe } = require('./nfe-parser');
 const registerConfNfRoutes = require('./confnf-api');
 let xml2js;
@@ -987,6 +987,105 @@ app.post('/api/nfe/consultar-sefaz', async (req, res) => {
         console.error('[ConsultarSEFAZ]', error?.message || error);
         return res.status(500).json({
             erro: error?.message || 'Falha ao consultar SEFAZ.',
+            permiteSelecaoManual: Boolean(error?.permiteSelecaoManual),
+        });
+    }
+});
+
+/**
+ * POST /api/nfe/consultar-status-sefaz
+ * body: { chave, estab, thumbprint? }
+ * Consulta situação na SEFAZ e, se Cancelado, atualiza SAC.NFE_XML.SITNFE = 2.
+ */
+app.post('/api/nfe/consultar-status-sefaz', async (req, res) => {
+    const chaveRaw = (req.body && req.body.chave) || '';
+    const estabRaw = (req.body && req.body.estab) || '';
+    const thumbprint = ((req.body && req.body.thumbprint) || '').replace(/[^0-9A-Fa-f]/g, '') || null;
+    const chave = String(chaveRaw).replace(/\D/g, '');
+    const estab = String(estabRaw).replace(/\D/g, '');
+
+    if (chave.length !== 44) {
+        return res.status(400).json({ erro: 'Chave de acesso inválida.' });
+    }
+    if (!estab) {
+        return res.status(400).json({ erro: 'Informe o estabelecimento (CNPJ).' });
+    }
+
+    try {
+        const [rowsEstab] = await pool.query(
+            'SELECT CNPJ, CERTIFICADO_NFE, UF FROM ESTAB WHERE CNPJ = ? LIMIT 1',
+            [estab]
+        );
+        if (!rowsEstab || rowsEstab.length === 0) {
+            return res.status(400).json({ erro: `Estabelecimento "${estab}" não encontrado em ESTAB.` });
+        }
+        const { CERTIFICADO_NFE, UF, CNPJ: codEstab } = rowsEstab[0];
+        if (!CERTIFICADO_NFE) {
+            return res.status(400).json({
+                erro: 'Campo CERTIFICADO_NFE não preenchido para este estabelecimento.'
+            });
+        }
+        if (!UF) {
+            return res.status(400).json({ erro: 'Campo UF não preenchido para este estabelecimento.' });
+        }
+
+        const [rowsNfe] = await pool.query(
+            'SELECT IDNFE_XML, SITNFE FROM nfe_xml WHERE CHAVE = ? AND ESTAB = ? LIMIT 1',
+            [chave, codEstab]
+        );
+        const registroBanco = rowsNfe && rowsNfe.length > 0 ? rowsNfe[0] : null;
+        const sitnfeAnterior = registroBanco ? Number(registroBanco.SITNFE) : null;
+
+        const tpAmb = process.env.SEFAZ_TPAMB || '1';
+        const statusSefaz = await consultarStatusPorChave(chave, CERTIFICADO_NFE, UF, { tpAmb, thumbprint });
+
+        let atualizado = false;
+        let sitnfeAtual = sitnfeAnterior;
+        let mensagem = `Situação na SEFAZ: ${statusSefaz.label}.`;
+
+        if (statusSefaz.situacao === 'cancelada') {
+            if (registroBanco) {
+                if (sitnfeAnterior !== 2) {
+                    await pool.query(
+                        'UPDATE nfe_xml SET SITNFE = 2 WHERE CHAVE = ? AND ESTAB = ?',
+                        [chave, codEstab]
+                    );
+                    atualizado = true;
+                    sitnfeAtual = 2;
+                    mensagem = 'NF-e cancelada na SEFAZ. Registro atualizado: SITNFE = 2.';
+                } else {
+                    mensagem = 'NF-e cancelada na SEFAZ. O registro já estava com SITNFE = 2.';
+                }
+            } else {
+                mensagem = 'NF-e cancelada na SEFAZ, porém não há registro em NFE_XML para este estabelecimento (nada foi alterado).';
+            }
+        } else if (!registroBanco) {
+            mensagem += ' Não há registro em NFE_XML para este estabelecimento.';
+        } else if (statusSefaz.situacao === 'autorizada') {
+            mensagem += ' Nenhuma alteração no banco (somente cancelamento atualiza SITNFE).';
+        } else if (statusSefaz.situacao === 'denegada') {
+            mensagem += ' Nenhuma alteração no banco (situação denegada).';
+        } else {
+            mensagem += ' Nenhuma alteração no banco (situação não identificada como cancelada).';
+        }
+
+        return res.json({
+            situacaoSefaz: statusSefaz.situacao,
+            situacaoLabel: statusSefaz.label,
+            cStat: statusSefaz.cStat,
+            xMotivo: statusSefaz.xMotivo,
+            detalhe: statusSefaz.detalhe,
+            existeNoBanco: !!registroBanco,
+            idNfe: registroBanco ? registroBanco.IDNFE_XML : null,
+            sitnfeAnterior,
+            sitnfeAtual,
+            atualizado,
+            mensagem,
+        });
+    } catch (error) {
+        console.error('[ConsultarStatusSEFAZ]', error?.message || error);
+        return res.status(500).json({
+            erro: error?.message || 'Falha ao consultar status na SEFAZ.',
             permiteSelecaoManual: Boolean(error?.permiteSelecaoManual),
         });
     }
