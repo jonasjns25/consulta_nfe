@@ -33,6 +33,53 @@ try {
     winca = null;
 }
 
+const ROOT = __dirname;
+
+/** Erro estruturado para falhas de certificado (mensagem amigável na UI). */
+class ErroCertificadoSefaz extends Error {
+    constructor(mensagem, opts = {}) {
+        super(mensagem);
+        this.name = 'ErroCertificadoSefaz';
+        this.codigo = opts.codigo || 'CERTIFICADO';
+        this.permiteSelecaoManual = opts.permiteSelecaoManual !== false;
+        this.orientacao = opts.orientacao || '';
+    }
+}
+
+function mensagemIndicaChaveNaoExportavel(msg) {
+    const t = String(msg || '').toLowerCase();
+    return (
+        t.includes('não exportável') ||
+        t.includes('nao exportavel') ||
+        t.includes('not exportable') ||
+        t.includes('chave inválida') ||
+        t.includes('chave invalida') ||
+        t.includes('not valid for use') ||
+        t.includes('não é possível exportar chave privada') ||
+        t.includes('nao e possivel exportar chave privada')
+    );
+}
+
+function erroCertificadoNaoExportavel(detalheTecnico) {
+    return new ErroCertificadoSefaz(
+        'O certificado instalado no Windows não permite exportar a chave privada (necessário para o Node.js assinar a consulta SEFAZ).',
+        {
+            codigo: 'CERT_NAO_EXPORTAVEL',
+            permiteSelecaoManual: false,
+            orientacao:
+                'Soluções:\n' +
+                '1) Configure no .env o caminho de um arquivo .pfx exportável:\n' +
+                '   SEFAZ_PFX_PATH=C:\\caminho\\certificado.pfx\n' +
+                '   SEFAZ_PFX_PASS=senha_do_pfx\n' +
+                '   (ou SEFAZ_PFX_PATH_<CNPJ14> / SEFAZ_PFX_PASS_<CNPJ14>)\n' +
+                '2) Coloque o .pfx na pasta Certificados\\ do sistema (nome com o CNPJ).\n' +
+                '3) Reimporte o A1 no Windows marcando "Marcar esta chave como exportável".\n' +
+                '4) Token A3 (smartcard) não funciona com este método — use .pfx em arquivo.\n' +
+                (detalheTecnico ? `\nDetalhe técnico: ${detalheTecnico}` : ''),
+        }
+    );
+}
+
 const MAP_UF = {
     AC: '12', AL: '27', AP: '16', AM: '13', BA: '29', CE: '23',
     DF: '53', ES: '32', GO: '52', MA: '21', MT: '51', MS: '50',
@@ -290,6 +337,9 @@ async function exportarPfxPorThumbprint(thumbprint) {
         const { stdout, stderr, code } = await executarPowerShell(script);
         if (code !== 0 || !fs.existsSync(pfxPath)) {
             const msg = (stderr || stdout || '').trim() || `PowerShell encerrou com código ${code}`;
+            if (mensagemIndicaChaveNaoExportavel(msg)) {
+                throw erroCertificadoNaoExportavel(msg);
+            }
             throw new Error(msg);
         }
         const pfxBuffer = fs.readFileSync(pfxPath);
@@ -371,6 +421,9 @@ async function exportarPfxPorCnpj(cnpj) {
     if (code !== 0 || !fs.existsSync(pfxPath)) {
         const resumo = (stdout || '').trim();
         const msg = resumo || (stderr || '').trim() || `PowerShell encerrou com código ${code}`;
+        if (mensagemIndicaChaveNaoExportavel(msg)) {
+            throw erroCertificadoNaoExportavel(msg);
+        }
         throw new Error(msg);
     }
     try {
@@ -382,24 +435,68 @@ async function exportarPfxPorCnpj(cnpj) {
 }
 
 /**
- * Retorna { pfx, passphrase } para uso no node-mde.
- * @param {string} cnpj CNPJ extraído do DN (usado para fallback por CNPJ).
- * @param {string} [thumbprint] Se informado, ignora a busca por CNPJ e usa o cert específico.
+ * Busca arquivo .pfx configurado no .env ou na pasta Certificados/ (por CNPJ no nome).
+ * @returns {{ pfx: Buffer, passphrase: string } | null}
  */
-async function obterCredenciais(cnpj, thumbprint) {
-    if (thumbprint) {
-        return await exportarPfxPorThumbprint(thumbprint);
+function tentarPfxDeArquivo(cnpj) {
+    const pass = process.env[`SEFAZ_PFX_PASS_${cnpj}`] || process.env.SEFAZ_PFX_PASS || '';
+    const paths = [];
+    const envPath = process.env[`SEFAZ_PFX_PATH_${cnpj}`] || process.env.SEFAZ_PFX_PATH;
+    if (envPath) paths.push(envPath);
+
+    const dirCerts = path.join(ROOT, 'Certificados');
+    if (fs.existsSync(dirCerts)) {
+        const raiz = raizCnpj(cnpj);
+        try {
+            for (const nome of fs.readdirSync(dirCerts)) {
+                if (!/\.pfx$/i.test(nome) && !/\.p12$/i.test(nome)) continue;
+                const full = path.join(dirCerts, nome);
+                const base = nome.replace(/\.(pfx|p12)$/i, '');
+                const digitos = base.replace(/\D/g, '');
+                if (digitos.includes(cnpj) || (raiz.length === 8 && digitos.includes(raiz))) {
+                    paths.push(full);
+                }
+            }
+        } catch (_e) { /* ignora */ }
     }
 
-    const pfxEnvPath = process.env[`SEFAZ_PFX_PATH_${cnpj}`] || process.env.SEFAZ_PFX_PATH;
-    const pfxEnvPass = process.env[`SEFAZ_PFX_PASS_${cnpj}`] || process.env.SEFAZ_PFX_PASS || '';
-    if (pfxEnvPath && fs.existsSync(pfxEnvPath)) {
-        return { pfx: fs.readFileSync(pfxEnvPath), passphrase: pfxEnvPass };
+    for (const p of paths) {
+        if (p && fs.existsSync(p)) {
+            return { pfx: fs.readFileSync(p), passphrase: pass };
+        }
+    }
+    return null;
+}
+
+/**
+ * Retorna { pfx, passphrase } para uso no node-mde.
+ * Ordem: 1) .pfx em arquivo (.env / Certificados/)  2) thumbprint  3) export automático por CNPJ
+ * @param {string} cnpj CNPJ extraído do DN (usado para fallback por CNPJ).
+ * @param {string} [thumbprint] Certificado escolhido manualmente na UI.
+ */
+async function obterCredenciais(cnpj, thumbprint) {
+    const pfxArquivo = tentarPfxDeArquivo(cnpj);
+    if (pfxArquivo) {
+        return pfxArquivo;
+    }
+
+    if (thumbprint) {
+        try {
+            return await exportarPfxPorThumbprint(thumbprint);
+        } catch (errThumb) {
+            if (mensagemIndicaChaveNaoExportavel(errThumb.message)) {
+                throw erroCertificadoNaoExportavel(errThumb.message);
+            }
+            throw errThumb;
+        }
     }
 
     try {
         return await exportarPfxPorCnpj(cnpj);
     } catch (errExport) {
+        if (mensagemIndicaChaveNaoExportavel(errExport.message)) {
+            throw erroCertificadoNaoExportavel(errExport.message);
+        }
         const { lista } = await listarCertsPowerShell();
         const compativeis = lista.filter((c) =>
             certificadoCompativelComEstabelecimento(c.Subject, cnpj)
@@ -407,17 +504,19 @@ async function obterCredenciais(cnpj, thumbprint) {
         const listaStr = compativeis.slice(0, 5)
             .map((c) => ` - [${c.Thumbprint}] ${c.Subject} (HasPrivateKey=${c.HasPrivateKey})`)
             .join('\n');
-        const erro = new Error(
-            `Não foi possível obter o PFX para o CNPJ ${cnpj}.\n` +
-            (compativeis.length > 0
-                ? `Certificados com esse CNPJ no Windows:\n${listaStr}\n`
-                : (lista.length > 0
-                    ? `Nenhum cert com esse CNPJ no Pessoal. ${lista.length} cert(s) visível(is) no total.\n`
-                    : 'Nada visível no repositório Pessoal.\n')) +
-            `Detalhe do export automático: ${errExport.message}\n` +
-            'Você pode tentar selecionar o certificado manualmente ou configurar um PFX no .env.'
+        const erro = new ErroCertificadoSefaz(
+            `Não foi possível obter o certificado para o CNPJ ${cnpj}.`,
+            {
+                codigo: 'CERT_NAO_ENCONTRADO',
+                permiteSelecaoManual: true,
+                orientacao:
+                    (compativeis.length > 0
+                        ? `Certificados com esse CNPJ no Windows:\n${listaStr}\n\n`
+                        : '') +
+                    'Configure SEFAZ_PFX_PATH e SEFAZ_PFX_PASS no .env, ou selecione outro certificado.\n' +
+                    `Detalhe: ${errExport.message}`,
+            }
         );
-        erro.permiteSelecaoManual = true;
         throw erro;
     }
 }
@@ -633,6 +732,28 @@ async function listarCertificadosParaUI() {
     return { certificados, debug };
 }
 
+/** Formata erro de certificado/SEFAZ para resposta HTTP da API. */
+function formatarErroRespostaSefaz(error) {
+    if (error instanceof ErroCertificadoSefaz) {
+        return {
+            status: 500,
+            body: {
+                erro: error.message,
+                codigo: error.codigo,
+                orientacao: error.orientacao,
+                permiteSelecaoManual: error.permiteSelecaoManual,
+            },
+        };
+    }
+    return {
+        status: 500,
+        body: {
+            erro: error?.message || 'Falha na operação SEFAZ.',
+            permiteSelecaoManual: Boolean(error?.permiteSelecaoManual),
+        },
+    };
+}
+
 module.exports = {
     raizCnpj,
     certificadoCompativelComEstabelecimento,
@@ -643,5 +764,7 @@ module.exports = {
     extrairCnpjDoDN,
     diagnosticarCertificados,
     listarCertificadosParaUI,
+    formatarErroRespostaSefaz,
+    ErroCertificadoSefaz,
     MAP_UF,
 };

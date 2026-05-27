@@ -2,7 +2,13 @@ const express = require('express');
 const mysql = require('mysql2/promise');
 const axios = require('axios');
 const path = require('path');
-const { consultarXmlPorChave, consultarStatusPorChave, diagnosticarCertificados, listarCertificadosParaUI } = require('./sefaz-service');
+const {
+    consultarXmlPorChave,
+    consultarStatusPorChave,
+    diagnosticarCertificados,
+    listarCertificadosParaUI,
+    formatarErroRespostaSefaz,
+} = require('./sefaz-service');
 const { extrairDadosNFe } = require('./nfe-parser');
 const registerConfNfRoutes = require('./confnf-api');
 let xml2js;
@@ -985,10 +991,8 @@ app.post('/api/nfe/consultar-sefaz', async (req, res) => {
         });
     } catch (error) {
         console.error('[ConsultarSEFAZ]', error?.message || error);
-        return res.status(500).json({
-            erro: error?.message || 'Falha ao consultar SEFAZ.',
-            permiteSelecaoManual: Boolean(error?.permiteSelecaoManual),
-        });
+        const fmt = formatarErroRespostaSefaz(error);
+        return res.status(fmt.status).json(fmt.body);
     }
 });
 
@@ -1084,10 +1088,8 @@ app.post('/api/nfe/consultar-status-sefaz', async (req, res) => {
         });
     } catch (error) {
         console.error('[ConsultarStatusSEFAZ]', error?.message || error);
-        return res.status(500).json({
-            erro: error?.message || 'Falha ao consultar status na SEFAZ.',
-            permiteSelecaoManual: Boolean(error?.permiteSelecaoManual),
-        });
+        const fmt = formatarErroRespostaSefaz(error);
+        return res.status(fmt.status).json(fmt.body);
     }
 });
 

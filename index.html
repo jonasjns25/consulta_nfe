@@ -2405,7 +2405,9 @@
         });
         const data = await resp.json();
         if (!resp.ok) {
-          const err = new Error(data?.erro || 'Erro desconhecido na consulta.');
+          let msg = data?.erro || 'Erro desconhecido na consulta.';
+          if (data?.orientacao) msg += '\n\n' + data.orientacao;
+          const err = new Error(msg);
           err.permiteSelecaoManual = Boolean(data?.permiteSelecaoManual);
           throw err;
         }
@@ -2460,7 +2462,9 @@
         });
         const data = await resp.json();
         if (!resp.ok) {
-          const err = new Error(data?.erro || 'Erro desconhecido na consulta de status.');
+          let msg = data?.erro || 'Erro desconhecido na consulta de status.';
+          if (data?.orientacao) msg += '\n\n' + data.orientacao;
+          const err = new Error(msg);
           err.permiteSelecaoManual = Boolean(data?.permiteSelecaoManual);
           throw err;
         }
