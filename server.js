@@ -2425,6 +2425,71 @@ app.post('/itemcomp/aplicar-st-zerado-massa', async (req, res) => {
 });
 
 /**
+ * Atualização em massa: XML com modalidade BC ST = Pauta (modBCST=5) e SAC com MVA (LUCRO).
+ * Zera LUCRO e grava a pauta do XML em itemcomp.PAUTA.
+ * Recebe payload: { chave, items: [ { fornece, numero, estab, item, pauta } ] }
+ * Usa chave composta para limitar à NF selecionada. Não permite NF Recebida (STATUS = 4).
+ */
+app.post('/itemcomp/aplicar-pauta-xml-massa', async (req, res) => {
+    const { chave, items } = req.body || {};
+    const itemsArr = Array.isArray(items) ? items : null;
+    if (!itemsArr || itemsArr.length === 0) {
+        return res.status(400).json({ error: 'Nenhum item informado.' });
+    }
+
+    if (chave && /^\d{44}$/.test(chave)) {
+        const [compRows] = await pool.query(
+            'SELECT STATUS FROM compra WHERE CHAVE_NFE = ? LIMIT 1',
+            [chave]
+        );
+        const status = compRows?.[0]?.STATUS;
+        const statusNum = status !== null && status !== undefined ? parseInt(String(status), 10) : NaN;
+        if (statusNum === 4) {
+            return res.status(400).json({ error: 'Não é possível aplicar pauta do XML em notas com status "NF Recebida".' });
+        }
+    }
+
+    let totalAffected = 0;
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        for (const it of itemsArr) {
+            if (!it.fornece || !it.numero || it.estab === undefined || it.estab === null || it.item === undefined || it.item === null) {
+                continue;
+            }
+            const pautaValor = parseFloat(it.pauta);
+            if (!Number.isFinite(pautaValor) || pautaValor < 0) continue;
+
+            const updateSql = `UPDATE itemcomp SET LUCRO = 0, PAUTA = ? WHERE fornece = ? AND (numero = ? OR numero = CAST(? AS UNSIGNED)) AND estab = ? AND item = ?`;
+            const params = [
+                Number(pautaValor.toFixed(4)),
+                String(it.fornece),
+                String(it.numero),
+                String(it.numero),
+                String(it.estab),
+                String(it.item)
+            ];
+            const [result] = await connection.query(updateSql, params);
+            totalAffected += result?.affectedRows || 0;
+        }
+
+        await connection.commit();
+        return res.json({ affectedRows: totalAffected });
+    } catch (error) {
+        await connection.rollback().catch(() => {});
+        console.error('Erro ao aplicar pauta XML em massa:', error);
+        const msg = error && error.message ? error.message : 'Erro desconhecido';
+        return res.status(500).json({
+            error: 'Falha ao aplicar pauta do XML em massa.',
+            detalhe: msg
+        });
+    } finally {
+        connection.release();
+    }
+});
+
+/**
  * Atualização em massa: aplica valor de Frete+Outros do XML em itemcomp.ODA.
  * ODA = (valorFrete + valorOutros) / qtd para cada item.
  * Recebe payload: { chave, items: [ { fornece, numero, estab, item, oda } ] }

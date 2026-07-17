@@ -3731,6 +3731,12 @@ function obterAcoesItemcomp() {
       titulo: 'Produtos ST zerados - Realizar ajuste.',
       descricao: 'Realiza o Ajuste na NF conforme o XML nos itens com Base ST e ICMS ST zerados no XML.',
       executar: aplicarSTZeradoMassa
+    },
+    {
+      id: 'pautaXmlMva',
+      titulo: 'XML com Pauta e SAC com MVA (Lucro) - Corrigir',
+      descricao: 'Itens com modalidade BC ST = Pauta no XML e LUCRO (MVA) no SAC: zera o LUCRO e grava a pauta do XML em PAUTA.',
+      executar: aplicarPautaXmlMvaMassa
     }
   ];
 }
@@ -3823,6 +3829,13 @@ function contarElegiveisAcao(acaoId) {
       const estab = buscarCampoERP(p.dadosERP, 'estab', 'ESTAB');
       const itemERP = buscarCampoERP(p.dadosERP, 'item', 'ITEM', 'nItem', 'NITEM', 'itemcomp', 'ITEMCOMP');
       if (fornece && numero && estab && itemERP != null) n++;
+    });
+    return n;
+  }
+  if (acaoId === 'pautaXmlMva') {
+    let n = 0;
+    produtos.forEach((p) => {
+      if (analisarItemPautaXmlMva(p).eligible) n++;
     });
     return n;
   }
@@ -3930,6 +3943,197 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
+
+/**
+ * Calcula a pauta unitária do XML para gravar no SAC.
+ * Preferência: vBCST / qtd do ERP (fórmula usada no cálculo de BC ST do SAC).
+ * Fallbacks: qCom e qTrib do XML.
+ */
+function calcularPautaXmlParaSac(produto) {
+  const vBCST = parseFloat(produto?.baseCalculoICMSST || 0) || 0;
+  if (vBCST <= 0) return null;
+
+  const dadosERP = produto?.dadosERP;
+  const qtdERP = dadosERP ? parseFloat(buscarCampoERP(dadosERP, 'qtd', 'QTD') || 0) || 0 : 0;
+  if (qtdERP > 0) return vBCST / qtdERP;
+
+  const qtdCom = parseFloat(produto?.quantidade || 0) || 0;
+  if (qtdCom > 0) return vBCST / qtdCom;
+
+  const qtdTrib = parseFloat(produto?.quantidadeTrib || 0) || 0;
+  if (qtdTrib > 0) return vBCST / qtdTrib;
+
+  return null;
+}
+
+/**
+ * Analisa se o item tem Pauta no XML (modBCST=5) e MVA/LUCRO no SAC.
+ * Retorna elegibilidade, motivo e payload de update quando aplicável.
+ */
+function analisarItemPautaXmlMva(produto) {
+  const idx = produto?.item || '-';
+  const codigo = produto?.codigo || '-';
+  const modBCST = String(produto?.icmsModBCST ?? '').trim();
+  const origem = String(produto?.dadosERPOrigem || '').trim().toLowerCase();
+  const dadosERP = produto?.dadosERP;
+  const lucroRaw = dadosERP ? buscarCampoERP(dadosERP, 'lucro', 'LUCRO') : null;
+  const lucroNum = lucroRaw !== null && lucroRaw !== undefined && String(lucroRaw).trim() !== ''
+    ? (parseFloat(lucroRaw) || 0)
+    : 0;
+  const pautaERPRaw = dadosERP ? buscarCampoERP(dadosERP, 'Pauta', 'PAUTA', 'pauta') : null;
+  const pautaERP = pautaERPRaw !== null && pautaERPRaw !== undefined && String(pautaERPRaw).trim() !== ''
+    ? (parseFloat(pautaERPRaw) || 0)
+    : null;
+  const pautaXml = calcularPautaXmlParaSac(produto);
+
+  let eligible = false;
+  let reason = '';
+  let itemPayload = null;
+
+  if (modBCST !== '5') {
+    reason = 'Modalidade BC ST do XML não é Pauta (5)';
+  } else if ((parseFloat(produto?.baseCalculoICMSST || 0) || 0) <= 0) {
+    reason = 'Base ST (vBCST) zerada no XML';
+  } else if (origem !== 'itemcomp') {
+    reason = 'NF não lançada no ERP (itemcomp)';
+  } else if (!dadosERP) {
+    reason = 'Dados ERP ausentes';
+  } else if (Math.abs(lucroNum) < 0.0001) {
+    reason = 'SAC já está sem MVA/LUCRO';
+  } else if (pautaXml === null || !(pautaXml > 0)) {
+    reason = 'Não foi possível calcular a pauta do XML';
+  } else {
+    const fornece = buscarCampoERP(dadosERP, 'fornece', 'FORNECE') || buscarCampoERP(dadosERP, 'fornec', 'FORNEC') || null;
+    const numero = buscarCampoERP(dadosERP, 'numero', 'NUMERO', 'numero_nf', 'NUMERO_NF') || null;
+    const estab = buscarCampoERP(dadosERP, 'estab', 'ESTAB');
+    const itemERP = buscarCampoERP(dadosERP, 'item', 'ITEM', 'nItem', 'NITEM', 'itemcomp', 'ITEMCOMP');
+    if (fornece && numero && estab != null && itemERP != null) {
+      eligible = true;
+      reason = `Elegível: LUCRO=${lucroNum.toFixed(4)} → 0; PAUTA=${pautaXml.toFixed(4)}`;
+      itemPayload = {
+        fornece,
+        numero,
+        estab,
+        item: itemERP,
+        pauta: Number(pautaXml.toFixed(4))
+      };
+    } else {
+      reason = 'Identificação ERP insuficiente';
+    }
+  }
+
+  return {
+    item: idx,
+    codigo,
+    modBCST: modBCST || '-',
+    lucro: lucroNum,
+    pautaERP,
+    pautaXml,
+    eligible,
+    reason,
+    itemPayload
+  };
+}
+
+// Ação em massa: XML Pauta + SAC MVA(LUCRO) → zera LUCRO e grava pauta do XML
+function aplicarPautaXmlMvaMassa() {
+  try {
+    if (!window.produtosData || !Array.isArray(window.produtosData)) {
+      mostrarToast('Dados dos produtos não disponíveis.', true);
+      return;
+    }
+    if (window.compraStatus === '4') {
+      mostrarToast('Não é possível aplicar em notas com status "NF Recebida".', true);
+      return;
+    }
+
+    const diagnostics = [];
+    const itensParaAtualizar = [];
+
+    for (const produto of window.produtosData) {
+      const analise = analisarItemPautaXmlMva(produto);
+      diagnostics.push(analise);
+      if (analise.eligible && analise.itemPayload) {
+        itensParaAtualizar.push(analise.itemPayload);
+      }
+    }
+
+    if (itensParaAtualizar.length === 0) {
+      mostrarDiagnosticoPautaXmlMva(diagnostics);
+      return;
+    }
+
+    mostrarConfirmacaoPautaXmlMva(itensParaAtualizar, diagnostics);
+  } catch (error) {
+    console.error('Erro ao analisar Pauta XML / MVA em massa:', error);
+    mostrarToast(error.message || 'Erro ao analisar Pauta XML / MVA em massa.', true);
+  }
+}
+
+function mostrarDiagnosticoPautaXmlMva(diagnostics) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10050;display:flex;align-items:center;justify-content:center;';
+  const box = document.createElement('div');
+  box.style.cssText = 'width:980px;max-height:80vh;overflow:auto;background:#fff;border-radius:12px;padding:1rem;box-shadow:0 20px 40px rgba(0,0,0,0.3);';
+  box.innerHTML = `<h3>Pauta XML × MVA (Lucro) — Análise</h3>
+    <p>Nenhum item elegível. Itens analisados abaixo.</p>
+    <table style="width:100%;border-collapse:collapse;font-size:0.9rem;"><thead><tr style="text-align:left;border-bottom:1px solid #eee"><th style="padding:6px">Item</th><th style="padding:6px">Código</th><th style="padding:6px">modBCST</th><th style="padding:6px">Lucro SAC</th><th style="padding:6px">Pauta XML</th><th style="padding:6px">Pauta SAC</th><th style="padding:6px">Elegível</th><th style="padding:6px">Motivo</th></tr></thead><tbody id="diag-pauta-mva-tbody"></tbody></table>
+    <div style="margin-top:0.75rem;text-align:right;"><button id="diag-pauta-mva-close" class="btn-ghost">Fechar</button></div>`;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  const tbody = box.querySelector('#diag-pauta-mva-tbody');
+  diagnostics.forEach((d) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td style="padding:6px;border-bottom:1px solid #f4f4f4">${d.item}</td><td style="padding:6px;border-bottom:1px solid #f4f4f4">${d.codigo}</td><td style="padding:6px;border-bottom:1px solid #f4f4f4">${d.modBCST}</td><td style="padding:6px;border-bottom:1px solid #f4f4f4">${(d.lucro ?? 0).toFixed(4)}</td><td style="padding:6px;border-bottom:1px solid #f4f4f4">${d.pautaXml != null ? d.pautaXml.toFixed(4) : '-'}</td><td style="padding:6px;border-bottom:1px solid #f4f4f4">${d.pautaERP != null ? d.pautaERP.toFixed(4) : '-'}</td><td style="padding:6px;border-bottom:1px solid #f4f4f4">${d.eligible ? '<strong style="color:green">SIM</strong>' : '<span style="color:#c0392b">NÃO</span>'}</td><td style="padding:6px;border-bottom:1px solid #f4f4f4">${d.reason || ''}</td>`;
+    tbody.appendChild(tr);
+  });
+  box.querySelector('#diag-pauta-mva-close').addEventListener('click', () => overlay.remove());
+}
+
+function mostrarConfirmacaoPautaXmlMva(itensParaAtualizar, diagnostics) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10050;display:flex;align-items:center;justify-content:center;';
+  const box = document.createElement('div');
+  box.style.cssText = 'width:980px;max-height:80vh;overflow:auto;background:#fff;border-radius:12px;padding:1rem;box-shadow:0 20px 40px rgba(0,0,0,0.3);';
+  box.innerHTML = `<h3>Pauta XML × MVA (Lucro) — Confirmar ajuste</h3>
+    <p>Serão atualizados <strong>${itensParaAtualizar.length}</strong> item(s): <strong>LUCRO=0</strong> e <strong>PAUTA</strong> com o valor do XML (vBCST ÷ qtd).</p>
+    <table style="width:100%;border-collapse:collapse;font-size:0.9rem;"><thead><tr style="text-align:left;border-bottom:1px solid #eee"><th style="padding:6px">Item</th><th style="padding:6px">Código</th><th style="padding:6px">modBCST</th><th style="padding:6px">Lucro SAC</th><th style="padding:6px">Pauta XML</th><th style="padding:6px">Pauta SAC</th><th style="padding:6px">Elegível</th><th style="padding:6px">Motivo</th></tr></thead><tbody id="conf-pauta-mva-tbody"></tbody></table>
+    <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.75rem;"><button id="conf-pauta-mva-cancel" class="btn-ghost">Cancelar</button><button id="conf-pauta-mva-ok" class="btn-primary">Confirmar e gravar</button></div>`;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  const tbody = box.querySelector('#conf-pauta-mva-tbody');
+  diagnostics.forEach((d) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td style="padding:6px;border-bottom:1px solid #f4f4f4">${d.item}</td><td style="padding:6px;border-bottom:1px solid #f4f4f4">${d.codigo}</td><td style="padding:6px;border-bottom:1px solid #f4f4f4">${d.modBCST}</td><td style="padding:6px;border-bottom:1px solid #f4f4f4">${(d.lucro ?? 0).toFixed(4)}</td><td style="padding:6px;border-bottom:1px solid #f4f4f4">${d.pautaXml != null ? d.pautaXml.toFixed(4) : '-'}</td><td style="padding:6px;border-bottom:1px solid #f4f4f4">${d.pautaERP != null ? d.pautaERP.toFixed(4) : '-'}</td><td style="padding:6px;border-bottom:1px solid #f4f4f4">${d.eligible ? '<strong style="color:green">SIM</strong>' : '<span style="color:#c0392b">NÃO</span>'}</td><td style="padding:6px;border-bottom:1px solid #f4f4f4">${d.reason || ''}</td>`;
+    tbody.appendChild(tr);
+  });
+  box.querySelector('#conf-pauta-mva-cancel').addEventListener('click', () => overlay.remove());
+  box.querySelector('#conf-pauta-mva-ok').addEventListener('click', async () => {
+    try {
+      box.querySelector('#conf-pauta-mva-ok').disabled = true;
+      const chave = new URLSearchParams(window.location.search).get('chave');
+      const resp = await fetch('/itemcomp/aplicar-pauta-xml-massa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chave, items: itensParaAtualizar })
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        const msg = json.detalhe ? `${json.error || 'Erro'} (${json.detalhe})` : (json.error || 'Falha ao aplicar pauta do XML em massa.');
+        throw new Error(msg);
+      }
+      mostrarToast(`${json.affectedRows ?? itensParaAtualizar.length} item(ns) atualizado(s): LUCRO=0 e PAUTA do XML.`);
+      overlay.remove();
+      if (chave && typeof carregarDetalhes === 'function') {
+        await carregarDetalhes(chave);
+      }
+    } catch (err) {
+      console.error(err);
+      mostrarToast(err.message || 'Erro ao aplicar pauta do XML em massa.', true);
+      box.querySelector('#conf-pauta-mva-ok').disabled = false;
+    }
+  });
+}
 
 // Aplica LUCRO=0 e PAUTA=0 em itemcomp para itens com CST 10/70 e Base ST + Valor ICMS ST zerados no XML
 function aplicarSTZeradoMassa() {
