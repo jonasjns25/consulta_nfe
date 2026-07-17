@@ -3734,8 +3734,8 @@ function obterAcoesItemcomp() {
     },
     {
       id: 'pautaXmlMva',
-      titulo: 'XML com Pauta e SAC com MVA (Lucro) - Corrigir',
-      descricao: 'Itens com modalidade BC ST = Pauta no XML e LUCRO (MVA) no SAC: zera o LUCRO e grava a pauta do XML em PAUTA.',
+      titulo: 'Aplicar Pauta do XML no SAC',
+      descricao: 'Itens com modalidade BC ST = Pauta no XML: zera LUCRO (se houver MVA) e grava a pauta do XML em PAUTA — inclusive quando o LUCRO já está zerado.',
       executar: aplicarPautaXmlMvaMassa
     }
   ];
@@ -3967,8 +3967,10 @@ function calcularPautaXmlParaSac(produto) {
 }
 
 /**
- * Analisa se o item tem Pauta no XML (modBCST=5) e MVA/LUCRO no SAC.
- * Retorna elegibilidade, motivo e payload de update quando aplicável.
+ * Analisa se o item tem Pauta no XML (modBCST=5) para aplicar no SAC.
+ * Elegível quando:
+ * - há MVA/LUCRO no SAC (zera e grava pauta), ou
+ * - LUCRO já é 0 mas a pauta do XML ainda precisa ser gravada/atualizada.
  */
 function analisarItemPautaXmlMva(produto) {
   const idx = produto?.item || '-';
@@ -3985,6 +3987,8 @@ function analisarItemPautaXmlMva(produto) {
     ? (parseFloat(pautaERPRaw) || 0)
     : null;
   const pautaXml = calcularPautaXmlParaSac(produto);
+  const lucroZerado = Math.abs(lucroNum) < 0.0001;
+  const pautaJaOk = pautaXml != null && pautaERP != null && Math.abs(pautaERP - pautaXml) < 0.01;
 
   let eligible = false;
   let reason = '';
@@ -3998,10 +4002,10 @@ function analisarItemPautaXmlMva(produto) {
     reason = 'NF não lançada no ERP (itemcomp)';
   } else if (!dadosERP) {
     reason = 'Dados ERP ausentes';
-  } else if (Math.abs(lucroNum) < 0.0001) {
-    reason = 'SAC já está sem MVA/LUCRO';
   } else if (pautaXml === null || !(pautaXml > 0)) {
     reason = 'Não foi possível calcular a pauta do XML';
+  } else if (lucroZerado && pautaJaOk) {
+    reason = 'Já corrigido: LUCRO=0 e PAUTA igual ao XML';
   } else {
     const fornece = buscarCampoERP(dadosERP, 'fornece', 'FORNECE') || buscarCampoERP(dadosERP, 'fornec', 'FORNEC') || null;
     const numero = buscarCampoERP(dadosERP, 'numero', 'NUMERO', 'numero_nf', 'NUMERO_NF') || null;
@@ -4009,7 +4013,12 @@ function analisarItemPautaXmlMva(produto) {
     const itemERP = buscarCampoERP(dadosERP, 'item', 'ITEM', 'nItem', 'NITEM', 'itemcomp', 'ITEMCOMP');
     if (fornece && numero && estab != null && itemERP != null) {
       eligible = true;
-      reason = `Elegível: LUCRO=${lucroNum.toFixed(4)} → 0; PAUTA=${pautaXml.toFixed(4)}`;
+      if (!lucroZerado) {
+        reason = `Elegível: LUCRO=${lucroNum.toFixed(4)} → 0; PAUTA=${pautaXml.toFixed(4)}`;
+      } else {
+        const pautaAtual = pautaERP != null ? pautaERP.toFixed(4) : '0';
+        reason = `Elegível: LUCRO já 0; PAUTA ${pautaAtual} → ${pautaXml.toFixed(4)}`;
+      }
       itemPayload = {
         fornece,
         numero,
