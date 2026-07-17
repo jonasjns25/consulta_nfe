@@ -1189,6 +1189,47 @@
       return csosn === '201' || csosn === '202' || csosn === '203';
     }
 
+    function ehFornecedorSimplesNacional(produto) {
+      return !!(produto?.icmsCSOSN && String(produto.icmsCSOSN).trim());
+    }
+
+    /** Mapeamento da regra em massa: CSOSN 201/202/203 → TRIBUTO 30; demais CSOSN → 41 */
+    function tributoEsperadoSimplesNacional(produto) {
+      const csosn = String(produto?.icmsCSOSN || '').trim();
+      if (!csosn) return null;
+      if (csosn === '201' || csosn === '202' || csosn === '203') return '30';
+      return '41';
+    }
+
+    function normalizarTributoERP(tributo) {
+      if (tributo === null || tributo === undefined || String(tributo).trim() === '') return null;
+      return String(tributo).replace(/\D/g, '').padStart(2, '0').slice(0, 2);
+    }
+
+    /** CSOSN do XML compatível com TRIBUTO do SAC após a regra de Simples Nacional */
+    function csosnCompativelComTributoSac(produto, cstERP) {
+      const esperado = tributoEsperadoSimplesNacional(produto);
+      const trib = normalizarTributoERP(cstERP);
+      if (!esperado || !trib) return false;
+      return trib === esperado;
+    }
+
+    /**
+     * No Simples Nacional o pICMSST do XML (ex.: 20%) não é a alíquota efetiva gravada no SAC.
+     * Compara a alíquota do SAC com a alíquota efetiva (vICMSST / vBCST).
+     */
+    function aliquotaSTCompativelSimplesNacional(produto, aliquotaICMSSTERP) {
+      if (aliquotaICMSSTERP === null || aliquotaICMSSTERP === undefined) return false;
+      const vBCST = parseFloat(produto?.baseCalculoICMSST || 0) || 0;
+      const vICMSST = parseFloat(produto?.valorICMSST || 0) || 0;
+      const aliqSac = parseFloat(aliquotaICMSSTERP) || 0;
+      if (vBCST <= 0.00001) {
+        return Math.abs(aliqSac) < 0.02;
+      }
+      const efetivaXml = (vICMSST / vBCST) * 100;
+      return Math.abs(efetivaXml - aliqSac) < 0.05;
+    }
+
     function rotuloCSTouCSOSN(produto) {
       const csosn = String(produto?.icmsCSOSN || '').trim();
       const cst = String(produto?.icmsCST || '').trim();
@@ -1589,7 +1630,13 @@
       const valorFCPSTERP = calculosFiscais.valorFCPSTERP;
 
       const cstXML = (produto.icmsCSOSN || produto.icmsCST || '').toString().trim();
-      if (cstERP && !compararValoresERP(cstXML, cstERP)) temErro = true;
+      const ehSimplesNacional = ehFornecedorSimplesNacional(produto);
+      if (cstERP) {
+        const cstOk = ehSimplesNacional && csosnCompativelComTributoSac(produto, cstERP)
+          ? true
+          : compararValoresERP(cstXML, cstERP);
+        if (!cstOk) temErro = true;
+      }
 
       const baseCalculoXML = produto.baseCalculoICMS || 0;
       if (baseCalculoERP !== null && temErroImposto(baseCalculoXML, baseCalculoERP, 'icms')) temErro = true;
@@ -1651,13 +1698,22 @@
         }
 
         const baseCalculoSTXML = produto.baseCalculoICMSST || 0;
+        const baseSTOk = baseCalculoSTERP === null || !temErroImposto(baseCalculoSTXML, baseCalculoSTERP, 'icms') || isCSTComSTZerada;
         if (baseCalculoSTERP !== null && temErroImposto(baseCalculoSTXML, baseCalculoSTERP, 'icms') && !isCSTComSTZerada) temErro = true;
 
-        const aliquotaICMSSTXML = produto.aliquotaICMSST || 0;
-        if (aliquotaICMSSTERP !== null && !compararValoresERP(aliquotaICMSSTXML, aliquotaICMSSTERP) && !isCSTComSTZerada) temErro = true;
-
         const valorICMSSTXML = produto.valorICMSST || 0;
+        const valorSTOk = valorICMSSTERP === null || !temErroImposto(valorICMSSTXML, valorICMSSTERP, 'icms') || isCSTComSTZerada;
         if (valorICMSSTERP !== null && temErroImposto(valorICMSSTXML, valorICMSSTERP, 'icms') && !isCSTComSTZerada) temErro = true;
+
+        const aliquotaICMSSTXML = produto.aliquotaICMSST || 0;
+        if (aliquotaICMSSTERP !== null && !isCSTComSTZerada) {
+          // Simples Nacional: pICMSST do XML ≠ alíquota efetiva do SAC; se Base/Valor ST batem (ou alíquota efetiva bate), não marcar erro
+          let aliquotaSTOk = compararValoresERP(aliquotaICMSSTXML, aliquotaICMSSTERP);
+          if (!aliquotaSTOk && ehSimplesNacional) {
+            aliquotaSTOk = (baseSTOk && valorSTOk) || aliquotaSTCompativelSimplesNacional(produto, aliquotaICMSSTERP);
+          }
+          if (!aliquotaSTOk) temErro = true;
+        }
 
         const baseCalculoFCPSTXML = produto.baseCalculoFCPST || 0;
         const xmlTemFCPSTBase = (produto.baseCalculoFCPST || 0) !== 0;
@@ -2399,7 +2455,9 @@
       // CST ou CSOSN (Simples Nacional) — exibe um ou outro conforme o regime
       if (ehSimplesNacional) {
         const valorXML_CSOSN = produto.icmsCSOSN || '';
-        const igualCSOSN = cstERP ? compararValores(valorXML_CSOSN, cstERP) : false;
+        const igualCSOSN = cstERP
+          ? (csosnCompativelComTributoSac(produto, cstERP) || compararValores(valorXML_CSOSN, cstERP))
+          : false;
         const corCSOSN = igualCSOSN ? '#28a745' : '#dc3545';
         const textoDescrCSOSN = descricaoCSOSN(valorXML_CSOSN);
         html += `
@@ -2708,7 +2766,14 @@
       
       // Alíquota ICMS ST (pICMSST) - se CST não permitir ICMS ST, mostrar 0
       const valorXML_AliquotaICMSST = permiteICMSST ? (produto.aliquotaICMSST || 0) : 0;
-      const igualAliquotaICMSST = aliquotaICMSSTERP !== null ? compararValores(valorXML_AliquotaICMSST, aliquotaICMSSTERP) : false;
+      let igualAliquotaICMSST = aliquotaICMSSTERP !== null ? compararValores(valorXML_AliquotaICMSST, aliquotaICMSSTERP) : false;
+      if (!igualAliquotaICMSST && ehSimplesNacional && permiteICMSST && aliquotaICMSSTERP !== null) {
+        const baseSTOkUi = baseCalculoSTERP === null || !temErroImposto(valorXML_BaseCalculoST, baseCalculoSTERP, 'icms');
+        // valorICMSSTERP ainda não foi comparado aqui abaixo; usa o valor XML já disponível
+        const valorSTXmlTmp = permiteICMSST ? (produto.valorICMSST || 0) : 0;
+        const valorSTOkUi = valorICMSSTERP === null || !temErroImposto(valorSTXmlTmp, valorICMSSTERP, 'icms');
+        igualAliquotaICMSST = (baseSTOkUi && valorSTOkUi) || aliquotaSTCompativelSimplesNacional(produto, aliquotaICMSSTERP);
+      }
       const corAliquotaICMSST = igualAliquotaICMSST ? '#28a745' : '#dc3545';
       html += `
         <div class="detalhes-item-comparacao">
