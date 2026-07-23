@@ -1438,7 +1438,9 @@ app.get('/detalhes/:chave', async (req, res) => {
                 aliquotaCOFINS: parseFloat(cofinsObj.pCOFINS || 0),
                 valorCOFINS: parseFloat(cofinsObj.vCOFINS || 0),
                 // IBS/CBS (XML)
-                cClassTrib: cClassTribStr
+                cClassTrib: cClassTribStr,
+                // Código de Benefício Fiscal (cBenef)
+                cBenef: (prod.cBenef || prod.CBenef || '').toString().trim()
             });
         });
 
@@ -2001,6 +2003,60 @@ app.get('/detalhes/:chave', async (req, res) => {
             const figuraFiscal = partesFigura.length > 0 ? partesFigura.join(' ') : '';
             if (figuraFiscal) Object.assign(erp, { figura_fiscal: figuraFiscal, FIGURA_FISCAL: figuraFiscal });
         });
+
+        // Código de benefício fiscal (cBenef XML ↔ beneficio_produto.COD_BENEFICIO)
+        // Join: itemcomp.NSU → embalagem.CODPRODUTO → produto.CODIGO → produto.GRUPO = beneficio_produto.GRUPO
+        // Filtro: beneficio_produto.UF = UF do destinatário
+        try {
+            if (ufDestinatario) {
+                const nsuSet = new Set();
+                produtos.forEach((p) => {
+                    const erp = p.dadosERP;
+                    if (!erp) return;
+                    const nsu = erp.NSU ?? erp.nsu ?? erp.CODPRODUTO ?? erp.codproduto;
+                    if (nsu != null && String(nsu).trim() !== '') nsuSet.add(String(nsu).trim());
+                });
+                if (nsuSet.size > 0) {
+                    const nsus = [...nsuSet];
+                    const placeholders = nsus.map(() => '?').join(',');
+                    const [benefRows] = await pool.query(
+                        `SELECT e.CODPRODUTO AS nsu,
+                                TRIM(bp.COD_BENEFICIO) AS cod_beneficio
+                         FROM embalagem e
+                         INNER JOIN produto p ON p.codigo = e.PRODUTO
+                         INNER JOIN beneficio_produto bp
+                                 ON bp.GRUPO = p.GRUPO
+                                AND UPPER(TRIM(bp.UF)) = ?
+                         WHERE e.CODPRODUTO IN (${placeholders})
+                           AND TRIM(COALESCE(bp.COD_BENEFICIO, '')) <> ''`,
+                        [ufDestinatario, ...nsus]
+                    );
+                    const mapNsuToBenefs = {};
+                    (benefRows || []).forEach((row) => {
+                        const nsu = String(row.nsu ?? row.NSU ?? '').trim();
+                        const cod = String(row.cod_beneficio ?? row.COD_BENEFICIO ?? '').trim();
+                        if (!nsu || !cod) return;
+                        if (!mapNsuToBenefs[nsu]) mapNsuToBenefs[nsu] = [];
+                        if (!mapNsuToBenefs[nsu].includes(cod)) mapNsuToBenefs[nsu].push(cod);
+                    });
+                    produtos.forEach((p) => {
+                        const erp = p.dadosERP;
+                        if (!erp) return;
+                        const nsu = String(erp.NSU ?? erp.nsu ?? erp.CODPRODUTO ?? erp.codproduto ?? '').trim();
+                        const lista = nsu ? (mapNsuToBenefs[nsu] || []) : [];
+                        const texto = lista.length === 0 ? '' : lista.join(', ');
+                        Object.assign(erp, {
+                            cod_beneficios: lista,
+                            COD_BENEFICIOS: lista,
+                            cod_beneficio: texto,
+                            COD_BENEFICIO: texto
+                        });
+                    });
+                }
+            }
+        } catch (benefError) {
+            console.error('Erro ao buscar beneficio_produto:', benefError);
+        }
 
         // Debug: log quando figura fiscal está vazia (tabfor/embalagem)
         if (process.env.DEBUG_FISCAL === '1') {

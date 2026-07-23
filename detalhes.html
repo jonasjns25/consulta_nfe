@@ -994,7 +994,7 @@
         const badgeHtml = temErro
           ? `<span class="badge-erro" title="${produto.cadastroNaoEncontrado ? 'Cadastro não encontrado' : (produto.dadosERPOrigem === 'tabfor' || produto.dadosERPOrigem === 'embalagem') ? 'NF não lançada — Comparação com dados simulados' : 'Item com divergências'}">!</span>`
           : temAtencao
-            ? '<span class="badge-atencao" title="Ponto de atenção: CST 10/70 com ICMS ST zerado no XML">⚠</span>'
+            ? '<span class="badge-atencao" title="Ponto de atenção (ex.: cBenef, ST zerado)">⚠</span>'
             : '<span class="badge-ok" title="Item sem divergências">&#10003;</span>';
         tr.innerHTML = `
           <td class="col-expand">
@@ -1187,6 +1187,43 @@
       if (cst === '10' || cst === '30' || cst === '70') return true;
       const csosn = String(produto?.icmsCSOSN || '').trim();
       return csosn === '201' || csosn === '202' || csosn === '203';
+    }
+
+    /** Lista de COD_BENEFICIO do SAC para o item (beneficio_produto via GRUPO + UF dest). */
+    function obterListaCodBeneficioSac(dadosERP) {
+      if (!dadosERP) return [];
+      const listaRaw = dadosERP.cod_beneficios ?? dadosERP.COD_BENEFICIOS;
+      if (Array.isArray(listaRaw)) {
+        return listaRaw.map((c) => String(c ?? '').trim()).filter(Boolean);
+      }
+      const texto = String(
+        dadosERP.cod_beneficio ?? dadosERP.COD_BENEFICIO ?? ''
+      ).trim();
+      if (!texto) return [];
+      return texto.split(/[,;|]/).map((c) => c.trim()).filter(Boolean);
+    }
+
+    /** Comparação cBenef XML × COD_BENEFICIO SAC (correto se XML estiver em qualquer código do GRUPO+UF). */
+    function obterComparacaoCBenef(produto) {
+      const xml = String(produto?.cBenef || '').trim();
+      const lista = obterListaCodBeneficioSac(produto?.dadosERP);
+      const temXml = xml !== '';
+      const temSac = lista.length > 0;
+      let igual = false;
+      if (!temXml && !temSac) {
+        igual = true;
+      } else if (temXml && temSac) {
+        const xmlUp = xml.toUpperCase();
+        igual = lista.some((c) => String(c).trim().toUpperCase() === xmlUp);
+      }
+      return {
+        xml,
+        sac: temSac ? lista.join(', ') : '',
+        lista,
+        temXml,
+        temSac,
+        igual
+      };
     }
 
     function ehFornecedorSimplesNacional(produto) {
@@ -1791,6 +1828,12 @@
         }
       }
 
+      // cBenef: divergência é ponto de atenção (não erro)
+      const cBenefCompErro = obterComparacaoCBenef(produto);
+      if ((cBenefCompErro.temXml || cBenefCompErro.temSac) && !cBenefCompErro.igual) {
+        temAtencao = true;
+      }
+
       return { temErro, temAtencao };
     }
 
@@ -2271,6 +2314,24 @@
           <span class="detalhes-label">${formatarLabel('CEST')}</span>
           <span class="detalhes-value">${cestXMLRaw || '-'}</span>
           <span class="detalhes-value" style="color: ${corCestSac};">${cestERP || '-'}</span>
+        </div>
+      `;
+
+      // cBenef (XML) vs beneficio_produto.COD_BENEFICIO (SAC) — ponto de atenção se divergir
+      const cBenefComp = obterComparacaoCBenef(produto);
+      let corCBenefSac;
+      if (!cBenefComp.temSac) {
+        corCBenefSac = cBenefComp.temXml ? '#ffb347' : 'var(--lumi-muted)';
+      } else if (!cBenefComp.temXml) {
+        corCBenefSac = '#ffb347';
+      } else {
+        corCBenefSac = cBenefComp.igual ? '#28a745' : '#ffb347';
+      }
+      html += `
+        <div class="detalhes-item-comparacao">
+          <span class="detalhes-label">${formatarLabel('cBenef')}</span>
+          <span class="detalhes-value">${cBenefComp.xml || '-'}</span>
+          <span class="detalhes-value" style="color: ${corCBenefSac};">${cBenefComp.sac || '-'}</span>
         </div>
       `;
       
@@ -3209,7 +3270,7 @@
           const badgeNovo = temErro
             ? '<span class="badge-erro" title="Item com divergências">!</span>'
             : temAtencao
-              ? '<span class="badge-atencao" title="Ponto de atenção: CST 10/70 com ICMS ST zerado no XML">⚠</span>'
+              ? '<span class="badge-atencao" title="Ponto de atenção (ex.: cBenef, ST zerado)">⚠</span>'
               : '<span class="badge-ok" title="Item sem divergências">&#10003;</span>';
           if (badge) {
             badge.outerHTML = badgeNovo;
@@ -3351,7 +3412,7 @@
             const badgeNovo = temErro
               ? '<span class="badge-erro" title="Item com divergências">!</span>'
               : temAtencao
-                ? '<span class="badge-atencao" title="Ponto de atenção: CST 10/70 com ICMS ST zerado no XML">⚠</span>'
+                ? '<span class="badge-atencao" title="Ponto de atenção (ex.: cBenef, ST zerado)">⚠</span>'
                 : '<span class="badge-ok" title="Item sem divergências">✓</span>';
             if (badge) badge.outerHTML = badgeNovo;
             if (temErro) linha.classList.add('linha-com-erro');
@@ -3402,7 +3463,7 @@
             const badgeNovo = temErro
               ? '<span class="badge-erro" title="Item com divergências">!</span>'
               : temAtencao
-                ? '<span class="badge-atencao" title="Ponto de atenção: CST 10/70 com ICMS ST zerado no XML">⚠</span>'
+                ? '<span class="badge-atencao" title="Ponto de atenção (ex.: cBenef, ST zerado)">⚠</span>'
                 : '<span class="badge-ok" title="Item sem divergências">✓</span>';
             if (badge) badge.outerHTML = badgeNovo;
             if (temErro) linha.classList.add('linha-com-erro');
