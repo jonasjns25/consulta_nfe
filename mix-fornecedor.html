@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mix do Fornecedor - Conferência</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Segoe UI", "Roboto", sans-serif;
+      --lumi-primary: #c8102e;
+      --lumi-primary-strong: #db2636;
+      --lumi-text: #222;
+      --lumi-muted: #666;
+      --lumi-surface: #fff;
+      --lumi-border: rgba(200, 16, 46, 0.16);
+      --lumi-soft: #fff8f4;
+      --success: #1f8b4c;
+      --warning: #ad7a00;
+      --danger: #c0392b;
+      --info: #1f6feb;
+      --shadow: 0 18px 36px rgba(34, 34, 34, 0.1);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at top left, #fff8f4, #ffffff);
+      color: var(--lumi-text);
+      padding: 2rem 1rem 3rem;
+    }
+
+    header, main {
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    h1, h2, h3 { margin: 0; }
+    h1 { font-size: clamp(1.7rem, 3vw, 2.3rem); }
+    p { margin: 0; }
+    .muted { color: var(--lumi-muted); }
+    .hidden { display: none !important; }
+
+    .nav-links {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .nav-links a {
+      text-decoration: none;
+      color: var(--lumi-primary);
+      font-weight: 600;
+    }
+
+    .card {
+      background: var(--lumi-surface);
+      border: 1px solid var(--lumi-border);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .grid-filters {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1fr 1fr auto;
+      gap: 0.9rem;
+      align-items: end;
+    }
+
+    @media (max-width: 980px) {
+      .grid-filters { grid-template-columns: 1fr 1fr; }
+      header { flex-direction: column; }
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .field label {
+      font-size: 0.92rem;
+      color: var(--lumi-muted);
+      font-weight: 600;
+    }
+
+    input, select, button { font: inherit; }
+
+    input, select {
+      width: 100%;
+      border: 1px solid var(--lumi-border);
+      border-radius: 12px;
+      padding: 0.8rem 0.9rem;
+      background: #fff;
+    }
+
+    .btn-primary, .btn-ghost {
+      border: none;
+      border-radius: 12px;
+      padding: 0.8rem 1.1rem;
+      cursor: pointer;
+      font-weight: 700;
+      min-height: 48px;
+    }
+
+    .btn-primary {
+      background: var(--lumi-primary);
+      color: #fff;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--lumi-border);
+      color: var(--lumi-text);
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .fornecedor-wrap { position: relative; }
+
+    .sugestoes {
+      position: absolute;
+      z-index: 20;
+      left: 0;
+      right: 0;
+      top: calc(100% + 4px);
+      background: #fff;
+      border: 1px solid var(--lumi-border);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      max-height: 240px;
+      overflow: auto;
+    }
+
+    .sugestoes button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: none;
+      background: transparent;
+      padding: 0.7rem 0.9rem;
+      cursor: pointer;
+    }
+
+    .sugestoes button:hover {
+      background: var(--lumi-soft);
+    }
+
+    .resumo-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0.8rem;
+    }
+
+    @media (max-width: 900px) {
+      .resumo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    .kpi {
+      border: 1px solid var(--lumi-border);
+      border-radius: 16px;
+      padding: 1rem;
+      background: #fff;
+    }
+
+    .kpi .valor {
+      font-size: 1.7rem;
+      font-weight: 800;
+      margin-top: 0.25rem;
+    }
+
+    .kpi.so_cadastro .valor { color: var(--warning); }
+    .kpi.so_notas .valor { color: var(--info); }
+    .kpi.divergente .valor { color: var(--danger); }
+    .kpi.ok .valor { color: var(--success); }
+
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+
+    .tabs button {
+      border: 1px solid var(--lumi-border);
+      background: #fff;
+      border-radius: 999px;
+      padding: 0.45rem 0.9rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .tabs button.active {
+      background: var(--lumi-primary);
+      border-color: var(--lumi-primary);
+      color: #fff;
+    }
+
+    .aviso {
+      margin-bottom: 1rem;
+      padding: 0.85rem 1rem;
+      border-radius: 12px;
+      background: #fff7e6;
+      border: 1px solid #f0d9a0;
+      color: #7a5a00;
+    }
+
+    .erro {
+      margin-bottom: 1rem;
+      padding: 0.85rem 1rem;
+      border-radius: 12px;
+      background: #fdecea;
+      border: 1px solid #f5c6cb;
+      color: #922b21;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--lumi-border);
+      border-radius: 16px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 1100px;
+    }
+
+    th, td {
+      padding: 0.7rem 0.8rem;
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+      text-align: left;
+      vertical-align: top;
+      font-size: 0.92rem;
+    }
+
+    th {
+      background: var(--lumi-soft);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      font-size: 0.84rem;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      color: var(--lumi-muted);
+    }
+
+    .badge {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 0.2rem 0.55rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .badge.so_cadastro { background: #fff3cd; color: #856404; }
+    .badge.so_notas { background: #dbeafe; color: #1e40af; }
+    .badge.divergente { background: #fdecea; color: #922b21; }
+    .badge.ok { background: #d4edda; color: #155724; }
+
+    .motivos {
+      margin: 0;
+      padding-left: 1.1rem;
+      color: var(--lumi-muted);
+    }
+
+    .link-chave {
+      color: var(--lumi-primary);
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .empty {
+      padding: 2rem;
+      text-align: center;
+      color: var(--lumi-muted);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Mix do Fornecedor</h1>
+      <p class="muted">Compara o mix cadastrado em tabfor com os itens das NF-e do fornecedor (XML).</p>
+    </div>
+    <nav class="nav-links">
+      <a href="index.html">Análise NFe</a>
+      <a href="autorizacao-recepcao-xml.html">Autorização de Recepção</a>
+      <a href="confnf.html">ConfNF</a>
+      <a href="mix-fornecedor.html"><strong>Mix Fornecedor</strong></a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="card">
+      <form id="form-mix">
+        <div class="grid-filters">
+          <div class="field fornecedor-wrap">
+            <label for="fornecedor-busca">Fornecedor</label>
+            <input id="fornecedor-busca" type="text" placeholder="CNPJ ou nome" autocomplete="off" required>
+            <input id="fornecedor-cnpj" type="hidden">
+            <div id="sugestoes" class="sugestoes hidden"></div>
+          </div>
+          <div class="field">
+            <label for="data-inicial">Data inicial</label>
+            <input id="data-inicial" type="date" required>
+          </div>
+          <div class="field">
+            <label for="data-final">Data final</label>
+            <input id="data-final" type="date" required>
+          </div>
+          <div class="field">
+            <label for="estab">Estabelecimento</label>
+            <select id="estab">
+              <option value="">Todos</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>&nbsp;</label>
+            <button type="submit" class="btn-primary" id="btn-conferir">Conferir</button>
+          </div>
+        </div>
+      </form>
+    </section>
+
+    <div id="msg-erro" class="erro hidden"></div>
+    <div id="msg-aviso" class="aviso hidden"></div>
+
+    <section class="card hidden" id="painel-resultado">
+      <div class="resumo-grid" id="resumo-kpis"></div>
+      <p class="muted" id="resumo-meta" style="margin: 1rem 0;"></p>
+
+      <div class="tabs" id="tabs-status">
+        <button type="button" data-status="todos" class="active">Todos</button>
+        <button type="button" data-status="divergente">Divergentes</button>
+        <button type="button" data-status="so_notas">Só notas</button>
+        <button type="button" data-status="so_cadastro">Só cadastro</button>
+        <button type="button" data-status="ok">OK</button>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>CODFOR / cProd</th>
+              <th>Descrição SAC</th>
+              <th>xProd XML</th>
+              <th>NSU</th>
+              <th>UNDFOR / EMBFOR / FATOR</th>
+              <th>uCom XML</th>
+              <th>NFs</th>
+              <th>Motivos</th>
+              <th>Exemplo</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-itens"></tbody>
+        </table>
+      </div>
+      <div id="empty-msg" class="empty hidden">Nenhum item neste filtro.</div>
+    </section>
+  </main>
+
+  <script>
+    const estado = {
+      itens: [],
+      filtroStatus: 'todos',
+      buscaTimer: null,
+      fornecedorSelecionado: null
+    };
+
+    const el = {
+      form: document.getElementById('form-mix'),
+      busca: document.getElementById('fornecedor-busca'),
+      cnpj: document.getElementById('fornecedor-cnpj'),
+      sugestoes: document.getElementById('sugestoes'),
+      dataInicial: document.getElementById('data-inicial'),
+      dataFinal: document.getElementById('data-final'),
+      estab: document.getElementById('estab'),
+      btn: document.getElementById('btn-conferir'),
+      erro: document.getElementById('msg-erro'),
+      aviso: document.getElementById('msg-aviso'),
+      painel: document.getElementById('painel-resultado'),
+      kpis: document.getElementById('resumo-kpis'),
+      meta: document.getElementById('resumo-meta'),
+      tabs: document.getElementById('tabs-status'),
+      tbody: document.getElementById('tbody-itens'),
+      empty: document.getElementById('empty-msg')
+    };
+
+    function formatarCnpj(valor) {
+      const d = String(valor || '').replace(/\D/g, '');
+      if (d.length === 14) {
+        return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+      }
+      if (d.length === 11) {
+        return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+      }
+      return valor || '';
+    }
+
+    function formatarNumero(valor, casas = 4) {
+      if (valor == null || valor === '') return '-';
+      const n = Number(valor);
+      if (!Number.isFinite(n)) return String(valor);
+      return n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: casas });
+    }
+
+    function labelStatus(status) {
+      return ({
+        so_cadastro: 'Só cadastro',
+        so_notas: 'Só notas',
+        divergente: 'Divergente',
+        ok: 'OK'
+      })[status] || status;
+    }
+
+    function datasPadrao() {
+      const fim = new Date();
+      const inicio = new Date();
+      inicio.setDate(fim.getDate() - 30);
+      el.dataFinal.value = fim.toISOString().slice(0, 10);
+      el.dataInicial.value = inicio.toISOString().slice(0, 10);
+    }
+
+    function mostrarErro(msg) {
+      el.erro.textContent = msg || '';
+      el.erro.classList.toggle('hidden', !msg);
+    }
+
+    function mostrarAviso(msg) {
+      el.aviso.textContent = msg || '';
+      el.aviso.classList.toggle('hidden', !msg);
+    }
+
+    async function carregarEstabelecimentos() {
+      try {
+        const resp = await fetch('/estabelecimentos');
+        if (!resp.ok) return;
+        const lista = await resp.json();
+        for (const item of lista || []) {
+          const opt = document.createElement('option');
+          opt.value = item.cnpj || '';
+          opt.textContent = item.nome || item.cnpj || '';
+          el.estab.appendChild(opt);
+        }
+      } catch (_) {
+        /* silencioso */
+      }
+    }
+
+    function renderSugestoes(lista) {
+      el.sugestoes.innerHTML = '';
+      if (!lista.length) {
+        el.sugestoes.classList.add('hidden');
+        return;
+      }
+      for (const item of lista) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = `${formatarCnpj(item.cnpj)} — ${item.nome || ''}`;
+        btn.addEventListener('click', () => {
+          estado.fornecedorSelecionado = item;
+          el.cnpj.value = item.cnpj;
+          el.busca.value = `${formatarCnpj(item.cnpj)} — ${item.nome || ''}`;
+          el.sugestoes.classList.add('hidden');
+        });
+        el.sugestoes.appendChild(btn);
+      }
+      el.sugestoes.classList.remove('hidden');
+    }
+
+    async function buscarFornecedores(q) {
+      if (!q || q.trim().length < 2) {
+        renderSugestoes([]);
+        return;
+      }
+      try {
+        const resp = await fetch(`/api/mix-fornecedor/fornecedores?q=${encodeURIComponent(q.trim())}`);
+        if (!resp.ok) throw new Error('Falha na busca');
+        const lista = await resp.json();
+        renderSugestoes(lista || []);
+      } catch (err) {
+        renderSugestoes([]);
+      }
+    }
+
+    function renderKpis(resumo) {
+      const cards = [
+        { key: 'divergente', titulo: 'Divergentes' },
+        { key: 'so_notas', titulo: 'Só notas' },
+        { key: 'so_cadastro', titulo: 'Só cadastro' },
+        { key: 'ok', titulo: 'OK' },
+        { key: 'nfs_analisadas', titulo: 'NFs analisadas' }
+      ];
+      el.kpis.innerHTML = cards.map((c) => `
+        <div class="kpi ${c.key}">
+          <div class="muted">${c.titulo}</div>
+          <div class="valor">${resumo[c.key] ?? 0}</div>
+        </div>
+      `).join('');
+
+      el.meta.textContent =
+        `tabfor: ${resumo.total_tabfor || 0} · códigos no XML: ${resumo.total_codigos_xml || 0} · ` +
+        `NFs no período: ${resumo.nfs_periodo || 0}` +
+        (resumo.nfs_com_erro ? ` · XMLs com erro: ${resumo.nfs_com_erro}` : '');
+    }
+
+    function itensFiltrados() {
+      if (estado.filtroStatus === 'todos') return estado.itens;
+      return estado.itens.filter((i) => i.status === estado.filtroStatus);
+    }
+
+    function renderTabela() {
+      const lista = itensFiltrados();
+      el.tbody.innerHTML = '';
+      el.empty.classList.toggle('hidden', lista.length > 0);
+
+      for (const item of lista) {
+        const tr = document.createElement('tr');
+        const codigos = [item.codfor, item.cProd].filter(Boolean);
+        const codigoTxt = [...new Set(codigos)].join(' / ') || '-';
+        const tabforTxt = [
+          item.undfor ? `UND ${item.undfor}` : null,
+          item.embfor ? `EMB ${item.embfor}` : null,
+          item.fatorfor != null ? `FAT ${formatarNumero(item.fatorfor, 4)}` : null
+        ].filter(Boolean).join(' · ') || '-';
+
+        const motivos = (item.motivos || []).length
+          ? `<ul class="motivos">${item.motivos.map((m) => `<li>${escapeHtml(m)}</li>`).join('')}</ul>`
+          : '<span class="muted">—</span>';
+
+        const exemplo = item.chave_exemplo
+          ? `<a class="link-chave" href="/detalhes.html?chave=${encodeURIComponent(item.chave_exemplo)}" target="_blank" rel="noopener">abrir</a>`
+          : '<span class="muted">—</span>';
+
+        tr.innerHTML = `
+          <td><span class="badge ${item.status}">${labelStatus(item.status)}</span></td>
+          <td>${escapeHtml(codigoTxt)}</td>
+          <td>${escapeHtml(item.descricao_sac || '-')}</td>
+          <td>${escapeHtml(item.xProd || '-')}</td>
+          <td>${escapeHtml(item.nsu || '-')}</td>
+          <td>${escapeHtml(tabforTxt)}</td>
+          <td>${escapeHtml(item.uCom || '-')}</td>
+          <td>${item.qtd_nfs || 0}</td>
+          <td>${motivos}</td>
+          <td>${exemplo}</td>
+        `;
+        el.tbody.appendChild(tr);
+      }
+    }
+
+    function escapeHtml(text) {
+      return String(text ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    el.busca.addEventListener('input', () => {
+      estado.fornecedorSelecionado = null;
+      el.cnpj.value = '';
+      clearTimeout(estado.buscaTimer);
+      estado.buscaTimer = setTimeout(() => buscarFornecedores(el.busca.value), 280);
+    });
+
+    document.addEventListener('click', (ev) => {
+      if (!ev.target.closest('.fornecedor-wrap')) {
+        el.sugestoes.classList.add('hidden');
+      }
+    });
+
+    el.tabs.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button[data-status]');
+      if (!btn) return;
+      estado.filtroStatus = btn.dataset.status;
+      el.tabs.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
+      renderTabela();
+    });
+
+    el.form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      mostrarErro('');
+      mostrarAviso('');
+
+      let fornecedor = el.cnpj.value.trim();
+      if (!fornecedor) {
+        const digits = el.busca.value.replace(/\D/g, '');
+        if (digits.length >= 11) fornecedor = digits;
+      }
+      if (!fornecedor) {
+        mostrarErro('Selecione um fornecedor na lista ou informe o CNPJ completo.');
+        return;
+      }
+
+      const params = new URLSearchParams({
+        fornecedor,
+        data_inicial: el.dataInicial.value,
+        data_final: el.dataFinal.value
+      });
+      if (el.estab.value) params.set('estab', el.estab.value);
+
+      el.btn.disabled = true;
+      el.btn.textContent = 'Conferindo...';
+      try {
+        const resp = await fetch(`/api/mix-fornecedor/conferir?${params.toString()}`);
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          throw new Error(data.error || data.detalhe || 'Erro ao conferir mix.');
+        }
+        estado.itens = data.itens || [];
+        estado.filtroStatus = 'todos';
+        el.tabs.querySelectorAll('button').forEach((b) => {
+          b.classList.toggle('active', b.dataset.status === 'todos');
+        });
+        renderKpis(data.resumo || {});
+        renderTabela();
+        el.painel.classList.remove('hidden');
+        if (data.aviso) mostrarAviso(data.aviso);
+      } catch (err) {
+        mostrarErro(err.message || 'Falha na conferência.');
+        el.painel.classList.add('hidden');
+      } finally {
+        el.btn.disabled = false;
+        el.btn.textContent = 'Conferir';
+      }
+    });
+
+    datasPadrao();
+    carregarEstabelecimentos();
+  </script>
+</body>
+</html>

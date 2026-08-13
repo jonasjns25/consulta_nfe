@@ -11,6 +11,7 @@ const {
 } = require('./sefaz-service');
 const { extrairDadosNFe } = require('./nfe-parser');
 const registerConfNfRoutes = require('./confnf-api');
+const registerMixFornecedorRoutes = require('./mix-fornecedor-api');
 let xml2js;
 try {
     xml2js = require('xml2js');
@@ -273,6 +274,12 @@ function montarExpressaoData(campo = 'EMISSAO') {
 }
 
 const DATA_EMISSAO_EXPR = montarExpressaoData('n.EMISSAO');
+
+registerMixFornecedorRoutes(app, {
+    getPool: () => pool,
+    xml2js,
+    dataEmissaoExpr: DATA_EMISSAO_EXPR
+});
 
 /**
  * Expressão SQL: CNPJ ou CPF do destinatário lido dentro de <dest>...</dest>.
@@ -2603,6 +2610,7 @@ app.get('/detalhes.html', (req, res) => res.sendFile(path.join(__dirname, 'detal
 app.get('/manutencao.html', (req, res) => res.sendFile(path.join(__dirname, 'manutencao.html')));
 app.get('/autorizacao-recepcao-xml.html', (req, res) => res.sendFile(path.join(__dirname, 'autorizacao-recepcao-xml.html')));
 app.get('/confnf.html', (req, res) => res.sendFile(path.join(__dirname, 'confnf.html')));
+app.get('/mix-fornecedor.html', (req, res) => res.sendFile(path.join(__dirname, 'mix-fornecedor.html')));
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 app.get('/admin/versao', (req, res) => {

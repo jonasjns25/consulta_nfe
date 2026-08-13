@@ -51,7 +51,7 @@ if not exist ".env" (
 REM Baixa NSSM se nao tiver
 if not exist "%NSSM_EXE%" (
     echo [INFO] Baixando NSSM...
-    powershell -NoProfile -Command "try { [Net.ServicePointManager]::SecurityProtocol = 'Tls12, Tls13'; Invoke-WebRequest -Uri '%NSSM_URL%' -OutFile '%NSSM_ZIP%' -UseBasicParsing } catch { Write-Host $_.Exception.Message; exit 1 }"
+    powershell -NoProfile -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%NSSM_URL%' -OutFile '%NSSM_ZIP%' -UseBasicParsing } catch { Write-Host $_.Exception.Message; exit 1 }"
     if errorlevel 1 (
         echo [ERRO] Falha ao baixar NSSM. Verifique sua conexao com a internet.
         pause
