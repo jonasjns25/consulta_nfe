@@ -120,28 +120,80 @@ function normalizarData(data) {
   return null;
 }
 
-function agregarItemXml(mapa, item, chaveNf) {
-  const chave = normalizeCodigo(item.cProd);
-  if (!chave) return;
+function normalizeBarcode(value) {
+  const barcode = normalizeText(value);
+  if (!barcode) return '';
+  const upper = barcode.toUpperCase();
+  if (upper === 'SEM GTIN' || upper === 'SEM_GTIN') return '';
+  return barcode;
+}
 
-  let agg = mapa.get(chave);
+function variantesBarcode(value) {
+  const code = normalizeBarcode(value);
+  if (!code) return [];
+  const set = new Set([code]);
+  const digits = normalizeDigits(code);
+  if (digits) {
+    set.add(digits);
+    if (digits.length === 14 && (digits.startsWith('1') || digits.startsWith('0'))) {
+      set.add(digits.slice(1));
+    }
+  }
+  return [...set];
+}
+
+function barcodesDoXml(item) {
+  return [...new Set([
+    ...variantesBarcode(item.cEAN),
+    ...variantesBarcode(item.cEANTrib)
+  ])];
+}
+
+function barcodesDoCadastro(cad) {
+  return [...new Set([
+    ...variantesBarcode(cad.barra1),
+    ...variantesBarcode(cad.barra2),
+    ...variantesBarcode(cad.barra3)
+  ])];
+}
+
+function agregarItemXml(mixXml, mixBarras, item, chaveNf) {
+  const chaveCod = normalizeCodigo(item.cProd);
+  const barras = barcodesDoXml(item);
+  if (!chaveCod && barras.length === 0) return;
+
+  let agg = chaveCod ? mixXml.get(chaveCod) : null;
+  if (!agg) {
+    for (const barra of barras) {
+      if (mixBarras.has(barra)) {
+        agg = mixBarras.get(barra);
+        break;
+      }
+    }
+  }
   if (!agg) {
     agg = {
-      chave_norm: chave,
+      chave_norm: chaveCod || barras[0],
       cProd: item.cProd,
       xProd: item.xProd,
       uCom: item.uCom,
       uTrib: item.uTrib,
       cEAN: item.cEAN || item.cEANTrib || '',
+      cEANTrib: item.cEANTrib || '',
       qtd_nfs: 0,
       chaves: new Set()
     };
   }
 
-  for (const variante of variantesCodigo(item.cProd)) {
-    if (!mapa.has(variante)) mapa.set(variante, agg);
+  if (chaveCod) {
+    for (const variante of variantesCodigo(item.cProd)) {
+      if (!mixXml.has(variante)) mixXml.set(variante, agg);
+    }
+    mixXml.set(chaveCod, agg);
   }
-  mapa.set(chave, agg);
+  for (const barra of barras) {
+    if (!mixBarras.has(barra)) mixBarras.set(barra, agg);
+  }
 
   if (!agg.chaves.has(chaveNf)) {
     agg.chaves.add(chaveNf);
@@ -152,6 +204,7 @@ function agregarItemXml(mapa, item, chaveNf) {
   if (item.uCom) agg.uCom = item.uCom;
   if (item.uTrib) agg.uTrib = item.uTrib;
   if (item.cEAN || item.cEANTrib) agg.cEAN = item.cEAN || item.cEANTrib;
+  if (item.cEANTrib) agg.cEANTrib = item.cEANTrib;
   if (item.cProd) agg.cProd = item.cProd;
 }
 
@@ -159,6 +212,14 @@ function acharNoXml(mixXml, codfor) {
   for (const variante of variantesCodigo(codfor)) {
     const hit = mixXml.get(variante);
     if (hit) return hit;
+  }
+  return null;
+}
+
+function acharPorBarra(mixBarras, cad) {
+  for (const barra of barcodesDoCadastro(cad)) {
+    const hit = mixBarras.get(barra);
+    if (hit) return { agg: hit, barra };
   }
   return null;
 }
@@ -191,6 +252,9 @@ function indexarTabfor(rows) {
       codfor,
       nsu,
       plu: normalizeText(row.plu || row.embalagem_plu),
+      barra1: normalizeText(row.barra1 || row.BARRA1),
+      barra2: normalizeText(row.barra2 || row.BARRA2),
+      barra3: normalizeText(row.barra3 || row.BARRA3),
       fatorfor: row.FATORFOR == null ? null : parseDecimal(row.FATORFOR, 4),
       embfor: normalizeText(row.EMBFOR),
       undfor: normalizeText(row.UNDFOR),
@@ -210,7 +274,14 @@ function indexarTabfor(rows) {
     }
   }
 
-  return { lista, porChave };
+  const porBarra = new Map();
+  for (const item of lista) {
+    for (const barra of barcodesDoCadastro(item)) {
+      if (!porBarra.has(barra)) porBarra.set(barra, item);
+    }
+  }
+
+  return { lista, porChave, porBarra };
 }
 
 module.exports = function registerMixFornecedorRoutes(app, options = {}) {
@@ -335,6 +406,9 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
             COALESCE(embalagem.DESCRICAO, embalagem.descricao, '')
           )) AS descricao_sac,
           COALESCE(embalagem.UNIDADE, embalagem.Unidade, '') AS erp_unidade,
+          embalagem.BARRA1 AS barra1,
+          embalagem.BARRA2 AS barra2,
+          embalagem.BARRA3 AS barra3,
           CONCAT(
             COALESCE(embalagem.PLU, embalagem.CODPRODUTO),
             '-',
@@ -350,7 +424,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
           tabfor.REGISTRO ASC
       `;
       const [tabforRows] = await pool.query(sqlTabfor, fornecedorVariants);
-      const { lista: mixCadastro, porChave: tabforPorCodigo } = indexarTabfor(tabforRows);
+      const { lista: mixCadastro, porChave: tabforPorCodigo, porBarra: tabforPorBarra } = indexarTabfor(tabforRows);
 
       const dataInicialCompact = toYmdCompact(dataInicial);
       const dataFinalCompact = toYmdCompact(dataFinal);
@@ -405,6 +479,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
 
       const parser = criarParser(xml2js);
       const mixXml = new Map();
+      const mixBarras = new Map();
       let nfsParseadas = 0;
       let nfsComErro = 0;
 
@@ -420,7 +495,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
           const infNFe = extrairInfNfe(parsed);
           const itens = extrairItensXml(infNFe);
           for (const item of itens) {
-            agregarItemXml(mixXml, item, chave);
+            agregarItemXml(mixXml, mixBarras, item, chave);
           }
           nfsParseadas += 1;
         } catch (parseErr) {
@@ -434,14 +509,25 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
 
       for (const cad of mixCadastro) {
         const temReferencia = temCodfor(cad.codfor);
-        const matchXml = temReferencia ? acharNoXml(mixXml, cad.codfor) : null;
+        let matchXml = temReferencia ? acharNoXml(mixXml, cad.codfor) : null;
+        let origemMatch = matchXml ? 'codfor' : null;
+        let barraMatch = null;
+
+        if (!matchXml) {
+          const hitBarra = acharPorBarra(mixBarras, cad);
+          if (hitBarra) {
+            matchXml = hitBarra.agg;
+            origemMatch = 'ean';
+            barraMatch = hitBarra.barra;
+          }
+        }
 
         if (!matchXml) {
           itens.push({
             status: 'divergente',
             motivos: temReferencia
-              ? ['Código na tabfor (CODFOR) não aparece em nenhum XML do período']
-              : ['Item na tabfor sem CODFOR (Referência vazia)'],
+              ? ['CODFOR e EAN da embalagem não aparecem em nenhum XML do período']
+              : ['Item na tabfor sem CODFOR e sem EAN correspondente no XML'],
             codfor: cad.codfor,
             cProd: null,
             nsu: cad.nsu,
@@ -455,7 +541,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
             erp_codigo: cad.erp_codigo,
             uCom: null,
             uTrib: null,
-            cEAN: null,
+            cEAN: cad.barra1 || cad.barra2 || cad.barra3 || null,
             qtd_nfs: 0,
             chave_exemplo: null
           });
@@ -464,10 +550,13 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
 
         usadosXml.add(matchXml.chave_norm);
         const chaveExemplo = matchXml.chaves.size ? [...matchXml.chaves][0] : null;
+        const motivoOk = origemMatch === 'ean'
+          ? `EAN da embalagem encontrado no XML (${barraMatch})`
+          : 'CODFOR encontrado no XML (cProd)';
 
         itens.push({
           status: 'ok',
-          motivos: ['CODFOR encontrado no XML (cProd)'],
+          motivos: [motivoOk],
           codfor: cad.codfor,
           cProd: matchXml.cProd,
           nsu: cad.nsu,
@@ -481,16 +570,15 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
           erp_codigo: cad.erp_codigo,
           uCom: matchXml.uCom,
           uTrib: matchXml.uTrib,
-          cEAN: matchXml.cEAN,
+          cEAN: matchXml.cEAN || barraMatch,
           qtd_nfs: matchXml.qtd_nfs,
           chave_exemplo: chaveExemplo
         });
       }
 
-      // cProd só nas notas: informativo, não é divergência do mix cadastrado
       const xmlUnicos = [];
       const vistosXml = new Set();
-      for (const xmlAgg of mixXml.values()) {
+      for (const xmlAgg of [...mixXml.values(), ...mixBarras.values()]) {
         if (!xmlAgg || vistosXml.has(xmlAgg.chave_norm)) continue;
         vistosXml.add(xmlAgg.chave_norm);
         xmlUnicos.push(xmlAgg);
@@ -499,11 +587,12 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
       for (const xmlAgg of xmlUnicos) {
         if (usadosXml.has(xmlAgg.chave_norm)) continue;
         if (variantesCodigo(xmlAgg.cProd).some((v) => tabforPorCodigo.has(v))) continue;
+        if (barcodesDoXml(xmlAgg).some((b) => tabforPorBarra.has(b))) continue;
 
         const chaveExemplo = xmlAgg.chaves.size ? [...xmlAgg.chaves][0] : null;
         itens.push({
           status: 'so_notas',
-          motivos: ['cProd no XML sem CODFOR na tabfor (informativo)'],
+          motivos: ['cProd/EAN do XML sem correspondência na tabfor (informativo)'],
           codfor: null,
           cProd: xmlAgg.cProd,
           nsu: null,
@@ -537,7 +626,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
         ok: 0,
         total_itens: itens.length,
         total_tabfor: mixCadastro.length,
-        total_codigos_xml: mixXml.size,
+        total_codigos_xml: xmlUnicos.length,
         nfs_periodo: totalNfsPeriodo,
         nfs_analisadas: nfsParseadas,
         nfs_com_erro: nfsComErro,
