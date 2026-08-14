@@ -296,7 +296,7 @@
   <header>
     <div>
       <h1>Mix do Fornecedor</h1>
-      <p class="muted">Compara apenas o código do fornecedor (CODFOR da tabfor × cProd do XML) para achar códigos no cadastro que não aparecem nas notas do fornecedor.</p>
+      <p class="muted">Compara a Referência do mix (CODFOR da tabfor) com o cProd das NFs. Foco: achar códigos cadastrados que não saíram nas notas do fornecedor.</p>
     </div>
     <nav class="nav-links">
       <a href="index.html">Análise NFe</a>
@@ -346,10 +346,10 @@
       <p class="muted" id="resumo-meta" style="margin: 1rem 0;"></p>
 
       <div class="tabs" id="tabs-status">
-        <button type="button" data-status="todos" class="active">Todos</button>
-        <button type="button" data-status="so_cadastro">Só cadastro</button>
+        <button type="button" data-status="so_cadastro" class="active">Só cadastro</button>
         <button type="button" data-status="so_notas">Só notas</button>
         <button type="button" data-status="ok">OK</button>
+        <button type="button" data-status="todos">Todos</button>
       </div>
 
       <div class="table-wrap">
@@ -357,13 +357,13 @@
           <thead>
             <tr>
               <th>Status</th>
-              <th>CODFOR / cProd</th>
-              <th>Descrição SAC</th>
+              <th>Referência</th>
+              <th>PLU</th>
+              <th>Produto (SAC)</th>
+              <th>cProd XML</th>
               <th>xProd XML</th>
-              <th>NSU</th>
-              <th>uCom XML</th>
               <th>NFs</th>
-              <th>Motivos</th>
+              <th>Motivo</th>
               <th>Exemplo</th>
             </tr>
           </thead>
@@ -377,7 +377,7 @@
   <script>
     const estado = {
       itens: [],
-      filtroStatus: 'todos',
+      filtroStatus: 'so_cadastro',
       buscaTimer: null,
       fornecedorSelecionado: null
     };
@@ -529,9 +529,7 @@
 
       for (const item of lista) {
         const tr = document.createElement('tr');
-        const codigos = [item.codfor, item.cProd].filter(Boolean);
-        const codigoTxt = [...new Set(codigos)].join(' / ') || '-';
-
+        const referencia = item.codfor || '-';
         const motivos = (item.motivos || []).length
           ? `<ul class="motivos">${item.motivos.map((m) => `<li>${escapeHtml(m)}</li>`).join('')}</ul>`
           : '<span class="muted">—</span>';
@@ -542,11 +540,11 @@
 
         tr.innerHTML = `
           <td><span class="badge ${item.status}">${labelStatus(item.status)}</span></td>
-          <td>${escapeHtml(codigoTxt)}</td>
+          <td><strong>${escapeHtml(referencia)}</strong></td>
+          <td>${escapeHtml(item.plu || '-')}</td>
           <td>${escapeHtml(item.descricao_sac || '-')}</td>
+          <td>${escapeHtml(item.cProd || '-')}</td>
           <td>${escapeHtml(item.xProd || '-')}</td>
-          <td>${escapeHtml(item.nsu || '-')}</td>
-          <td>${escapeHtml(item.uCom || '-')}</td>
           <td>${item.qtd_nfs || 0}</td>
           <td>${motivos}</td>
           <td>${exemplo}</td>
@@ -615,9 +613,9 @@
           throw new Error(data.error || data.detalhe || 'Erro ao conferir mix.');
         }
         estado.itens = data.itens || [];
-        estado.filtroStatus = 'todos';
+        estado.filtroStatus = 'so_cadastro';
         el.tabs.querySelectorAll('button').forEach((b) => {
-          b.classList.toggle('active', b.dataset.status === 'todos');
+          b.classList.toggle('active', b.dataset.status === 'so_cadastro');
         });
         renderKpis(data.resumo || {});
         renderTabela();

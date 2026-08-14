@@ -25,16 +25,27 @@ function padCnpj(value) {
 }
 
 function normalizeCodigo(value) {
-  const code = normalizeText(value);
+  const code = normalizeText(value).toUpperCase().replace(/[\s\-./\\_]/g, '');
   if (!code) return '';
-  return code.replace(/^0+/, '') || '0';
+  if (/^\d+$/.test(code)) {
+    return code.replace(/^0+/, '') || '0';
+  }
+  return code.replace(/^0+/, '') || code;
 }
 
 function variantesCodigo(value) {
-  const code = normalizeText(value);
-  if (!code) return [];
-  const semZeros = normalizeCodigo(code);
-  return semZeros === code ? [code] : [code, semZeros];
+  const raw = normalizeText(value);
+  if (!raw) return [];
+  const set = new Set();
+  set.add(raw);
+  set.add(raw.toUpperCase());
+  set.add(normalizeCodigo(raw));
+  const digits = normalizeDigits(raw);
+  if (digits) {
+    set.add(digits);
+    set.add(digits.replace(/^0+/, '') || '0');
+  }
+  return [...set].filter(Boolean);
 }
 
 function criarParser(xml2js) {
@@ -136,16 +147,22 @@ function agregarItemXml(mapa, item, chaveNf) {
 function indexarTabfor(rows) {
   const porChave = new Map();
   const lista = [];
+  const vistos = new Set();
 
   for (const row of rows || []) {
     const codfor = normalizeText(row.CODFOR);
-    if (!codfor) continue;
+    if (!codfor || codfor === '0') continue;
+
+    const chaveNorm = normalizeCodigo(codfor);
+    if (!chaveNorm || vistos.has(chaveNorm)) continue;
+    vistos.add(chaveNorm);
 
     const item = {
       registro: row.REGISTRO,
       fornece: normalizeText(row.FORNECE),
       codfor,
       nsu: normalizeText(row.NSU),
+      plu: normalizeText(row.plu || row.embalagem_plu),
       fatorfor: row.FATORFOR == null ? null : parseDecimal(row.FATORFOR, 4),
       embfor: normalizeText(row.EMBFOR),
       undfor: normalizeText(row.UNDFOR),
@@ -287,11 +304,18 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
             ' ',
             COALESCE(embalagem.DESCRICAO, embalagem.descricao, '')
           )) AS descricao_sac,
-          COALESCE(embalagem.UNIDADE, embalagem.Unidade, '') AS erp_unidade
+          COALESCE(embalagem.UNIDADE, embalagem.Unidade, '') AS erp_unidade,
+          CONCAT(
+            COALESCE(embalagem.PLU, embalagem.CODPRODUTO),
+            '-',
+            calculo_digito(COALESCE(embalagem.PLU, embalagem.CODPRODUTO))
+          ) AS plu
         FROM sac.tabfor
         LEFT JOIN sac.embalagem ON embalagem.CODPRODUTO = tabfor.NSU
         LEFT JOIN sac.produto ON produto.codigo = embalagem.PRODUTO
         WHERE tabfor.FORNECE IN (${placeholdersFornece})
+          AND TRIM(COALESCE(tabfor.CODFOR, '')) <> ''
+          AND TRIM(COALESCE(tabfor.CODFOR, '')) <> '0'
         ORDER BY tabfor.CODFOR ASC, tabfor.REGISTRO ASC
       `;
       const [tabforRows] = await pool.query(sqlTabfor, fornecedorVariants);
@@ -369,10 +393,11 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
         if (!matchXml) {
           itens.push({
             status: 'so_cadastro',
-            motivos: ['CODFOR na tabfor sem correspondente nas NFs do fornecedor no período'],
+            motivos: ['Referência (CODFOR) na tabfor sem correspondente nas NFs do fornecedor no período'],
             codfor: cad.codfor,
             cProd: null,
             nsu: cad.nsu,
+            plu: cad.plu || null,
             descricao_sac: cad.descricao_sac,
             xProd: null,
             undfor: cad.undfor,
@@ -398,6 +423,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
           codfor: cad.codfor,
           cProd: matchXml.cProd,
           nsu: cad.nsu,
+          plu: cad.plu || null,
           descricao_sac: cad.descricao_sac,
           xProd: matchXml.xProd,
           undfor: cad.undfor,
@@ -420,10 +446,11 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
         const chaveExemplo = xmlAgg.chaves.size ? [...xmlAgg.chaves][0] : null;
         itens.push({
           status: 'so_notas',
-          motivos: ['cProd do XML sem CODFOR correspondente na tabfor deste fornecedor'],
+          motivos: ['cProd do XML sem Referência (CODFOR) correspondente na tabfor deste fornecedor'],
           codfor: null,
           cProd: xmlAgg.cProd,
           nsu: null,
+          plu: null,
           descricao_sac: null,
           xProd: xmlAgg.xProd,
           undfor: null,
