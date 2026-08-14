@@ -224,6 +224,56 @@ function acharPorBarra(mixBarras, cad) {
   return null;
 }
 
+function indexarItemcomp(rows) {
+  const porReffor = new Map();
+  const porNsu = new Map();
+  const lista = [];
+  const vistos = new Set();
+
+  for (const row of rows || []) {
+    const reffor = normalizeText(row.REFFOR || row.reffor);
+    const nsu = normalizeText(row.NSU || row.nsu);
+    const chave = `${normalizeCodigo(reffor) || ''}|${nsu}`;
+    if (vistos.has(chave)) {
+      const existente = porReffor.get(normalizeCodigo(reffor)) || porNsu.get(nsu);
+      if (existente) existente.qtd += Number(row.qtd_lanc || 1);
+      continue;
+    }
+    vistos.add(chave);
+
+    const item = {
+      reffor,
+      nsu,
+      qtd: Number(row.qtd_lanc || 1),
+      chave_exemplo: normalizeText(row.chave_exemplo)
+    };
+    lista.push(item);
+
+    if (temCodfor(reffor)) {
+      for (const variante of variantesCodigo(reffor)) {
+        if (!porReffor.has(variante)) porReffor.set(variante, item);
+      }
+    }
+    if (nsu && !porNsu.has(nsu)) porNsu.set(nsu, item);
+  }
+
+  return { lista, porReffor, porNsu };
+}
+
+function acharNoItemcomp(index, cad) {
+  if (temCodfor(cad.codfor)) {
+    for (const variante of variantesCodigo(cad.codfor)) {
+      const hit = index.porReffor.get(variante);
+      if (hit) return { item: hit, origem: 'reffor' };
+    }
+  }
+  const nsu = normalizeText(cad.nsu);
+  if (nsu && index.porNsu.has(nsu)) {
+    return { item: index.porNsu.get(nsu), origem: 'nsu' };
+  }
+  return null;
+}
+
 function temCodfor(value) {
   const code = normalizeText(value);
   return !!(code && code !== '0');
@@ -504,7 +554,60 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
         }
       }
 
+      const dataCompraExpr = montarExpressaoDataLocal('c.EMISSAO');
+      const filtrosItemcomp = [
+        `(
+          DATE(${dataCompraExpr}) BETWEEN ? AND ?
+          OR (
+            c.EMISSAO REGEXP '^[0-9]{8}$'
+            AND c.EMISSAO BETWEEN ? AND ?
+          )
+        )`,
+        `(
+          REPLACE(REPLACE(REPLACE(ic.FORNECE, '.', ''), '/', ''), '-', '') IN (${fornecedorVariants.map(() => '?').join(', ')})
+          OR ic.FORNECE IN (${fornecedorVariants.map(() => '?').join(', ')})
+        )`
+      ];
+      const valoresItemcomp = [
+        dataInicial,
+        dataFinal,
+        dataInicialCompact,
+        dataFinalCompact,
+        ...fornecedorVariants,
+        ...fornecedorVariants
+      ];
+      if (estab) {
+        filtrosItemcomp.push(`(
+          REPLACE(REPLACE(REPLACE(COALESCE(ic.ESTAB, ''), '.', ''), '/', ''), '-', '') = ?
+          OR ic.ESTAB = ?
+        )`);
+        valoresItemcomp.push(estab, estab);
+      }
+
+      let itemcompIndex = { lista: [], porReffor: new Map(), porNsu: new Map() };
+      try {
+        const sqlItemcomp = `
+          SELECT
+            ic.REFFOR,
+            ic.NSU,
+            COUNT(*) AS qtd_lanc,
+            MAX(c.CHAVE_NFE) AS chave_exemplo
+          FROM itemcomp ic
+          INNER JOIN compra c
+            ON c.FORNECE = ic.FORNECE
+           AND c.ESTAB = ic.ESTAB
+           AND (c.NUMERO = ic.NUMERO OR CAST(c.NUMERO AS CHAR) = CAST(ic.NUMERO AS CHAR))
+          WHERE ${filtrosItemcomp.join(' AND ')}
+          GROUP BY ic.REFFOR, ic.NSU
+        `;
+        const [itemcompRows] = await pool.query(sqlItemcomp, valoresItemcomp);
+        itemcompIndex = indexarItemcomp(itemcompRows);
+      } catch (errItemcomp) {
+        console.warn('[mix-fornecedor] consulta itemcomp falhou:', errItemcomp.message);
+      }
+
       const usadosXml = new Set();
+      const usadosItemcomp = new Set();
       const itens = [];
 
       for (const cad of mixCadastro) {
@@ -512,6 +615,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
         let matchXml = temReferencia ? acharNoXml(mixXml, cad.codfor) : null;
         let origemMatch = matchXml ? 'codfor' : null;
         let barraMatch = null;
+        let matchItemcomp = null;
 
         if (!matchXml) {
           const hitBarra = acharPorBarra(mixBarras, cad);
@@ -523,11 +627,16 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
         }
 
         if (!matchXml) {
+          matchItemcomp = acharNoItemcomp(itemcompIndex, cad);
+          if (matchItemcomp) origemMatch = 'itemcomp';
+        }
+
+        if (!matchXml && !matchItemcomp) {
           itens.push({
             status: 'divergente',
             motivos: temReferencia
-              ? ['CODFOR e EAN da embalagem não aparecem em nenhum XML do período']
-              : ['Item na tabfor sem CODFOR e sem EAN correspondente no XML'],
+              ? ['CODFOR/EAN não aparecem no XML nem no lançamento (itemcomp) do período']
+              : ['Item na tabfor sem CODFOR e sem EAN/NSU correspondente no XML ou itemcomp'],
             codfor: cad.codfor,
             cProd: null,
             nsu: cad.nsu,
@@ -548,30 +657,42 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
           continue;
         }
 
-        usadosXml.add(matchXml.chave_norm);
-        const chaveExemplo = matchXml.chaves.size ? [...matchXml.chaves][0] : null;
-        const motivoOk = origemMatch === 'ean'
-          ? `EAN da embalagem encontrado no XML (${barraMatch})`
-          : 'CODFOR encontrado no XML (cProd)';
+        if (matchXml) usadosXml.add(matchXml.chave_norm);
+        if (matchItemcomp) {
+          usadosItemcomp.add(`${normalizeCodigo(matchItemcomp.item.reffor)}|${matchItemcomp.item.nsu}`);
+        }
+
+        const fonte = matchXml || {};
+        const chaveExemplo = matchXml?.chaves?.size
+          ? [...matchXml.chaves][0]
+          : (matchItemcomp?.item.chave_exemplo || null);
+
+        let motivoOk = 'CODFOR encontrado no XML (cProd)';
+        if (origemMatch === 'ean') motivoOk = `EAN da embalagem encontrado no XML (${barraMatch})`;
+        if (origemMatch === 'itemcomp') {
+          motivoOk = matchItemcomp.origem === 'nsu'
+            ? `NSU encontrado no lançamento (itemcomp ${matchItemcomp.item.nsu})`
+            : `CODFOR encontrado no lançamento (itemcomp.REFFOR ${matchItemcomp.item.reffor})`;
+        }
 
         itens.push({
           status: 'ok',
           motivos: [motivoOk],
           codfor: cad.codfor,
-          cProd: matchXml.cProd,
+          cProd: fonte.cProd || matchItemcomp?.item.reffor || null,
           nsu: cad.nsu,
           plu: cad.plu || null,
           descricao_sac: cad.descricao_sac,
-          xProd: matchXml.xProd,
+          xProd: fonte.xProd || null,
           undfor: cad.undfor,
           embfor: cad.embfor,
           fatorfor: cad.fatorfor,
           erp_unidade: cad.erp_unidade,
           erp_codigo: cad.erp_codigo,
-          uCom: matchXml.uCom,
-          uTrib: matchXml.uTrib,
-          cEAN: matchXml.cEAN || barraMatch,
-          qtd_nfs: matchXml.qtd_nfs,
+          uCom: fonte.uCom || null,
+          uTrib: fonte.uTrib || null,
+          cEAN: fonte.cEAN || barraMatch || null,
+          qtd_nfs: fonte.qtd_nfs || matchItemcomp?.item.qtd || 0,
           chave_exemplo: chaveExemplo
         });
       }
@@ -588,6 +709,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
         if (usadosXml.has(xmlAgg.chave_norm)) continue;
         if (variantesCodigo(xmlAgg.cProd).some((v) => tabforPorCodigo.has(v))) continue;
         if (barcodesDoXml(xmlAgg).some((b) => tabforPorBarra.has(b))) continue;
+        if (variantesCodigo(xmlAgg.cProd).some((v) => itemcompIndex.porReffor.has(v))) continue;
 
         const chaveExemplo = xmlAgg.chaves.size ? [...xmlAgg.chaves][0] : null;
         itens.push({
@@ -609,6 +731,34 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
           cEAN: xmlAgg.cEAN,
           qtd_nfs: xmlAgg.qtd_nfs,
           chave_exemplo: chaveExemplo
+        });
+      }
+
+      for (const lanc of itemcompIndex.lista) {
+        const chaveLanc = `${normalizeCodigo(lanc.reffor)}|${lanc.nsu}`;
+        if (usadosItemcomp.has(chaveLanc)) continue;
+        if (temCodfor(lanc.reffor) && variantesCodigo(lanc.reffor).some((v) => tabforPorCodigo.has(v))) continue;
+        if (lanc.nsu && mixCadastro.some((cad) => cad.nsu === lanc.nsu)) continue;
+
+        itens.push({
+          status: 'so_notas',
+          motivos: ['Lançado em itemcomp sem correspondência na tabfor (informativo)'],
+          codfor: null,
+          cProd: lanc.reffor,
+          nsu: lanc.nsu,
+          plu: null,
+          descricao_sac: null,
+          xProd: null,
+          undfor: null,
+          embfor: null,
+          fatorfor: null,
+          erp_unidade: null,
+          erp_codigo: null,
+          uCom: null,
+          uTrib: null,
+          cEAN: null,
+          qtd_nfs: lanc.qtd,
+          chave_exemplo: lanc.chave_exemplo || null
         });
       }
 

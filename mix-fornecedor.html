@@ -298,7 +298,7 @@
   <header>
     <div>
       <h1>Mix do Fornecedor</h1>
-      <p class="muted">Match em duas chaves: <strong>CODFOR = cProd</strong> ou <strong>BARRA da embalagem = cEAN/cEANTrib</strong>. Qualquer um dos dois = OK. Sem os dois = divergência. Itens da tabfor sem CODFOR também entram.</p>
+      <p class="muted">OK se achar o item da tabfor em qualquer uma destas chaves: <strong>CODFOR = cProd</strong> (XML), <strong>BARRA = cEAN</strong> (XML) ou <strong>CODFOR/NSU = REFFOR/NSU</strong> (itemcomp). Sem match = divergência.</p>
       <p class="muted" id="build-info" style="margin-top:0.4rem;font-size:0.85rem;"></p>
     </div>
     <nav class="nav-links">
@@ -638,7 +638,7 @@
     fetch('/admin/versao').then((r) => r.json()).then((v) => {
       const elInfo = document.getElementById('build-info');
       if (elInfo) {
-        elInfo.textContent = `Versão ${v.versao || '?'} · CODFOR=cProd ou EAN embalagem=cEAN (sem FATORFOR)`;
+        elInfo.textContent = `Versão ${v.versao || '?'} · CODFOR=cProd, EAN ou itemcomp.REFFOR/NSU`;
       }
     }).catch(() => {});
   </script>
