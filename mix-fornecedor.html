@@ -297,6 +297,7 @@
     <div>
       <h1>Mix do Fornecedor</h1>
       <p class="muted">Regra simples: código na <strong>tabfor</strong> (CODFOR) que <strong>não aparece em nenhum XML</strong> (cProd) = <strong>divergência</strong>. Se aparecer, está OK. Sem checagem de fator/unidade.</p>
+      <p class="muted" id="build-info" style="margin-top:0.4rem;font-size:0.85rem;"></p>
     </div>
     <nav class="nav-links">
       <a href="index.html">Análise NFe</a>
@@ -632,6 +633,12 @@
 
     datasPadrao();
     carregarEstabelecimentos();
+    fetch('/admin/versao').then((r) => r.json()).then((v) => {
+      const elInfo = document.getElementById('build-info');
+      if (elInfo) {
+        elInfo.textContent = `Versão ${v.versao || '?'} · validação apenas CODFOR = cProd (sem FATORFOR)`;
+      }
+    }).catch(() => {});
   </script>
 </body>
 </html>
