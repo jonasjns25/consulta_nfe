@@ -393,7 +393,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
         if (!matchXml) {
           itens.push({
             status: 'so_cadastro',
-            motivos: ['Referência (CODFOR) na tabfor sem correspondente nas NFs do fornecedor no período'],
+            motivos: ['CODFOR sem cProd correspondente nas NFs do fornecedor no período'],
             codfor: cad.codfor,
             cProd: null,
             nsu: cad.nsu,
@@ -419,7 +419,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
 
         itens.push({
           status: 'ok',
-          motivos: [],
+          motivos: ['Validado: CODFOR = cProd'],
           codfor: cad.codfor,
           cProd: matchXml.cProd,
           nsu: cad.nsu,
@@ -446,7 +446,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
         const chaveExemplo = xmlAgg.chaves.size ? [...xmlAgg.chaves][0] : null;
         itens.push({
           status: 'so_notas',
-          motivos: ['cProd do XML sem Referência (CODFOR) correspondente na tabfor deste fornecedor'],
+          motivos: ['cProd sem CODFOR correspondente na tabfor deste fornecedor'],
           codfor: null,
           cProd: xmlAgg.cProd,
           nsu: null,
