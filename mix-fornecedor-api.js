@@ -1,5 +1,4 @@
 const CAP_NFS = 500;
-const TOLERANCIA_FATOR = 0.01;
 
 function toArray(value) {
   if (!value) return [];
@@ -103,50 +102,6 @@ function normalizarData(data) {
   return null;
 }
 
-function razaoQTribQCom(item) {
-  const qCom = parseDecimal(item.qCom, 0);
-  const qTrib = parseDecimal(item.qTrib, 0);
-  if (qCom <= 0 || qTrib <= 0) return null;
-  return qTrib / qCom;
-}
-
-function avaliarDivergencias(tabforRow, xmlAgg) {
-  const motivos = [];
-  const undfor = normalizeText(tabforRow.undfor).toUpperCase();
-  const embfor = normalizeText(tabforRow.embfor).toUpperCase();
-  const erpUnidade = normalizeText(tabforRow.erp_unidade).toUpperCase();
-  const fatorfor = parseDecimal(tabforRow.fatorfor, 0);
-  const uCom = normalizeText(xmlAgg.uCom).toUpperCase();
-  const uTrib = normalizeText(xmlAgg.uTrib || xmlAgg.uCom).toUpperCase();
-
-  const unidadesXml = new Set([uCom, uTrib].filter(Boolean));
-  const undforExplicavel = !undfor
-    || unidadesXml.has(undfor)
-    || (embfor && unidadesXml.has(embfor));
-
-  if (undfor && !undforExplicavel) {
-    motivos.push(`UNDFOR (${undfor}) diferente de uCom/uTrib do XML (${[uCom, uTrib].filter(Boolean).join('/')})`);
-  }
-
-  if (uCom === 'KG' && fatorfor <= 0 && erpUnidade && erpUnidade !== 'KG' && embfor !== 'KG') {
-    motivos.push('XML em KG e FATORFOR ausente/zero com unidade ERP diferente de KG');
-  }
-
-  if (fatorfor > 0 && Array.isArray(xmlAgg.razoes) && xmlAgg.razoes.length > 0) {
-    const media = xmlAgg.razoes.reduce((acc, v) => acc + v, 0) / xmlAgg.razoes.length;
-    if (media > 0) {
-      const desvio = Math.abs(media - fatorfor) / fatorfor;
-      if (desvio > TOLERANCIA_FATOR) {
-        motivos.push(
-          `FATORFOR (${fatorfor}) incompatível com razão média qTrib/qCom nas NFs (${media.toFixed(4)})`
-        );
-      }
-    }
-  }
-
-  return motivos;
-}
-
 function agregarItemXml(mapa, item, chaveNf) {
   const chave = normalizeCodigo(item.cProd);
   if (!chave) return;
@@ -161,8 +116,7 @@ function agregarItemXml(mapa, item, chaveNf) {
       uTrib: item.uTrib,
       cEAN: item.cEAN || item.cEANTrib || '',
       qtd_nfs: 0,
-      chaves: new Set(),
-      razoes: []
+      chaves: new Set()
     };
     mapa.set(chave, agg);
   }
@@ -177,11 +131,6 @@ function agregarItemXml(mapa, item, chaveNf) {
   if (item.uTrib) agg.uTrib = item.uTrib;
   if (item.cEAN || item.cEANTrib) agg.cEAN = item.cEAN || item.cEANTrib;
   if (item.cProd) agg.cProd = item.cProd;
-
-  const razao = razaoQTribQCom(item);
-  if (razao != null && Number.isFinite(razao)) {
-    agg.razoes.push(razao);
-  }
 }
 
 function indexarTabfor(rows) {
@@ -420,7 +369,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
         if (!matchXml) {
           itens.push({
             status: 'so_cadastro',
-            motivos: ['Produto no mix (tabfor) sem ocorrência nas NFs do período'],
+            motivos: ['CODFOR na tabfor sem correspondente nas NFs do fornecedor no período'],
             codfor: cad.codfor,
             cProd: null,
             nsu: cad.nsu,
@@ -441,12 +390,11 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
         }
 
         usadosXml.add(matchXml.chave_norm);
-        const motivos = avaliarDivergencias(cad, matchXml);
         const chaveExemplo = matchXml.chaves.size ? [...matchXml.chaves][0] : null;
 
         itens.push({
-          status: motivos.length ? 'divergente' : 'ok',
-          motivos,
+          status: 'ok',
+          motivos: [],
           codfor: cad.codfor,
           cProd: matchXml.cProd,
           nsu: cad.nsu,
@@ -472,7 +420,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
         const chaveExemplo = xmlAgg.chaves.size ? [...xmlAgg.chaves][0] : null;
         itens.push({
           status: 'so_notas',
-          motivos: ['Código do XML sem vínculo correspondente na tabfor'],
+          motivos: ['cProd do XML sem CODFOR correspondente na tabfor deste fornecedor'],
           codfor: null,
           cProd: xmlAgg.cProd,
           nsu: null,
@@ -491,7 +439,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
         });
       }
 
-      const ordemStatus = { divergente: 0, so_notas: 1, so_cadastro: 2, ok: 3 };
+      const ordemStatus = { so_cadastro: 0, so_notas: 1, ok: 2 };
       itens.sort((a, b) => {
         const sa = ordemStatus[a.status] ?? 9;
         const sb = ordemStatus[b.status] ?? 9;
@@ -502,7 +450,6 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
       const resumo = {
         so_cadastro: 0,
         so_notas: 0,
-        divergente: 0,
         ok: 0,
         total_itens: itens.length,
         total_tabfor: mixCadastro.length,

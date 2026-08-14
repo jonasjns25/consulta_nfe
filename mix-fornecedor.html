@@ -164,7 +164,7 @@
 
     .resumo-grid {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 0.8rem;
     }
 
@@ -185,9 +185,8 @@
       margin-top: 0.25rem;
     }
 
-    .kpi.so_cadastro .valor { color: var(--warning); }
+    .kpi.so_cadastro .valor { color: var(--danger); }
     .kpi.so_notas .valor { color: var(--info); }
-    .kpi.divergente .valor { color: var(--danger); }
     .kpi.ok .valor { color: var(--success); }
 
     .tabs {
@@ -270,9 +269,8 @@
       white-space: nowrap;
     }
 
-    .badge.so_cadastro { background: #fff3cd; color: #856404; }
+    .badge.so_cadastro { background: #fdecea; color: #922b21; }
     .badge.so_notas { background: #dbeafe; color: #1e40af; }
-    .badge.divergente { background: #fdecea; color: #922b21; }
     .badge.ok { background: #d4edda; color: #155724; }
 
     .motivos {
@@ -298,7 +296,7 @@
   <header>
     <div>
       <h1>Mix do Fornecedor</h1>
-      <p class="muted">Compara o mix cadastrado em tabfor com os itens das NF-e do fornecedor (XML).</p>
+      <p class="muted">Compara apenas o código do fornecedor (CODFOR da tabfor × cProd do XML) para achar códigos no cadastro que não aparecem nas notas do fornecedor.</p>
     </div>
     <nav class="nav-links">
       <a href="index.html">Análise NFe</a>
@@ -349,9 +347,8 @@
 
       <div class="tabs" id="tabs-status">
         <button type="button" data-status="todos" class="active">Todos</button>
-        <button type="button" data-status="divergente">Divergentes</button>
-        <button type="button" data-status="so_notas">Só notas</button>
         <button type="button" data-status="so_cadastro">Só cadastro</button>
+        <button type="button" data-status="so_notas">Só notas</button>
         <button type="button" data-status="ok">OK</button>
       </div>
 
@@ -364,7 +361,6 @@
               <th>Descrição SAC</th>
               <th>xProd XML</th>
               <th>NSU</th>
-              <th>UNDFOR / EMBFOR / FATOR</th>
               <th>uCom XML</th>
               <th>NFs</th>
               <th>Motivos</th>
@@ -427,7 +423,6 @@
       return ({
         so_cadastro: 'Só cadastro',
         so_notas: 'Só notas',
-        divergente: 'Divergente',
         ok: 'OK'
       })[status] || status;
     }
@@ -504,9 +499,8 @@
 
     function renderKpis(resumo) {
       const cards = [
-        { key: 'divergente', titulo: 'Divergentes' },
-        { key: 'so_notas', titulo: 'Só notas' },
         { key: 'so_cadastro', titulo: 'Só cadastro' },
+        { key: 'so_notas', titulo: 'Só notas' },
         { key: 'ok', titulo: 'OK' },
         { key: 'nfs_analisadas', titulo: 'NFs analisadas' }
       ];
@@ -537,11 +531,6 @@
         const tr = document.createElement('tr');
         const codigos = [item.codfor, item.cProd].filter(Boolean);
         const codigoTxt = [...new Set(codigos)].join(' / ') || '-';
-        const tabforTxt = [
-          item.undfor ? `UND ${item.undfor}` : null,
-          item.embfor ? `EMB ${item.embfor}` : null,
-          item.fatorfor != null ? `FAT ${formatarNumero(item.fatorfor, 4)}` : null
-        ].filter(Boolean).join(' · ') || '-';
 
         const motivos = (item.motivos || []).length
           ? `<ul class="motivos">${item.motivos.map((m) => `<li>${escapeHtml(m)}</li>`).join('')}</ul>`
@@ -557,7 +546,6 @@
           <td>${escapeHtml(item.descricao_sac || '-')}</td>
           <td>${escapeHtml(item.xProd || '-')}</td>
           <td>${escapeHtml(item.nsu || '-')}</td>
-          <td>${escapeHtml(tabforTxt)}</td>
           <td>${escapeHtml(item.uCom || '-')}</td>
           <td>${item.qtd_nfs || 0}</td>
           <td>${motivos}</td>
