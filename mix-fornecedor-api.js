@@ -136,8 +136,12 @@ function agregarItemXml(mapa, item, chaveNf) {
       qtd_nfs: 0,
       chaves: new Set()
     };
-    mapa.set(chave, agg);
   }
+
+  for (const variante of variantesCodigo(item.cProd)) {
+    if (!mapa.has(variante)) mapa.set(variante, agg);
+  }
+  mapa.set(chave, agg);
 
   if (!agg.chaves.has(chaveNf)) {
     agg.chaves.add(chaveNf);
@@ -149,6 +153,14 @@ function agregarItemXml(mapa, item, chaveNf) {
   if (item.uTrib) agg.uTrib = item.uTrib;
   if (item.cEAN || item.cEANTrib) agg.cEAN = item.cEAN || item.cEANTrib;
   if (item.cProd) agg.cProd = item.cProd;
+}
+
+function acharNoXml(mixXml, codfor) {
+  for (const variante of variantesCodigo(codfor)) {
+    const hit = mixXml.get(variante);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 function indexarTabfor(rows) {
@@ -409,9 +421,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
       const itens = [];
 
       for (const cad of mixCadastro) {
-        const matchXml = variantesCodigo(cad.codfor)
-          .map((v) => mixXml.get(v))
-          .find(Boolean);
+        const matchXml = acharNoXml(mixXml, cad.codfor);
 
         if (!matchXml) {
           itens.push({
@@ -463,8 +473,16 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
       }
 
       // cProd só nas notas: informativo, não é divergência do mix cadastrado
-      for (const [chaveNorm, xmlAgg] of mixXml.entries()) {
-        if (usadosXml.has(chaveNorm)) continue;
+      const xmlUnicos = [];
+      const vistosXml = new Set();
+      for (const xmlAgg of mixXml.values()) {
+        if (!xmlAgg || vistosXml.has(xmlAgg.chave_norm)) continue;
+        vistosXml.add(xmlAgg.chave_norm);
+        xmlUnicos.push(xmlAgg);
+      }
+
+      for (const xmlAgg of xmlUnicos) {
+        if (usadosXml.has(xmlAgg.chave_norm)) continue;
         if (variantesCodigo(xmlAgg.cProd).some((v) => tabforPorCodigo.has(v))) continue;
 
         const chaveExemplo = xmlAgg.chaves.size ? [...xmlAgg.chaves][0] : null;
