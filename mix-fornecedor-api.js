@@ -104,12 +104,19 @@ function montarExpressaoDataLocal(campo = 'n.EMISSAO') {
   `;
 }
 
+function toYmdCompact(dataIso) {
+  return String(dataIso || '').replace(/-/g, '');
+}
+
 function normalizarData(data) {
   if (!data) return null;
   const text = String(data).trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
   const br = text.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+  if (/^\d{8}$/.test(text)) {
+    return `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`;
+  }
   return null;
 }
 
@@ -321,15 +328,31 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
       const [tabforRows] = await pool.query(sqlTabfor, fornecedorVariants);
       const { lista: mixCadastro, porChave: tabforPorCodigo } = indexarTabfor(tabforRows);
 
+      const dataInicialCompact = toYmdCompact(dataInicial);
+      const dataFinalCompact = toYmdCompact(dataFinal);
+
       const filtrosNf = [
-        `DATE(${dataEmissaoExpr}) BETWEEN ? AND ?`,
+        `(
+          DATE(${dataEmissaoExpr}) BETWEEN ? AND ?
+          OR (
+            n.EMISSAO REGEXP '^[0-9]{8}$'
+            AND n.EMISSAO BETWEEN ? AND ?
+          )
+        )`,
         'COALESCE(n.SITNFE, 1) = 1',
         `(
           REPLACE(REPLACE(REPLACE(n.CNPJ_CPF, '.', ''), '/', ''), '-', '') IN (${fornecedorVariants.map(() => '?').join(', ')})
           OR n.CNPJ_CPF IN (${fornecedorVariants.map(() => '?').join(', ')})
         )`
       ];
-      const valoresNf = [dataInicial, dataFinal, ...fornecedorVariants, ...fornecedorVariants];
+      const valoresNf = [
+        dataInicial,
+        dataFinal,
+        dataInicialCompact,
+        dataFinalCompact,
+        ...fornecedorVariants,
+        ...fornecedorVariants
+      ];
 
       if (estab) {
         filtrosNf.push(`(
@@ -494,7 +517,9 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
       }
 
       let aviso = null;
-      if (resumo.limite_atingido) {
+      if (resumo.nfs_analisadas === 0) {
+        aviso = 'Nenhuma NF do fornecedor foi encontrada no período. Todos os CODFOR da tabfor aparecem como divergência. Amplie ou ajuste as datas.';
+      } else if (resumo.limite_atingido) {
         aviso = `Período tem ${totalNfsPeriodo} NFs; foram analisadas as ${resumo.cap_nfs} mais recentes.`;
       }
 
