@@ -392,8 +392,8 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
 
         if (!matchXml) {
           itens.push({
-            status: 'so_cadastro',
-            motivos: ['CODFOR sem cProd correspondente nas NFs do fornecedor no período'],
+            status: 'divergente',
+            motivos: ['Código na tabfor (CODFOR) não aparece em nenhum XML do período'],
             codfor: cad.codfor,
             cProd: null,
             nsu: cad.nsu,
@@ -419,7 +419,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
 
         itens.push({
           status: 'ok',
-          motivos: ['Validado: CODFOR = cProd'],
+          motivos: ['CODFOR encontrado no XML (cProd)'],
           codfor: cad.codfor,
           cProd: matchXml.cProd,
           nsu: cad.nsu,
@@ -439,6 +439,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
         });
       }
 
+      // cProd só nas notas: informativo, não é divergência do mix cadastrado
       for (const [chaveNorm, xmlAgg] of mixXml.entries()) {
         if (usadosXml.has(chaveNorm)) continue;
         if (variantesCodigo(xmlAgg.cProd).some((v) => tabforPorCodigo.has(v))) continue;
@@ -446,7 +447,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
         const chaveExemplo = xmlAgg.chaves.size ? [...xmlAgg.chaves][0] : null;
         itens.push({
           status: 'so_notas',
-          motivos: ['cProd sem CODFOR correspondente na tabfor deste fornecedor'],
+          motivos: ['cProd no XML sem CODFOR na tabfor (informativo)'],
           codfor: null,
           cProd: xmlAgg.cProd,
           nsu: null,
@@ -466,7 +467,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
         });
       }
 
-      const ordemStatus = { so_cadastro: 0, so_notas: 1, ok: 2 };
+      const ordemStatus = { divergente: 0, so_notas: 1, ok: 2 };
       itens.sort((a, b) => {
         const sa = ordemStatus[a.status] ?? 9;
         const sb = ordemStatus[b.status] ?? 9;
@@ -475,7 +476,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
       });
 
       const resumo = {
-        so_cadastro: 0,
+        divergente: 0,
         so_notas: 0,
         ok: 0,
         total_itens: itens.length,

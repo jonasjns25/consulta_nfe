@@ -185,7 +185,7 @@
       margin-top: 0.25rem;
     }
 
-    .kpi.so_cadastro .valor { color: var(--danger); }
+    .kpi.divergente .valor { color: var(--danger); }
     .kpi.so_notas .valor { color: var(--info); }
     .kpi.ok .valor { color: var(--success); }
 
@@ -269,7 +269,7 @@
       white-space: nowrap;
     }
 
-    .badge.so_cadastro { background: #fdecea; color: #922b21; }
+    .badge.divergente { background: #fdecea; color: #922b21; }
     .badge.so_notas { background: #dbeafe; color: #1e40af; }
     .badge.ok { background: #d4edda; color: #155724; }
 
@@ -296,7 +296,7 @@
   <header>
     <div>
       <h1>Mix do Fornecedor</h1>
-      <p class="muted">Regra única: se <strong>CODFOR</strong> (tabfor) = <strong>cProd</strong> (XML), o item está validado. Sem checagem de unidade, fator ou embalagem.</p>
+      <p class="muted">Regra simples: código na <strong>tabfor</strong> (CODFOR) que <strong>não aparece em nenhum XML</strong> (cProd) = <strong>divergência</strong>. Se aparecer, está OK.</p>
     </div>
     <nav class="nav-links">
       <a href="index.html">Análise NFe</a>
@@ -346,9 +346,9 @@
       <p class="muted" id="resumo-meta" style="margin: 1rem 0;"></p>
 
       <div class="tabs" id="tabs-status">
-        <button type="button" data-status="so_cadastro" class="active">Só cadastro</button>
-        <button type="button" data-status="so_notas">Só notas</button>
+        <button type="button" data-status="divergente" class="active">Divergências</button>
         <button type="button" data-status="ok">OK</button>
+        <button type="button" data-status="so_notas">Só no XML</button>
         <button type="button" data-status="todos">Todos</button>
       </div>
 
@@ -377,7 +377,7 @@
   <script>
     const estado = {
       itens: [],
-      filtroStatus: 'so_cadastro',
+      filtroStatus: 'divergente',
       buscaTimer: null,
       fornecedorSelecionado: null
     };
@@ -421,8 +421,8 @@
 
     function labelStatus(status) {
       return ({
-        so_cadastro: 'Só cadastro',
-        so_notas: 'Só notas',
+        divergente: 'Divergência',
+        so_notas: 'Só no XML',
         ok: 'OK'
       })[status] || status;
     }
@@ -499,9 +499,9 @@
 
     function renderKpis(resumo) {
       const cards = [
-        { key: 'so_cadastro', titulo: 'Só cadastro' },
-        { key: 'so_notas', titulo: 'Só notas' },
+        { key: 'divergente', titulo: 'Divergências' },
         { key: 'ok', titulo: 'OK' },
+        { key: 'so_notas', titulo: 'Só no XML' },
         { key: 'nfs_analisadas', titulo: 'NFs analisadas' }
       ];
       el.kpis.innerHTML = cards.map((c) => `
@@ -613,9 +613,9 @@
           throw new Error(data.error || data.detalhe || 'Erro ao conferir mix.');
         }
         estado.itens = data.itens || [];
-        estado.filtroStatus = 'so_cadastro';
+        estado.filtroStatus = 'divergente';
         el.tabs.querySelectorAll('button').forEach((b) => {
-          b.classList.toggle('active', b.dataset.status === 'so_cadastro');
+          b.classList.toggle('active', b.dataset.status === 'divergente');
         });
         renderKpis(data.resumo || {});
         renderTabela();
