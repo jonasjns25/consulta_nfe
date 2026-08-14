@@ -129,6 +129,24 @@
       color: var(--lumi-text);
     }
 
+    .btn-danger {
+      background: var(--danger);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      padding: 0.8rem 1.1rem;
+      cursor: pointer;
+      font-weight: 700;
+      min-height: 48px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
     button:disabled {
       opacity: 0.55;
       cursor: not-allowed;
@@ -347,6 +365,9 @@
     <section class="card hidden" id="painel-resultado">
       <div class="resumo-grid" id="resumo-kpis"></div>
       <p class="muted" id="resumo-meta" style="margin: 1rem 0;"></p>
+      <div class="actions" style="margin-bottom: 1rem;">
+        <button type="button" class="btn-danger hidden" id="btn-excluir">Excluir divergências da tabfor</button>
+      </div>
 
       <div class="tabs" id="tabs-status">
         <button type="button" data-status="divergente" class="active">Divergências</button>
@@ -382,7 +403,8 @@
       itens: [],
       filtroStatus: 'divergente',
       buscaTimer: null,
-      fornecedorSelecionado: null
+      fornecedorSelecionado: null,
+      ultimoFiltro: null
     };
 
     const el = {
@@ -401,7 +423,8 @@
       meta: document.getElementById('resumo-meta'),
       tabs: document.getElementById('tabs-status'),
       tbody: document.getElementById('tbody-itens'),
-      empty: document.getElementById('empty-msg')
+      empty: document.getElementById('empty-msg'),
+      btnExcluir: document.getElementById('btn-excluir')
     };
 
     function formatarCnpj(valor) {
@@ -518,6 +541,12 @@
         `tabfor: ${resumo.total_tabfor || 0} · códigos no XML: ${resumo.total_codigos_xml || 0} · ` +
         `NFs no período: ${resumo.nfs_periodo || 0}` +
         (resumo.nfs_com_erro ? ` · XMLs com erro: ${resumo.nfs_com_erro}` : '');
+
+      const qtdDiv = Number(resumo.divergente || 0);
+      el.btnExcluir.classList.toggle('hidden', qtdDiv <= 0);
+      el.btnExcluir.textContent = qtdDiv
+        ? `Excluir ${qtdDiv} divergência(s) da tabfor`
+        : 'Excluir divergências da tabfor';
     }
 
     function itensFiltrados() {
@@ -585,8 +614,7 @@
       renderTabela();
     });
 
-    el.form.addEventListener('submit', async (ev) => {
-      ev.preventDefault();
+    async function conferirMix() {
       mostrarErro('');
       mostrarAviso('');
 
@@ -606,6 +634,7 @@
         data_final: el.dataFinal.value
       });
       if (el.estab.value) params.set('estab', el.estab.value);
+      estado.ultimoFiltro = { fornecedor, params: params.toString() };
 
       el.btn.disabled = true;
       el.btn.textContent = 'Conferindo...';
@@ -630,6 +659,48 @@
       } finally {
         el.btn.disabled = false;
         el.btn.textContent = 'Conferir';
+      }
+    }
+
+    el.form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      await conferirMix();
+    });
+
+    el.btnExcluir.addEventListener('click', async () => {
+      const divergentes = estado.itens.filter((i) => i.status === 'divergente' && i.registro);
+      if (!divergentes.length) {
+        mostrarErro('Nenhuma divergência com registro da tabfor para excluir.');
+        return;
+      }
+      const fornecedor = estado.ultimoFiltro?.fornecedor || el.cnpj.value.trim();
+      if (!fornecedor) {
+        mostrarErro('Fornecedor não informado.');
+        return;
+      }
+      const ok = window.confirm(
+        `Apagar ${divergentes.length} item(ns) divergente(s) da tabfor deste fornecedor?\n\nEssa exclusão não tem volta.`
+      );
+      if (!ok) return;
+
+      el.btnExcluir.disabled = true;
+      try {
+        const resp = await fetch('/api/mix-fornecedor/excluir-divergentes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fornecedor,
+            registros: divergentes.map((i) => i.registro)
+          })
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.error || data.detalhe || 'Falha ao excluir.');
+        mostrarAviso(`${data.excluido || 0} item(ns) removido(s) da tabfor.`);
+        await conferirMix();
+      } catch (err) {
+        mostrarErro(err.message || 'Falha ao excluir divergências.');
+      } finally {
+        el.btnExcluir.disabled = false;
       }
     });
 

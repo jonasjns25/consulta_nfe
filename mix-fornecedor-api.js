@@ -637,6 +637,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
             motivos: temReferencia
               ? ['CODFOR/EAN não aparecem no XML nem no lançamento (itemcomp) do período']
               : ['Item na tabfor sem CODFOR e sem EAN/NSU correspondente no XML ou itemcomp'],
+            registro: cad.registro,
             codfor: cad.codfor,
             cProd: null,
             nsu: cad.nsu,
@@ -678,6 +679,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
         itens.push({
           status: 'ok',
           motivos: [motivoOk],
+          registro: cad.registro,
           codfor: cad.codfor,
           cProd: fonte.cProd || matchItemcomp?.item.reffor || null,
           nsu: cad.nsu,
@@ -807,6 +809,49 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
     } catch (error) {
       console.error('[mix-fornecedor] erro na conferência:', error);
       res.status(500).json({ error: 'Falha ao conferir mix do fornecedor.', detalhe: error.message });
+    }
+  });
+
+  app.post('/api/mix-fornecedor/excluir-divergentes', async (req, res) => {
+    try {
+      const body = req.body || {};
+      const fornecedorRaw = normalizeText(body.fornecedor);
+      const fornecedor = padCnpj(fornecedorRaw) || normalizeDigits(fornecedorRaw);
+      const registros = [...new Set((Array.isArray(body.registros) ? body.registros : [])
+        .map((v) => parseInt(v, 10))
+        .filter((v) => Number.isInteger(v) && v > 0))];
+
+      if (!fornecedor || fornecedor.length < 11) {
+        return res.status(400).json({ error: 'Informe o CNPJ/CPF do fornecedor.' });
+      }
+      if (!registros.length) {
+        return res.status(400).json({ error: 'Nenhum registro da tabfor informado para exclusão.' });
+      }
+
+      const pool = getPool();
+      const fornecedorVariants = [...new Set([
+        fornecedor,
+        fornecedorRaw,
+        normalizeDigits(fornecedorRaw),
+        padCnpj(fornecedorRaw)
+      ].filter(Boolean))];
+
+      const phFornece = fornecedorVariants.map(() => '?').join(', ');
+      const phReg = registros.map(() => '?').join(', ');
+      const sql = `
+        DELETE FROM sac.tabfor
+        WHERE REGISTRO IN (${phReg})
+          AND FORNECE IN (${phFornece})
+      `;
+      const [result] = await pool.query(sql, [...registros, ...fornecedorVariants]);
+      res.json({
+        ok: true,
+        excluido: result.affectedRows || 0,
+        fornecedor
+      });
+    } catch (error) {
+      console.error('[mix-fornecedor] erro ao excluir divergentes:', error);
+      res.status(500).json({ error: 'Falha ao excluir itens da tabfor.', detalhe: error.message });
     }
   });
 };
