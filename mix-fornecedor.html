@@ -298,7 +298,7 @@
   <header>
     <div>
       <h1>Mix do Fornecedor</h1>
-      <p class="muted">Regra simples: código na <strong>tabfor</strong> (CODFOR) que <strong>não aparece em nenhum XML</strong> (cProd) = <strong>divergência</strong>. Se aparecer, está OK. Sem checagem de fator/unidade.</p>
+      <p class="muted">Lista <strong>todos</strong> os itens da tabfor, inclusive sem Referência (CODFOR). Sem CODFOR ou CODFOR ausente no XML = <strong>divergência</strong>. CODFOR = cProd = <strong>OK</strong>.</p>
       <p class="muted" id="build-info" style="margin-top:0.4rem;font-size:0.85rem;"></p>
     </div>
     <nav class="nav-links">
@@ -532,7 +532,7 @@
 
       for (const item of lista) {
         const tr = document.createElement('tr');
-        const referencia = item.codfor || '-';
+        const referencia = (item.codfor && item.codfor !== '0') ? item.codfor : 'sem CODFOR';
         const motivos = (item.motivos || []).length
           ? `<ul class="motivos">${item.motivos.map((m) => `<li>${escapeHtml(m)}</li>`).join('')}</ul>`
           : '<span class="muted">—</span>';

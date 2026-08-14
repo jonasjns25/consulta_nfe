@@ -163,6 +163,11 @@ function acharNoXml(mixXml, codfor) {
   return null;
 }
 
+function temCodfor(value) {
+  const code = normalizeText(value);
+  return !!(code && code !== '0');
+}
+
 function indexarTabfor(rows) {
   const porChave = new Map();
   const lista = [];
@@ -170,17 +175,21 @@ function indexarTabfor(rows) {
 
   for (const row of rows || []) {
     const codfor = normalizeText(row.CODFOR);
-    if (!codfor || codfor === '0') continue;
+    const nsu = normalizeText(row.NSU);
+    const registro = String(row.REGISTRO ?? '');
+    const chaveNorm = temCodfor(codfor) ? normalizeCodigo(codfor) : '';
+    const chaveUnica = chaveNorm
+      ? `cod:${chaveNorm}`
+      : `nsu:${nsu || registro || lista.length}`;
 
-    const chaveNorm = normalizeCodigo(codfor);
-    if (!chaveNorm || vistos.has(chaveNorm)) continue;
-    vistos.add(chaveNorm);
+    if (vistos.has(chaveUnica)) continue;
+    vistos.add(chaveUnica);
 
     const item = {
       registro: row.REGISTRO,
       fornece: normalizeText(row.FORNECE),
       codfor,
-      nsu: normalizeText(row.NSU),
+      nsu,
       plu: normalizeText(row.plu || row.embalagem_plu),
       fatorfor: row.FATORFOR == null ? null : parseDecimal(row.FATORFOR, 4),
       embfor: normalizeText(row.EMBFOR),
@@ -192,9 +201,11 @@ function indexarTabfor(rows) {
 
     lista.push(item);
 
-    for (const variante of variantesCodigo(codfor)) {
-      if (!porChave.has(variante)) {
-        porChave.set(variante, item);
+    if (temCodfor(codfor)) {
+      for (const variante of variantesCodigo(codfor)) {
+        if (!porChave.has(variante)) {
+          porChave.set(variante, item);
+        }
       }
     }
   }
@@ -333,9 +344,10 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
         LEFT JOIN sac.embalagem ON embalagem.CODPRODUTO = tabfor.NSU
         LEFT JOIN sac.produto ON produto.codigo = embalagem.PRODUTO
         WHERE tabfor.FORNECE IN (${placeholdersFornece})
-          AND TRIM(COALESCE(tabfor.CODFOR, '')) <> ''
-          AND TRIM(COALESCE(tabfor.CODFOR, '')) <> '0'
-        ORDER BY tabfor.CODFOR ASC, tabfor.REGISTRO ASC
+        ORDER BY
+          CASE WHEN TRIM(COALESCE(tabfor.CODFOR, '')) IN ('', '0') THEN 1 ELSE 0 END,
+          tabfor.CODFOR ASC,
+          tabfor.REGISTRO ASC
       `;
       const [tabforRows] = await pool.query(sqlTabfor, fornecedorVariants);
       const { lista: mixCadastro, porChave: tabforPorCodigo } = indexarTabfor(tabforRows);
@@ -421,12 +433,15 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
       const itens = [];
 
       for (const cad of mixCadastro) {
-        const matchXml = acharNoXml(mixXml, cad.codfor);
+        const temReferencia = temCodfor(cad.codfor);
+        const matchXml = temReferencia ? acharNoXml(mixXml, cad.codfor) : null;
 
         if (!matchXml) {
           itens.push({
             status: 'divergente',
-            motivos: ['Código na tabfor (CODFOR) não aparece em nenhum XML do período'],
+            motivos: temReferencia
+              ? ['Código na tabfor (CODFOR) não aparece em nenhum XML do período']
+              : ['Item na tabfor sem CODFOR (Referência vazia)'],
             codfor: cad.codfor,
             cProd: null,
             nsu: cad.nsu,
