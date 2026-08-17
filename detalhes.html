@@ -272,12 +272,36 @@
       border-radius: 999px;
       font-size: 0.7rem;
       font-weight: 700;
-      color: #1a1a1a;
-      background: #ffc107;
+      color: #fff;
+      background: #28a745;
+    }
+
+    .marca-atencao {
+      display: inline;
+      margin-left: 0.2rem;
+      font-size: 0.78em;
+      font-weight: 500;
+      color: #5a8f6a;
+      letter-spacing: 0;
+      vertical-align: baseline;
     }
 
     .linha-com-atencao {
-      background: rgba(255, 193, 7, 0.08);
+      background: rgba(40, 167, 69, 0.06);
+    }
+
+    .banner-atencao {
+      background: rgba(40, 167, 69, 0.08);
+      border: 1px solid rgba(40, 167, 69, 0.22);
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      margin-top: 0.5rem;
+    }
+
+    .banner-atencao span {
+      color: #2d6a4f;
+      font-weight: 500;
+      font-size: 0.9rem;
     }
 
     .config-dropdown {
@@ -991,11 +1015,15 @@
       produtos.forEach((produto) => {
         const tr = document.createElement('tr');
         const { temErro, temAtencao } = itemTemErro(produto);
-        const badgeHtml = temErro
-          ? `<span class="badge-erro" title="${produto.cadastroNaoEncontrado ? 'Cadastro não encontrado' : (produto.dadosERPOrigem === 'tabfor' || produto.dadosERPOrigem === 'embalagem') ? 'NF não lançada — Comparação com dados simulados' : 'Item com divergências'}">!</span>`
-          : temAtencao
-            ? '<span class="badge-atencao" title="Ponto de atenção (ex.: cBenef, ST zerado)">⚠</span>'
-            : '<span class="badge-ok" title="Item sem divergências">&#10003;</span>';
+        const badgeHtml = htmlBadgeStatus(
+          temErro,
+          temAtencao,
+          produto.cadastroNaoEncontrado
+            ? 'Cadastro não encontrado'
+            : (produto.dadosERPOrigem === 'tabfor' || produto.dadosERPOrigem === 'embalagem')
+              ? 'NF não lançada — Comparação com dados simulados'
+              : 'Item com divergências'
+        );
         tr.innerHTML = `
           <td class="col-expand">
             <button type="button" class="btn-expand" onclick="toggleDetalhes(${produto.item})" aria-label="Expandir detalhes">
@@ -1070,6 +1098,28 @@
     function formatarChave(chave) {
       if (!chave) return '-';
       return chave.replace(/(\d{4})(\d{4})(\d{4})(\d{4})(\d{4})(\d{4})(\d{4})(\d{4})(\d{4})(\d{4})(\d{4})/, '$1 $2 $3 $4 $5 $6 $7 $8 $9 $10 $11');
+    }
+
+    function marcaAtencao(titulo) {
+      const t = String(titulo || 'Ponto de atenção').replace(/"/g, '&quot;');
+      return ` <span class="marca-atencao" title="${t}">(*)</span>`;
+    }
+
+    function htmlBadgeStatus(temErro, temAtencao, tituloErro) {
+      if (temErro) {
+        const t = String(tituloErro || 'Item com divergências').replace(/"/g, '&quot;');
+        return `<span class="badge-erro" title="${t}">!</span>`;
+      }
+      if (temAtencao) {
+        return `<span class="badge-ok" title="Item conferido">&#10003;</span>${marcaAtencao('Ponto de atenção')}`;
+      }
+      return '<span class="badge-ok" title="Item sem divergências">&#10003;</span>';
+    }
+
+    function atualizarBadgeCelula(tdItem, item, temErro, temAtencao, tituloErro) {
+      if (!tdItem) return;
+      tdItem.querySelectorAll('.badge-erro, .badge-atencao, .badge-ok, .marca-atencao').forEach((el) => el.remove());
+      tdItem.innerHTML = `${item} ${htmlBadgeStatus(temErro, temAtencao, tituloErro)}`;
     }
 
     function formatarEAN(produto) {
@@ -1611,14 +1661,43 @@
       const codigoXML = produto.codigo || '';
       if (codigoERP && !compararValoresERP(codigoXML, codigoERP)) temErro = true;
 
-      // EAN: NÃO é tratado como erro, apenas como ponto de atenção (comparação visual na renderização)
-      // A comparação é feita com EMBALAGEM.BARRA1, BARRA2 e BARRA3 na função renderizarComparacaoProduto
+      // EAN: NÃO é tratado como erro, apenas como ponto de atenção
+      const barra1 = String(buscarCampoERP(dadosERP, 'embalagem_barra1', 'EMBALAGEM_BARRA1') || '').trim();
+      const barra2 = String(buscarCampoERP(dadosERP, 'embalagem_barra2', 'EMBALAGEM_BARRA2') || '').trim();
+      const barra3 = String(buscarCampoERP(dadosERP, 'embalagem_barra3', 'EMBALAGEM_BARRA3') || '').trim();
+      const eanCoincideERP = (ean) => {
+        const eanStr = String(ean || '').trim();
+        if (!eanStr) return false;
+        return (barra1 && eanStr === barra1) || (barra2 && eanStr === barra2) || (barra3 && eanStr === barra3);
+      };
+      if (barra1 || barra2 || barra3) {
+        const eanCom = String(produto.eanComercial || '').trim();
+        const eanTrib = String(produto.eanTributavel || '').trim();
+        if (eanCom && !eanCoincideERP(eanCom)) temAtencao = true;
+        if (eanTrib && eanTrib !== eanCom && !eanCoincideERP(eanTrib)) temAtencao = true;
+      }
 
-      // Campos de embalagem (Unidade Tributável, Quantidade Tributável, Valor Unit. Tributável)
-      // NÃO são tratados como erro, apenas verificados para exibir aviso de possível erro de embalagem
-
-      // Obter qtd para uso em outros cálculos
+      // Campos de embalagem: NÃO são tratados como erro, apenas ponto de atenção
       const qtd = buscarCampoERP(dadosERP, 'qtd', 'QTD');
+      const fatorEmb = buscarCampoERP(dadosERP, 'fator', 'FATOR');
+      const valorEmb = buscarCampoERP(dadosERP, 'valor', 'VALOR');
+      const fatorValorEmb = buscarCampoERP(dadosERP, 'fator', 'FATOR');
+      const descontoValorUnitEmb = buscarCampoERP(dadosERP, 'desconto', 'DESCONTO', 'ic_desconto', 'IC_DESCONTO');
+      if (qtd !== null && fatorEmb !== null) {
+        const qtdNum = parseFloat(qtd) || 0;
+        const fatorNum = parseFloat(fatorEmb) || 1;
+        const qtdCalc = fatorNum === 1 ? qtdNum : Math.round((qtdNum * fatorNum) * 100) / 100;
+        const qtdXml = produto.quantidadeTrib || 0;
+        if (!compararValoresERP(qtdXml, qtdCalc) && !compararValoresERP(qtdXml, qtdNum)) temAtencao = true;
+      }
+      if (valorEmb !== null) {
+        const valorNum = parseFloat(valorEmb) || 0;
+        const fatorValorNum = parseFloat(fatorValorEmb) || 1;
+        const descontoVU = parseFloat(descontoValorUnitEmb) || 0;
+        const valorCalc = Math.round(((valorNum / fatorValorNum) + descontoVU) * 100) / 100;
+        const valorXml = produto.valorUnitarioTrib || 0;
+        if (!compararValoresERP(valorXml, valorCalc) && !compararValoresERP(valorXml, valorNum)) temAtencao = true;
+      }
 
       // Valor Desconto
       const descontoTotal = buscarCampoERP(dadosERP, 'desconto', 'DESCONTO', 'ic_desconto', 'IC_DESCONTO');
@@ -1942,13 +2021,14 @@
           ? String(ncmERPRaw).trim()
           : null);
       const temSacNcm = !!ncmSacExibir;
-      // Atenção (laranja) quando há valor SAC para comparar e não bate com o XML; sem valor SAC → neutro
-      const corNCM = !temSacNcm ? 'var(--lumi-muted)' : igualNCM ? '#28a745' : '#ffb347';
+      // Atenção (verde + *) quando há valor SAC para comparar e não bate com o XML; sem valor SAC → neutro
+      const ncmAtencao = temSacNcm && !igualNCM;
+      const corNCM = !temSacNcm ? 'var(--lumi-muted)' : '#28a745';
       html += `
         <div class="detalhes-item-comparacao">
           <span class="detalhes-label">${formatarLabel('NCM')}</span>
           <span class="detalhes-value">${ncmXML || '-'}</span>
-          <span class="detalhes-value" style="color: ${corNCM};">${ncmSacExibir || '-'}</span>
+          <span class="detalhes-value" style="color: ${corNCM};">${ncmSacExibir || '-'}${ncmAtencao ? marcaAtencao('NCM diverge (ponto de atenção)') : ''}</span>
         </div>
       `;
       
@@ -1992,18 +2072,21 @@
       const temXmlClass = cClassTribXML !== '';
       const temErpTrib = tribCbsIbsERP !== '';
       let corClassTribSac;
+      let classTribAtencao = false;
       if (!temErpTrib) {
         corClassTribSac = 'var(--lumi-muted)';
       } else if (!temXmlClass) {
-        corClassTribSac = '#ffb347';
+        corClassTribSac = '#28a745';
+        classTribAtencao = true;
       } else {
-        corClassTribSac = igualCClassTrib ? '#28a745' : '#dc3545';
+        corClassTribSac = '#28a745';
+        classTribAtencao = !igualCClassTrib;
       }
       html += `
         <div class="detalhes-item-comparacao">
           <span class="detalhes-label">${formatarLabel('cClassTrib (IBS/CBS)')}</span>
           <span class="detalhes-value">${cClassTribXML || '-'}</span>
-          <span class="detalhes-value" style="color: ${corClassTribSac};">${tribCbsIbsERP || '-'}</span>
+          <span class="detalhes-value" style="color: ${corClassTribSac};">${tribCbsIbsERP || '-'}${classTribAtencao ? marcaAtencao('cClassTrib diverge (ponto de atenção)') : ''}</span>
         </div>
       `;
       
@@ -2049,35 +2132,38 @@
       if (eanIguais) {
         // Se forem iguais, mostrar apenas uma vez
         const eanOk = eanCoincide(eanComercial);
-        const corEAN = temDadosEANERP ? (eanOk ? '#28a745' : '#dc3545') : 'var(--lumi-muted)';
+        const eanAtencao = temDadosEANERP && !eanOk;
+        const corEAN = temDadosEANERP ? '#28a745' : 'var(--lumi-muted)';
         html += `
           <div class="detalhes-item-comparacao">
             <span class="detalhes-label">${formatarLabel('EAN')}</span>
             <span class="detalhes-value">${eanComercial || '-'}</span>
-            <span class="detalhes-value" style="color: ${corEAN};">${temDadosEANERP ? barrasERP : '-'}</span>
+            <span class="detalhes-value" style="color: ${corEAN};">${temDadosEANERP ? barrasERP : '-'}${eanAtencao ? marcaAtencao('EAN não coincide com BARRA1/2/3 (ponto de atenção)') : ''}</span>
           </div>
         `;
       } else {
         // Se forem diferentes ou apenas um existir, mostrar ambos
         if (eanComercial) {
           const eanComOk = eanCoincide(eanComercial);
-          const corEANCom = temDadosEANERP ? (eanComOk ? '#28a745' : '#dc3545') : 'var(--lumi-muted)';
+          const eanComAtencao = temDadosEANERP && !eanComOk;
+          const corEANCom = temDadosEANERP ? '#28a745' : 'var(--lumi-muted)';
           html += `
             <div class="detalhes-item-comparacao">
               <span class="detalhes-label">${formatarLabel('EAN Comercial')}</span>
               <span class="detalhes-value">${eanComercial}</span>
-              <span class="detalhes-value" style="color: ${corEANCom};">${temDadosEANERP ? barrasERP : '-'}</span>
+              <span class="detalhes-value" style="color: ${corEANCom};">${temDadosEANERP ? barrasERP : '-'}${eanComAtencao ? marcaAtencao('EAN comercial não coincide com BARRA1/2/3 (ponto de atenção)') : ''}</span>
             </div>
           `;
         }
         if (eanTributavel) {
           const eanTribOk = eanCoincide(eanTributavel);
-          const corEANTrib = temDadosEANERP ? (eanTribOk ? '#28a745' : '#dc3545') : 'var(--lumi-muted)';
+          const eanTribAtencao = temDadosEANERP && !eanTribOk;
+          const corEANTrib = temDadosEANERP ? '#28a745' : 'var(--lumi-muted)';
           html += `
             <div class="detalhes-item-comparacao">
               <span class="detalhes-label">${formatarLabel('EAN Tributável')}</span>
               <span class="detalhes-value">${eanTributavel}</span>
-              <span class="detalhes-value" style="color: ${corEANTrib};">${temDadosEANERP ? barrasERP : '-'}</span>
+              <span class="detalhes-value" style="color: ${corEANTrib};">${temDadosEANERP ? barrasERP : '-'}${eanTribAtencao ? marcaAtencao('EAN tributável não coincide com BARRA1/2/3 (ponto de atenção)') : ''}</span>
             </div>
           `;
         }
@@ -2138,12 +2224,14 @@
       const igualQtdCalculado = quantidadeTributavelERP !== null ? compararValores(valorXML_Qtd, quantidadeTributavelERP) : false;
       const igualQtdDireto = qtdDiretoERP !== null ? compararValores(valorXML_Qtd, qtdDiretoERP) : false;
       const igualQtd = igualQtdCalculado || igualQtdDireto;
-      const corQtd = igualQtd ? '#28a745' : '#dc3545';
+      const temDadosQtd = quantidadeTributavelERP !== null || qtdDiretoERP !== null;
+      const qtdAtencao = temDadosQtd && !igualQtd;
+      const corQtd = temDadosQtd ? '#28a745' : 'var(--lumi-muted)';
       html += `
         <div class="detalhes-item-comparacao">
           <span class="detalhes-label">${formatarLabel('Quantidade Tributável')}</span>
           <span class="detalhes-value">${formatarNumero(valorXML_Qtd)}</span>
-          <span class="detalhes-value" style="color: ${(quantidadeTributavelERP !== null || qtdDiretoERP !== null) ? corQtd : 'var(--lumi-muted)'};">${quantidadeTributavelERP !== null ? formatarNumero(quantidadeTributavelERP) : '-'}</span>
+          <span class="detalhes-value" style="color: ${corQtd};">${quantidadeTributavelERP !== null ? formatarNumero(quantidadeTributavelERP) : '-'}${qtdAtencao ? marcaAtencao('Quantidade tributável diverge (possível embalagem)') : ''}</span>
         </div>
       `;
       
@@ -2170,7 +2258,9 @@
       const igualValorUnitCalculado = valorUnitTributavelERP !== null ? compararValores(valorXML_ValorUnit, valorUnitTributavelERP) : false;
       const igualValorUnitDireto = valorDiretoERP !== null ? compararValores(valorXML_ValorUnit, valorDiretoERP) : false;
       const igualValorUnit = igualValorUnitCalculado || igualValorUnitDireto;
-      const corValorUnit = igualValorUnit ? '#28a745' : '#dc3545';
+      const temDadosValorUnit = valorUnitTributavelERP !== null || valorDiretoERP !== null;
+      const valorUnitAtencao = temDadosValorUnit && !igualValorUnit;
+      const corValorUnit = temDadosValorUnit ? '#28a745' : 'var(--lumi-muted)';
       
       // Montar texto para exibir: valor calculado e valor direto
       let textoERP = '-';
@@ -2186,7 +2276,7 @@
         <div class="detalhes-item-comparacao">
           <span class="detalhes-label">${formatarLabel('Valor Unit. Tributável')}</span>
           <span class="detalhes-value">${formatarMoeda(valorXML_ValorUnit)}</span>
-          <span class="detalhes-value" style="color: ${(valorUnitTributavelERP !== null || valorDiretoERP !== null) ? corValorUnit : 'var(--lumi-muted)'};">${textoERP}</span>
+          <span class="detalhes-value" style="color: ${corValorUnit};">${textoERP}${valorUnitAtencao ? marcaAtencao('Valor unitário tributável diverge (possível embalagem)') : ''}</span>
         </div>
       `;
       
@@ -2196,8 +2286,8 @@
       // Exibir aviso de possível erro de embalagem se houver divergência
       if (temDivergenciaEmbalagem) {
         html += `
-          <div class="detalhes-item-comparacao" style="background: rgba(255, 193, 7, 0.1); padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem;">
-            <span style="color: #856404; font-weight: 600; font-size: 0.9rem;">⚠️ Possível erro de embalagem detectado</span>
+          <div class="detalhes-item-comparacao banner-atencao">
+            <span>(*) Possível divergência de embalagem</span>
           </div>
         `;
       }
@@ -2301,37 +2391,43 @@
       const temXmlCest = cestXMLRaw !== '';
       const temErpCest = cestERP !== '';
       let corCestSac;
+      let cestAtencao = false;
       if (!temErpCest) {
         corCestSac = 'var(--lumi-muted)';
       } else if (!temXmlCest) {
-        corCestSac = '#ffb347';
+        corCestSac = '#28a745';
+        cestAtencao = true;
       } else {
-        // Divergência: apenas ponto de atenção (não usar vermelho de erro)
-        corCestSac = igualCest ? '#28a745' : '#ffb347';
+        corCestSac = '#28a745';
+        cestAtencao = !igualCest;
       }
       html += `
         <div class="detalhes-item-comparacao">
           <span class="detalhes-label">${formatarLabel('CEST')}</span>
           <span class="detalhes-value">${cestXMLRaw || '-'}</span>
-          <span class="detalhes-value" style="color: ${corCestSac};">${cestERP || '-'}</span>
+          <span class="detalhes-value" style="color: ${corCestSac};">${cestERP || '-'}${cestAtencao ? marcaAtencao('CEST diverge (ponto de atenção)') : ''}</span>
         </div>
       `;
 
       // cBenef (XML) vs beneficio_produto.COD_BENEFICIO (SAC) — ponto de atenção se divergir
       const cBenefComp = obterComparacaoCBenef(produto);
       let corCBenefSac;
+      let cBenefAtencao = false;
       if (!cBenefComp.temSac) {
-        corCBenefSac = cBenefComp.temXml ? '#ffb347' : 'var(--lumi-muted)';
+        corCBenefSac = cBenefComp.temXml ? '#28a745' : 'var(--lumi-muted)';
+        cBenefAtencao = cBenefComp.temXml;
       } else if (!cBenefComp.temXml) {
-        corCBenefSac = '#ffb347';
+        corCBenefSac = '#28a745';
+        cBenefAtencao = true;
       } else {
-        corCBenefSac = cBenefComp.igual ? '#28a745' : '#ffb347';
+        corCBenefSac = '#28a745';
+        cBenefAtencao = !cBenefComp.igual;
       }
       html += `
         <div class="detalhes-item-comparacao">
           <span class="detalhes-label">${formatarLabel('cBenef')}</span>
           <span class="detalhes-value">${cBenefComp.xml || '-'}</span>
-          <span class="detalhes-value" style="color: ${corCBenefSac};">${cBenefComp.sac || '-'}</span>
+          <span class="detalhes-value" style="color: ${corCBenefSac};">${cBenefComp.sac || '-'}${cBenefAtencao ? marcaAtencao('cBenef diverge (ponto de atenção)') : ''}</span>
         </div>
       `;
       
@@ -2476,7 +2572,7 @@
       }
       
       // Origem – Tabela A (XML "orig" x produto.atrib do ERP)
-      // Tratada como ponto de atencao (laranja), nao como erro (vermelho).
+      // Tratada como ponto de atencao (verde + *), nao como erro (vermelho).
       const valorOrigXML = produto.icmsOrig;
       const atribERP = dadosERP ? buscarCampo(dadosERP, 'produto_atrib', 'ATRIB', 'atrib') : null;
       const xmlOrigStr = (valorOrigXML !== undefined && valorOrigXML !== null && valorOrigXML !== '')
@@ -2498,11 +2594,9 @@
           estiloErpOrig = 'color: #1f7a55; font-size: 0.85rem; line-height: 1.4;';
         } else {
           // Ponto de atencao, NAO erro.
-          estiloXmlOrig += ' color: #b35c00;';
-          estiloErpOrig = 'color: #b35c00; font-size: 0.85rem; line-height: 1.4;';
-          badgeOrigem = ' <span title="Ponto de atenção: origem do XML difere do cadastro (produto.atrib)" '
-            + 'style="background:#fff4e0;color:#b35c00;border:1px solid #b35c00;border-radius:10px;'
-            + 'padding:1px 6px;font-size:0.7rem;font-weight:700;margin-left:4px;">⚠ Atenção</span>';
+          estiloXmlOrig += ' color: #28a745;';
+          estiloErpOrig = 'color: #28a745; font-size: 0.85rem; line-height: 1.4;';
+          badgeOrigem = marcaAtencao('Origem do XML difere do cadastro (produto.atrib)');
         }
       }
       html += `
@@ -2681,8 +2775,8 @@
           csosnAtencaoST === '203');
       if (ehCSTComSTZerada) {
         html += `
-          <div class="detalhes-item-comparacao" style="background: rgba(255, 193, 7, 0.12); border: 1px solid rgba(255, 193, 7, 0.4); border-radius: 8px; padding: 0.5rem 0.75rem; margin-bottom: 0.5rem;">
-            <span style="font-weight: 700; color: #856404; font-size: 0.9rem;">⚠ Ponto de atenção: ${rotuloCSTouCSOSN(produto)} com Base ST e Valor ICMS ST zerados no XML. Verifique se o SAC está correto.</span>
+          <div class="detalhes-item-comparacao banner-atencao" style="margin-bottom: 0.5rem;">
+            <span>(*) ${rotuloCSTouCSOSN(produto)} com Base ST e Valor ICMS ST zerados no XML. Verifique se o SAC está correto.</span>
             <span></span>
             <span></span>
           </div>
@@ -3266,17 +3360,7 @@
         trProduto.classList.remove('linha-com-erro', 'linha-com-atencao');
         const tdItem = trProduto.querySelector('.col-item');
         if (tdItem) {
-          const badge = tdItem.querySelector('.badge-erro') || tdItem.querySelector('.badge-atencao') || tdItem.querySelector('.badge-ok');
-          const badgeNovo = temErro
-            ? '<span class="badge-erro" title="Item com divergências">!</span>'
-            : temAtencao
-              ? '<span class="badge-atencao" title="Ponto de atenção (ex.: cBenef, ST zerado)">⚠</span>'
-              : '<span class="badge-ok" title="Item sem divergências">&#10003;</span>';
-          if (badge) {
-            badge.outerHTML = badgeNovo;
-          } else {
-            tdItem.innerHTML = `${item} ${badgeNovo}`;
-          }
+          atualizarBadgeCelula(tdItem, item, temErro, temAtencao, 'Item com divergências');
           if (temErro) trProduto.classList.add('linha-com-erro');
           else if (temAtencao) trProduto.classList.add('linha-com-atencao');
         }
@@ -3408,13 +3492,7 @@
           const tdItem = linha.querySelector('.col-item');
           if (tdItem && tdItem.textContent.trim().startsWith(String(item))) {
             linha.classList.remove('linha-com-erro', 'linha-com-atencao');
-            const badge = tdItem.querySelector('.badge-erro') || tdItem.querySelector('.badge-atencao') || tdItem.querySelector('.badge-ok');
-            const badgeNovo = temErro
-              ? '<span class="badge-erro" title="Item com divergências">!</span>'
-              : temAtencao
-                ? '<span class="badge-atencao" title="Ponto de atenção (ex.: cBenef, ST zerado)">⚠</span>'
-                : '<span class="badge-ok" title="Item sem divergências">✓</span>';
-            if (badge) badge.outerHTML = badgeNovo;
+            atualizarBadgeCelula(tdItem, item, temErro, temAtencao, 'Item com divergências');
             if (temErro) linha.classList.add('linha-com-erro');
             else if (temAtencao) linha.classList.add('linha-com-atencao');
             break;
@@ -3459,13 +3537,7 @@
           const tdItem = linha.querySelector('.col-item');
           if (tdItem && tdItem.textContent.trim().startsWith(String(item))) {
             linha.classList.remove('linha-com-erro', 'linha-com-atencao');
-            const badge = tdItem.querySelector('.badge-erro') || tdItem.querySelector('.badge-atencao') || tdItem.querySelector('.badge-ok');
-            const badgeNovo = temErro
-              ? '<span class="badge-erro" title="Item com divergências">!</span>'
-              : temAtencao
-                ? '<span class="badge-atencao" title="Ponto de atenção (ex.: cBenef, ST zerado)">⚠</span>'
-                : '<span class="badge-ok" title="Item sem divergências">✓</span>';
-            if (badge) badge.outerHTML = badgeNovo;
+            atualizarBadgeCelula(tdItem, item, temErro, temAtencao, 'Item com divergências');
             if (temErro) linha.classList.add('linha-com-erro');
             else if (temAtencao) linha.classList.add('linha-com-atencao');
             break;
