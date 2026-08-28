@@ -3589,7 +3589,86 @@
       }, 3000);
     }
 
- 
+function normalizarCST2Digitos(valor) {
+  if (valor === null || valor === undefined || String(valor).trim() === '') return '';
+  const d = String(valor).replace(/\D/g, '');
+  if (!d) return '';
+  return d.padStart(2, '0').slice(-2);
+}
+
+function analisarItemCST20(produto) {
+  const idx = produto?.item || '-';
+  const codigo = produto?.codigo || '-';
+  const cstXML = normalizarCST2Digitos(produto?.icmsCST);
+  const reducaoXML = parseFloat(produto?.icmsRedBC || 0) || 0;
+  const aliquotaXML = parseFloat(produto?.aliquotaICMS || 0) || 0;
+  const novaReducao = Math.max(0, Math.min(100, 100 - reducaoXML));
+  const dadoERP = produto?.dadosERP || null;
+  const origemERP = String(produto?.dadosERPOrigem || '').trim().toLowerCase();
+  const tributoERP = normalizarCST2Digitos(dadoERP ? buscarCampoERP(dadoERP, 'tributo', 'TRIBUTO') : null);
+  const reducaoERP = parseFloat((dadoERP ? buscarCampoERP(dadoERP, 'reducao', 'REDUCAO') : null) || 0) || 0;
+  const aliquotaERP = parseFloat((dadoERP ? buscarCampoERP(dadoERP, 'aliquota', 'ALIQUOTA') : null) || 0) || 0;
+
+  const diagnostico = {
+    item: idx,
+    codigo,
+    cstXML: cstXML || String(produto?.icmsCST || '-'),
+    tributoERP: tributoERP || '-',
+    tributoNovo: '20',
+    reducaoERP,
+    reducaoNova: novaReducao,
+    aliquotaERP,
+    aliquotaNova: aliquotaXML,
+    eligible: false,
+    reason: '',
+    payload: null
+  };
+
+  if (cstXML !== '20') {
+    diagnostico.reason = 'Item do XML não está com CST 20';
+    return diagnostico;
+  }
+  if (!dadoERP) {
+    diagnostico.reason = 'Item sem correspondência no ERP';
+    return diagnostico;
+  }
+  if (origemERP !== 'itemcomp') {
+    diagnostico.reason = 'Item não está lançado em itemcomp';
+    return diagnostico;
+  }
+  if (
+    tributoERP === '20' &&
+    Math.abs(reducaoERP - novaReducao) < 0.01 &&
+    Math.abs(aliquotaERP - aliquotaXML) < 0.01
+  ) {
+    diagnostico.reason = 'Item já está alinhado com o XML';
+    return diagnostico;
+  }
+
+  const fornece = buscarCampoERP(dadoERP, 'fornece', 'FORNECE') || buscarCampoERP(dadoERP, 'fornec', 'FORNEC') || null;
+  const numero = buscarCampoERP(dadoERP, 'numero', 'NUMERO', 'numero_nf', 'NUMERO_NF') || null;
+  const estab = buscarCampoERP(dadoERP, 'estab', 'ESTAB') || null;
+  const itemERP = buscarCampoERP(dadoERP, 'item', 'ITEM', 'nItem', 'NITEM', 'itemcomp', 'ITEMCOMP') || null;
+  if (!fornece || !numero || estab == null || itemERP == null) {
+    diagnostico.reason = 'Identificação ERP insuficiente para update';
+    return diagnostico;
+  }
+
+  diagnostico.eligible = true;
+  diagnostico.reason = tributoERP !== '20'
+    ? 'Elegível: aplicar CST 20, alíquota e redução do XML'
+    : 'Elegível: ajustar alíquota e/ou redução do XML';
+  diagnostico.payload = {
+    fornece,
+    numero,
+    estab,
+    item: itemERP,
+    tributo: 20,
+    reducao: novaReducao,
+    aliquota: aliquotaXML
+  };
+  return diagnostico;
+}
 
 async function aplicarCST20Massa() {
   try {
@@ -3604,88 +3683,17 @@ async function aplicarCST20Massa() {
 
     const diagnostics = [];
     const itensParaAtualizar = [];
-    const normalizarTributo = (valor) => {
-      if (valor === null || valor === undefined || String(valor).trim() === '') return '';
-      return String(valor).replace(/\D/g, '').padStart(2, '0').slice(0, 2);
-    };
-
-    let totalComparaveis = 0;
-    let totalDivergenciaCST = 0;
+    let totalCst20 = 0;
+    let totalAlinhados = 0;
 
     window.produtosData.forEach((produto) => {
       try {
-        const idx = produto.item || '-';
-        const cstXML = String(produto.icmsCST || '').trim();
-        const reducaoXML = parseFloat(produto.icmsRedBC || 0) || 0;
-        const aliquotaXML = parseFloat(produto.aliquotaICMS || 0) || 0;
-        const novaReducao = reducaoXML > 0 ? (100 - reducaoXML) : 0;
-        const dadoERP = produto.dadosERP || null;
-        const origemERP = String(produto.dadosERPOrigem || '').trim().toLowerCase();
-        const tributoERPraw = dadoERP ? buscarCampoERP(dadoERP, 'tributo', 'TRIBUTO') : null;
-        const reducaoERPraw = dadoERP ? buscarCampoERP(dadoERP, 'reducao', 'REDUCAO') : null;
-        const aliquotaERPraw = dadoERP ? buscarCampoERP(dadoERP, 'aliquota', 'ALIQUOTA') : null;
-        const tributoERP = normalizarTributo(tributoERPraw);
-        const reducaoERP = parseFloat(reducaoERPraw || 0) || 0;
-        const aliquotaERP = parseFloat(aliquotaERPraw || 0) || 0;
-        const divergenciaCST = !!(dadoERP && origemERP === 'itemcomp' && cstXML === '20' && tributoERP !== '20');
-
-        if (dadoERP && origemERP === 'itemcomp') {
-          totalComparaveis += 1;
-          if (divergenciaCST) totalDivergenciaCST += 1;
-        }
-
-        let eligible = false;
-        let reason = '';
-
-        if (cstXML !== '20') {
-          reason = 'Item do XML não está com CST 20';
-        } else if (!dadoERP) {
-          reason = 'Item sem correspondência no ERP';
-        } else if (origemERP !== 'itemcomp') {
-          reason = 'Item não está lançado em itemcomp';
-        } else if (
-          tributoERP === '20' &&
-          Math.abs(reducaoERP - novaReducao) < 0.01 &&
-          Math.abs(aliquotaERP - aliquotaXML) < 0.01
-        ) {
-          reason = 'Item já está alinhado com o XML';
-        } else {
-          eligible = true;
-          reason = divergenciaCST ? 'Elegível: divergência de CST detectada' : 'Elegível: ajuste de redução/alíquota';
-        }
-
-        const diagnostico = {
-          item: idx,
-          codigo: produto.codigo || '-',
-          cstXML,
-          tributoERP: tributoERP || '-',
-          tributoNovo: '20',
-          reducaoERP,
-          reducaoNova: novaReducao,
-          aliquotaERP,
-          aliquotaNova: aliquotaXML,
-          eligible,
-          reason
-        };
+        const diagnostico = analisarItemCST20(produto);
+        if (normalizarCST2Digitos(produto.icmsCST) === '20') totalCst20 += 1;
+        if (diagnostico.reason === 'Item já está alinhado com o XML') totalAlinhados += 1;
         diagnostics.push(diagnostico);
-
-        if (eligible) {
-          const fornece = buscarCampoERP(dadoERP, 'fornece', 'FORNECE') || buscarCampoERP(dadoERP, 'fornec', 'FORNEC') || null;
-          const numero = buscarCampoERP(dadoERP, 'numero', 'NUMERO', 'numero_nf', 'NUMERO_NF') || null;
-          const estab = buscarCampoERP(dadoERP, 'estab', 'ESTAB') || null;
-          const itemERP = buscarCampoERP(dadoERP, 'item', 'ITEM', 'nItem', 'NITEM', 'itemcomp', 'ITEMCOMP') || null;
-          const payload = {
-            tributo: 20,
-            reducao: novaReducao,
-            aliquota: aliquotaXML,
-            _preview: diagnostico
-          };
-          if (fornece && numero && estab != null && itemERP != null) {
-            itensParaAtualizar.push({ fornece, numero, estab, item: itemERP, ...payload });
-          } else {
-            diagnostico.eligible = false;
-            diagnostico.reason = 'Identificação ERP insuficiente para update';
-          }
+        if (diagnostico.eligible && diagnostico.payload) {
+          itensParaAtualizar.push({ ...diagnostico.payload, _preview: diagnostico });
         }
       } catch (e) {
         console.error('Erro ao avaliar produto para CST 20:', e);
@@ -3693,16 +3701,11 @@ async function aplicarCST20Massa() {
       }
     });
 
-    const totalItens = window.produtosData.length;
-    const todosItensCST20 = totalItens > 0 && window.produtosData.every((produto) => String(produto.icmsCST || '').trim() === '20');
-    const maioriaDivergente = totalComparaveis > 0 && totalDivergenciaCST > (totalComparaveis / 2);
-
     mostrarAnaliseCST20Massa({
-      totalItens,
-      totalComparaveis,
-      totalDivergenciaCST,
-      todosItensCST20,
-      maioriaDivergente
+      totalItens: window.produtosData.length,
+      totalCst20,
+      totalAlinhados,
+      totalElegiveis: itensParaAtualizar.length
     }, diagnostics, itensParaAtualizar);
   } catch (error) {
     console.error('Erro ao analisar CST 20 em massa:', error);
@@ -3901,8 +3904,8 @@ function obterAcoesItemcomp() {
   return [
     {
       id: 'cst20',
-      titulo: 'Fornecedor c/ Benefício Fiscal - Aplicar CST 20 do XML',
-      descricao: 'Analisa a NF, valida a regra global e permite gravar TRIBUTO, REDUCAO e ALIQUOTA no ERP.',
+      titulo: 'Aplicar CST 20, alíquota e redução do XML',
+      descricao: 'Nos itens com CST 20 no XML, grava TRIBUTO = 20, ALIQUOTA = pICMS e REDUCAO = 100 − pRedBC no itemcomp.',
       executar: aplicarCST20Massa
     },
     {
@@ -3944,27 +3947,7 @@ function contarElegiveisAcao(acaoId) {
   if (!Array.isArray(produtos) || produtos.length === 0) return 0;
 
   if (acaoId === 'cst20') {
-    const normalizarTributo = (v) => (v == null || String(v).trim() === '') ? '' : String(v).replace(/\D/g, '').padStart(2, '0').slice(0, 2);
-    let n = 0;
-    produtos.forEach((p) => {
-      const cst = String(p.icmsCST || '').trim();
-      const reducaoXML = parseFloat(p.icmsRedBC || 0) || 0;
-      const aliquotaXML = parseFloat(p.aliquotaICMS || 0) || 0;
-      const novaReducao = reducaoXML > 0 ? (100 - reducaoXML) : 0;
-      const dadoERP = p.dadosERP;
-      const origem = String(p.dadosERPOrigem || '').trim().toLowerCase();
-      const tributoERP = normalizarTributo(dadoERP ? buscarCampoERP(dadoERP, 'tributo', 'TRIBUTO') : null);
-      const reducaoERP = parseFloat((dadoERP ? buscarCampoERP(dadoERP, 'reducao', 'REDUCAO') : null) || 0) || 0;
-      const aliquotaERP = parseFloat((dadoERP ? buscarCampoERP(dadoERP, 'aliquota', 'ALIQUOTA') : null) || 0) || 0;
-      if (cst !== '20' || !dadoERP || origem !== 'itemcomp') return;
-      if (tributoERP === '20' && Math.abs(reducaoERP - novaReducao) < 0.01 && Math.abs(aliquotaERP - aliquotaXML) < 0.01) return;
-      const fornece = buscarCampoERP(dadoERP, 'fornece', 'FORNECE', 'fornec', 'FORNEC');
-      const numero = buscarCampoERP(dadoERP, 'numero', 'NUMERO', 'numero_nf', 'NUMERO_NF');
-      const estab = buscarCampoERP(dadoERP, 'estab', 'ESTAB');
-      const itemERP = buscarCampoERP(dadoERP, 'item', 'ITEM', 'nItem', 'NITEM', 'itemcomp', 'ITEMCOMP');
-      if (fornece && numero && estab != null && itemERP != null) n++;
-    });
-    return n;
+    return produtos.filter((p) => analisarItemCST20(p).eligible).length;
   }
   if (acaoId === 'cst60') {
     let n = 0;
@@ -4569,21 +4552,20 @@ function mostrarAnaliseCST20Massa(resumo, diagnostics, itensParaAtualizar) {
   box.style.boxShadow = '0 20px 40px rgba(0,0,0,0.3)';
 
   const resumoHtml = `
-    <div style="display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:0.75rem;margin:0.75rem 0 1rem 0;">
+    <div style="display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:0.75rem;margin:0.75rem 0 1rem 0;">
       <div><strong>Total itens</strong><br>${resumo.totalItens}</div>
-      <div><strong>Comparáveis</strong><br>${resumo.totalComparaveis}</div>
-      <div><strong>Divergência CST</strong><br>${resumo.totalDivergenciaCST}</div>
-      <div><strong>Todos XML CST 20</strong><br>${resumo.todosItensCST20 ? 'Sim' : 'Não'}</div>
-      <div><strong>Maioria divergente</strong><br>${resumo.maioriaDivergente ? 'Sim' : 'Não'}</div>
+      <div><strong>CST 20 no XML</strong><br>${resumo.totalCst20 ?? 0}</div>
+      <div><strong>Já alinhados</strong><br>${resumo.totalAlinhados ?? 0}</div>
+      <div><strong>Elegíveis</strong><br>${resumo.totalElegiveis ?? itensParaAtualizar.length}</div>
     </div>
     <p style="margin:0 0 1rem 0;color:${podeAplicar ? '#155724' : '#8a6d3b'};">
       ${podeAplicar
-        ? `A análise encontrou <strong>${itensParaAtualizar.length}</strong> item(ns) prontos para gravação em <code>itemcomp</code>.`
-        : 'A gravação foi bloqueada porque não existem itens elegíveis para atualização.'}
+        ? `Serão gravados em <code>itemcomp</code> nos <strong>${itensParaAtualizar.length}</strong> item(ns) com CST 20: <strong>TRIBUTO = 20</strong>, <strong>ALIQUOTA = pICMS</strong> e <strong>REDUCAO = 100 − pRedBC</strong>.`
+        : 'Nenhum item com CST 20 está elegível para gravação (NF não lançada, já alinhado ou identificação insuficiente).'}
     </p>
   `;
 
-  box.innerHTML = `<h3>Análise — Aplicar CST 20 do XML em itemcomp</h3>
+  box.innerHTML = `<h3>Análise — Aplicar CST 20, alíquota e redução do XML</h3>
     ${resumoHtml}
     <div style="margin-top: 0.5rem;">
       <table id="analise-cst20-table" style="width:100%; border-collapse:collapse; font-size:0.92rem;">
