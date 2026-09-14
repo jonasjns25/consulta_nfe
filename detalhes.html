@@ -1425,7 +1425,12 @@
 
     function formatarDataHoraSefaz(valor) {
       if (!valor) return '-';
-      const s = String(valor);
+      const s = String(valor).trim();
+      const naive = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+      const temFuso = /[zZ]|[+-]\d{2}:?\d{2}$/.test(s.replace(/\.\d+$/, ''));
+      if (naive && !temFuso) {
+        return `${naive[3]}/${naive[2]}/${naive[1]}, ${naive[4]}:${naive[5]}:${naive[6] || '00'}`;
+      }
       const date = new Date(s.includes('T') || s.includes('-') ? s : s.replace(' ', 'T'));
       if (isNaN(date.getTime())) return s;
       return date.toLocaleString('pt-BR', {

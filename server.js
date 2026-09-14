@@ -1079,6 +1079,22 @@ function colRow(row, ...names) {
     return undefined;
 }
 
+function dataHoraLocalIso(valor) {
+    const date = valor instanceof Date ? valor : new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}:${p(date.getSeconds())}`;
+}
+
+function dataConsultaSefaz(valor) {
+    if (!valor) return null;
+    if (valor instanceof Date) {
+        const p = (n) => String(n).padStart(2, '0');
+        return `${valor.getUTCFullYear()}-${p(valor.getUTCMonth() + 1)}-${p(valor.getUTCDate())}T${p(valor.getUTCHours())}:${p(valor.getUTCMinutes())}:${p(valor.getUTCSeconds())}`;
+    }
+    const s = String(valor).trim().replace(' ', 'T');
+    return s.replace(/\.\d+Z$/i, '').replace(/Z$/i, '');
+}
+
 function montarPainelSefaz(row, eventosRows) {
     if (!row) return null;
     const unpacked = desempacotarDetalheSefaz(colRow(row, 'detalhe'));
@@ -1097,7 +1113,7 @@ function montarPainelSefaz(row, eventosRows) {
         id: colRow(row, 'id'),
         chave: colRow(row, 'chave_nfe', 'chave'),
         estab: colRow(row, 'estab') || null,
-        consultadoEm: colRow(row, 'consultado_em'),
+        consultadoEm: dataConsultaSefaz(colRow(row, 'consultado_em')),
         situacao: colRow(row, 'situacao'),
         situacaoLabel: colRow(row, 'situacao_label'),
         cStat: colRow(row, 'c_stat'),
@@ -1115,7 +1131,7 @@ function painelSefazMemoria(chave, estab, statusSefaz) {
     return {
         chave,
         estab: estab || null,
-        consultadoEm: new Date().toISOString(),
+        consultadoEm: dataHoraLocalIso(),
         situacao: statusSefaz.situacao || null,
         situacaoLabel: statusSefaz.label || null,
         cStat: statusSefaz.cStat != null ? String(statusSefaz.cStat) : null,
@@ -1132,7 +1148,9 @@ async function buscarConsultasSefaz(chave) {
     try {
         if (!(await garantirTabelasSefazConsulta())) return fallback;
         const [rows] = await getConfNfPool().query(
-            `SELECT * FROM ${tabelaConfnf('conf_sefaz_consulta')} WHERE chave_nfe = ? ORDER BY id DESC`,
+            `SELECT id, chave_nfe, estab, DATE_FORMAT(consultado_em, '%Y-%m-%dT%H:%i:%s') AS consultado_em,
+                    situacao, situacao_label, c_stat, x_motivo, ambiente, tem_cce, detalhe
+             FROM ${tabelaConfnf('conf_sefaz_consulta')} WHERE chave_nfe = ? ORDER BY id DESC`,
             [chave]
         );
         if (!rows || rows.length === 0) return fallback;
