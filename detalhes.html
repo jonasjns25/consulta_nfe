@@ -131,6 +131,158 @@
       font-weight: 600;
     }
 
+    .sefaz-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 2.1rem;
+      padding: 0.4rem 0.95rem;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+
+    .sefaz-badge--pendente {
+      background: #f1f3f5;
+      color: #495057;
+      border-color: #dee2e6;
+    }
+
+    .sefaz-badge--ok {
+      background: #28a745;
+      color: #fff;
+    }
+
+    .sefaz-badge--cce {
+      background: #ffc107;
+      color: #5c4300;
+    }
+
+    .sefaz-badge--cancelada {
+      background: #dc3545;
+      color: #fff;
+    }
+
+    .sefaz-badge--denegada {
+      background: #6c757d;
+      color: #fff;
+    }
+
+    .sefaz-sit {
+      margin: 0 0 0.85rem 0;
+      padding: 0.75rem 1rem;
+      border-radius: 10px;
+      font-weight: 700;
+    }
+
+    .sefaz-sit.sefaz-badge--ok {
+      background: rgba(40, 167, 69, 0.12);
+      color: #1e7a3a;
+      border: 1px solid rgba(40, 167, 69, 0.35);
+    }
+
+    .sefaz-sit.sefaz-badge--cce {
+      background: rgba(255, 193, 7, 0.18);
+      color: #7a5b00;
+      border: 1px solid rgba(255, 193, 7, 0.55);
+    }
+
+    .sefaz-sit.sefaz-badge--cancelada {
+      background: rgba(220, 53, 69, 0.12);
+      color: #a71d2a;
+      border: 1px solid rgba(220, 53, 69, 0.35);
+    }
+
+    .sefaz-sit.sefaz-badge--denegada,
+    .sefaz-sit.sefaz-badge--pendente {
+      background: #f8f9fa;
+      color: #495057;
+      border: 1px solid #dee2e6;
+    }
+
+    .sefaz-meta {
+      font-size: 0.85rem;
+      color: var(--lumi-muted);
+      font-weight: 500;
+      margin: 0 0 0.75rem 0;
+    }
+
+    .sefaz-cce {
+      margin: 0 0 0.75rem 0;
+      padding: 0.6rem 0.85rem;
+      border-radius: 8px;
+      background: rgba(255, 193, 7, 0.16);
+      border: 1px solid rgba(255, 193, 7, 0.5);
+      color: #7a5b00;
+      font-size: 0.9rem;
+    }
+
+    .sefaz-cce-texto {
+      margin-top: 0.35rem;
+      white-space: pre-wrap;
+      font-weight: 500;
+      color: var(--lumi-dark);
+    }
+
+    .sefaz-tabela {
+      width: 100%;
+      min-width: 0;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+
+    .sefaz-tabela th,
+    .sefaz-tabela td {
+      text-align: left;
+      padding: 0.55rem 0.65rem;
+      border-bottom: 1px solid rgba(184, 134, 11, 0.25);
+      vertical-align: top;
+    }
+
+    .sefaz-tabela th {
+      background: rgba(184, 134, 11, 0.12);
+      color: #6b4f12;
+      font-weight: 700;
+    }
+
+    .sefaz-acoes {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .btn-sefaz {
+      border: none;
+      border-radius: 10px;
+      padding: 0.55rem 0.95rem;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--lumi-primary-strong);
+      color: #fff;
+    }
+
+    .btn-sefaz:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-sefaz-ghost {
+      background: rgba(200, 16, 46, 0.08);
+      color: var(--lumi-dark);
+    }
+
+    .sefaz-erro {
+      color: #c62828;
+      font-size: 0.88rem;
+      white-space: pre-wrap;
+      margin: 0.5rem 0 0;
+    }
+
     .table-wrapper {
       position: relative;
       overflow: auto;
@@ -685,11 +837,12 @@
     <div id="content" class="hidden">
       <section class="card" id="info-nfe">
         <div class="card-header">
-          <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
             <button type="button" class="btn-toggle-section collapsed" id="btn-toggle-info" onclick="toggleSection('info-nfe-content')" title="Expandir/Ocultar Informações da NF-e">
               <span class="icon">▼</span>
             </button>
             <h2 style="margin: 0;">Informações da NF-e</h2>
+            <span id="sefaz-badge-topo" class="sefaz-badge sefaz-badge--pendente">SEFAZ: não consultada</span>
           </div>
           <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
             <button type="button" class="btn-icon" id="btn-danfe" title="Visualizar/Imprimir DANFE (API Meu Danfe)" style="background: var(--lumi-primary-strong); color: white; border: none;">
@@ -722,6 +875,25 @@
         <div class="section-content" id="info-nfe-content">
           <div class="info-grid" id="info-grid"></div>
         </div>
+      </section>
+
+      <section class="card" id="sefaz-section">
+        <div class="card-header">
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+            <h2 style="margin: 0;">Situação na SEFAZ</h2>
+            <span id="sefaz-badge" class="sefaz-badge sefaz-badge--pendente">Não consultada</span>
+          </div>
+          <div class="sefaz-acoes">
+            <button type="button" class="btn-sefaz btn-sefaz-ghost" id="btn-sefaz-cert" title="Escolher certificado A1">Certificado</button>
+            <button type="button" class="btn-sefaz" id="btn-consultar-sefaz">Consultar SEFAZ</button>
+          </div>
+        </div>
+        <p class="sefaz-meta" id="sefaz-cert-info"></p>
+        <div id="sefaz-painel">
+          <p class="sefaz-meta">Ainda não há consulta gravada. Clique em Consultar SEFAZ para buscar a situação e os eventos.</p>
+        </div>
+        <p id="sefaz-status-msg" class="sefaz-meta hidden"></p>
+        <p id="sefaz-erro" class="sefaz-erro hidden"></p>
       </section>
 
       <section class="card" id="totais-section">
@@ -826,6 +998,15 @@
       document.getElementById('loading').classList.add('hidden');
       document.getElementById('error').classList.add('hidden');
       document.getElementById('content').classList.remove('hidden');
+
+      window.nfeChave = dados.chave;
+      window.nfeEstab = String(dados.estab || dados.destinatario?.cnpj || '').replace(/\D/g, '');
+      renderizarPainelSefaz(dados.sefazConsulta || null);
+      atualizarInfoCertSefaz();
+      const btnConsultarSefaz = document.getElementById('btn-consultar-sefaz');
+      const btnCertSefaz = document.getElementById('btn-sefaz-cert');
+      if (btnConsultarSefaz) btnConsultarSefaz.onclick = consultarSituacaoSefaz;
+      if (btnCertSefaz) btnCertSefaz.onclick = escolherCertificadoSefaz;
 
       // Configurar botões de ação
       const chaveNFe = dados.chave;
@@ -1172,6 +1353,224 @@
         });
       } catch {
         return data;
+      }
+    }
+
+    function formatarDataHoraSefaz(valor) {
+      if (!valor) return '-';
+      const s = String(valor);
+      const date = new Date(s.includes('T') || s.includes('-') ? s : s.replace(' ', 'T'));
+      if (isNaN(date.getTime())) return s;
+      return date.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    }
+
+    const CERT_STORAGE_KEY = 'sefaz.certSelecionado';
+    function lerCertSefaz() {
+      try {
+        const raw = sessionStorage.getItem(CERT_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch (_e) {
+        return null;
+      }
+    }
+    function salvarCertSefaz(cert) {
+      try {
+        if (cert) sessionStorage.setItem(CERT_STORAGE_KEY, JSON.stringify(cert));
+        else sessionStorage.removeItem(CERT_STORAGE_KEY);
+      } catch (_e) { /* ignore */ }
+    }
+    function atualizarInfoCertSefaz() {
+      const el = document.getElementById('sefaz-cert-info');
+      if (!el) return;
+      const cert = lerCertSefaz();
+      el.textContent = cert?.thumbprint
+        ? `Certificado: ${cert.nome || cert.thumbprint}`
+        : 'Usando o certificado do estabelecimento (A1).';
+    }
+
+    function escaparHtml(texto) {
+      return String(texto || '').replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+
+    function classeSituacaoSefaz(consulta) {
+      if (!consulta) return { classe: 'sefaz-badge--pendente', texto: 'Não consultada', textoTopo: 'SEFAZ: não consultada' };
+      const sit = String(consulta.situacao || consulta.situacaoLabel || '').toLowerCase();
+      const temCce = consulta.temCce || (consulta.eventos || []).some((e) => String(e.tpEvento) === '110110');
+      if (sit.includes('cancel')) {
+        return { classe: 'sefaz-badge--cancelada', texto: 'Cancelada', textoTopo: 'SEFAZ: cancelada' };
+      }
+      if (sit.includes('deneg')) {
+        return { classe: 'sefaz-badge--denegada', texto: 'Denegada', textoTopo: 'SEFAZ: denegada' };
+      }
+      if (temCce) {
+        return { classe: 'sefaz-badge--cce', texto: 'Autorizada • CCe', textoTopo: 'SEFAZ: autorizada com CCe' };
+      }
+      if (sit.includes('autoriz')) {
+        return { classe: 'sefaz-badge--ok', texto: 'Autorizada', textoTopo: 'SEFAZ: autorizada' };
+      }
+      const label = String(consulta.situacaoLabel || consulta.situacao || 'Indefinida');
+      return { classe: 'sefaz-badge--pendente', texto: label, textoTopo: `SEFAZ: ${label}` };
+    }
+
+    function atualizarBadgesSefaz(consulta) {
+      const info = classeSituacaoSefaz(consulta);
+      ['sefaz-badge', 'sefaz-badge-topo'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.className = `sefaz-badge ${info.classe}`;
+        el.textContent = id === 'sefaz-badge-topo' ? info.textoTopo : info.texto;
+      });
+    }
+
+    function renderizarPainelSefaz(consulta) {
+      const painel = document.getElementById('sefaz-painel');
+      if (!painel) return;
+      atualizarBadgesSefaz(consulta);
+      if (!consulta) {
+        painel.innerHTML = '<p class="sefaz-meta">Ainda não há consulta gravada. Clique em Consultar SEFAZ para buscar a situação e os eventos.</p>';
+        return;
+      }
+      const info = classeSituacaoSefaz(consulta);
+      const sit = escaparHtml(String(consulta.situacaoLabel || consulta.situacao || 'Indefinida').toUpperCase());
+      const amb = consulta.ambiente ? ` (Ambiente de autorização: ${escaparHtml(consulta.ambiente)})` : '';
+      const cces = (consulta.eventos || []).filter((e) => String(e.tpEvento) === '110110');
+      const temCce = consulta.temCce || cces.length > 0;
+      const linhas = (consulta.eventos || []).map((ev) => `
+        <tr>
+          <td>${escaparHtml(ev.descricao || '-')}</td>
+          <td>${escaparHtml(ev.protocolo || '-')}</td>
+          <td>${escaparHtml(formatarDataHoraSefaz(ev.dhEvento))}</td>
+          <td>${escaparHtml(formatarDataHoraSefaz(ev.dhRegEvento))}</td>
+        </tr>
+      `).join('');
+      const blocoCce = temCce
+        ? `<div class="sefaz-cce"><strong>Houve carta de correção (CCe) para esta NF-e.</strong>${
+            cces.map((c) => c.xCorrecao ? `<div class="sefaz-cce-texto">${escaparHtml(c.xCorrecao)}</div>` : '').join('')
+          }</div>`
+        : '';
+      painel.innerHTML = `
+        <div class="sefaz-sit ${info.classe}">Situação atual: ${sit}${amb}</div>
+        <p class="sefaz-meta">Última consulta: ${formatarDataHoraSefaz(consulta.consultadoEm)}</p>
+        ${blocoCce}
+        <div style="overflow:auto;">
+          <table class="sefaz-tabela">
+            <thead>
+              <tr>
+                <th>Eventos da NF-e</th>
+                <th>Protocolo</th>
+                <th>Data Autorização</th>
+                <th>Data Inclusão AN</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${linhas || '<tr><td colspan="4">Nenhum evento retornado pela SEFAZ nesta consulta.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    async function consultarSituacaoSefaz() {
+      const erroEl = document.getElementById('sefaz-erro');
+      const msgEl = document.getElementById('sefaz-status-msg');
+      const btn = document.getElementById('btn-consultar-sefaz');
+      erroEl.classList.add('hidden');
+      msgEl.classList.add('hidden');
+      const chaveNFe = window.nfeChave || '';
+      const estab = window.nfeEstab || '';
+      if (!chaveNFe || chaveNFe.length !== 44) {
+        erroEl.textContent = 'Chave da NF-e inválida.';
+        erroEl.classList.remove('hidden');
+        return;
+      }
+      if (!estab) {
+        erroEl.textContent = 'Estabelecimento (CNPJ) não identificado para consultar a SEFAZ.';
+        erroEl.classList.remove('hidden');
+        return;
+      }
+      const cert = lerCertSefaz();
+      btn.disabled = true;
+      msgEl.textContent = 'Consultando SEFAZ, aguarde…';
+      msgEl.classList.remove('hidden');
+      try {
+        const payload = { chave: chaveNFe, estab };
+        if (cert?.thumbprint) payload.thumbprint = cert.thumbprint;
+        const resp = await fetch('/api/nfe/consultar-status-sefaz', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          let msg = data?.erro || 'Falha ao consultar a SEFAZ.';
+          if (data?.orientacao) msg += '\n\n' + data.orientacao;
+          throw new Error(msg);
+        }
+        renderizarPainelSefaz(data.consulta || {
+          situacao: data.situacaoSefaz,
+          situacaoLabel: data.situacaoLabel,
+          ambiente: data.ambiente,
+          temCce: data.temCce,
+          consultadoEm: new Date().toISOString(),
+          eventos: data.eventos || []
+        });
+        msgEl.textContent = data.mensagem || 'Consulta concluída.';
+      } catch (e) {
+        erroEl.textContent = e?.message || 'Falha ao consultar a SEFAZ.';
+        erroEl.classList.remove('hidden');
+        msgEl.classList.add('hidden');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function escolherCertificadoSefaz() {
+      const erroEl = document.getElementById('sefaz-erro');
+      erroEl.classList.add('hidden');
+      try {
+        const resp = await fetch('/api/sefaz/certificados');
+        const data = await resp.json();
+        const lista = data.certificados || [];
+        if (!lista.length) {
+          throw new Error('Nenhum certificado encontrado no Windows.');
+        }
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:10050;display:flex;align-items:center;justify-content:center;';
+        overlay.innerHTML = `<div style="background:#fff;border-radius:12px;width:min(640px,92vw);max-height:80vh;overflow:auto;padding:1rem;box-shadow:0 12px 40px rgba(0,0,0,0.25);">
+          <h3 style="margin:0 0 0.75rem 0;">Selecione o certificado digital</h3>
+          <div id="cert-lista-det"></div>
+          <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:0.75rem;">
+            <button type="button" class="btn-sefaz btn-sefaz-ghost" id="cert-cancel">Cancelar</button>
+          </div>
+        </div>`;
+        document.body.appendChild(overlay);
+        const box = overlay.querySelector('#cert-lista-det');
+        lista.forEach((c) => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.style.cssText = 'display:block;width:100%;text-align:left;margin:0 0 0.4rem 0;padding:0.6rem 0.75rem;border:1px solid #eee;border-radius:8px;background:#fff;cursor:pointer;';
+          b.textContent = `${c.nome || c.thumbprint}${c.cnpj ? ' — ' + c.cnpj : ''}`;
+          b.addEventListener('click', () => {
+            salvarCertSefaz(c);
+            atualizarInfoCertSefaz();
+            overlay.remove();
+          });
+          box.appendChild(b);
+        });
+        overlay.querySelector('#cert-cancel').addEventListener('click', () => overlay.remove());
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+      } catch (e) {
+        erroEl.textContent = e?.message || 'Falha ao listar certificados.';
+        erroEl.classList.remove('hidden');
       }
     }
 

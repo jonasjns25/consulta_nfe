@@ -166,3 +166,37 @@ ON DUPLICATE KEY UPDATE
   pin_hash = VALUES(pin_hash),
   perfil = VALUES(perfil),
   ativo = VALUES(ativo);
+
+CREATE TABLE IF NOT EXISTS conf_sefaz_consulta (
+  id                INT NOT NULL AUTO_INCREMENT,
+  chave_nfe         VARCHAR(44) NOT NULL,
+  estab             VARCHAR(20) DEFAULT NULL,
+  consultado_em     DATETIME NOT NULL,
+  situacao          VARCHAR(20) DEFAULT NULL,
+  situacao_label    VARCHAR(80) DEFAULT NULL,
+  c_stat            VARCHAR(10) DEFAULT NULL,
+  x_motivo          VARCHAR(255) DEFAULT NULL,
+  ambiente          VARCHAR(20) DEFAULT NULL,
+  tem_cce           TINYINT(1) NOT NULL DEFAULT 0,
+  detalhe           TEXT,
+  PRIMARY KEY (id),
+  KEY idx_conf_sefaz_consulta_chave (chave_nfe)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS conf_sefaz_evento (
+  id                INT NOT NULL AUTO_INCREMENT,
+  id_consulta       INT NOT NULL,
+  chave_nfe         VARCHAR(44) NOT NULL,
+  tp_evento         VARCHAR(10) DEFAULT NULL,
+  n_seq             INT DEFAULT NULL,
+  descricao         VARCHAR(160) DEFAULT NULL,
+  protocolo         VARCHAR(30) DEFAULT NULL,
+  dh_evento         VARCHAR(40) DEFAULT NULL,
+  dh_reg_evento     VARCHAR(40) DEFAULT NULL,
+  orgao             VARCHAR(80) DEFAULT NULL,
+  x_correcao        TEXT,
+  PRIMARY KEY (id),
+  KEY idx_conf_sefaz_evento_consulta (id_consulta),
+  KEY idx_conf_sefaz_evento_chave (chave_nfe),
+  CONSTRAINT fk_conf_sefaz_evento_consulta FOREIGN KEY (id_consulta) REFERENCES conf_sefaz_consulta (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

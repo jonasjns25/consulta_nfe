@@ -847,8 +847,170 @@ app.get('/danfe/:chave', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
+// Persistência da consulta de situação/eventos na SEFAZ (banco confnf)
+// ─────────────────────────────────────────────────────────────
+const CONFN_DB_NAME = process.env.CONFNF_DB_NAME || 'confnf';
+const tabelaConfnf = (name) => `\`${CONFN_DB_NAME}\`.\`${name}\``;
+let tabelasSefazConsultaOk = false;
+
+async function garantirTabelasSefazConsulta() {
+    if (tabelasSefazConsultaOk) return true;
+    try {
+        await pool.query(`CREATE DATABASE IF NOT EXISTS \`${CONFN_DB_NAME}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS ${tabelaConfnf('conf_sefaz_consulta')} (
+                id INT NOT NULL AUTO_INCREMENT,
+                chave_nfe VARCHAR(44) NOT NULL,
+                estab VARCHAR(20) DEFAULT NULL,
+                consultado_em DATETIME NOT NULL,
+                situacao VARCHAR(20) DEFAULT NULL,
+                situacao_label VARCHAR(80) DEFAULT NULL,
+                c_stat VARCHAR(10) DEFAULT NULL,
+                x_motivo VARCHAR(255) DEFAULT NULL,
+                ambiente VARCHAR(20) DEFAULT NULL,
+                tem_cce TINYINT(1) NOT NULL DEFAULT 0,
+                detalhe TEXT,
+                PRIMARY KEY (id),
+                KEY idx_conf_sefaz_consulta_chave (chave_nfe)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS ${tabelaConfnf('conf_sefaz_evento')} (
+                id INT NOT NULL AUTO_INCREMENT,
+                id_consulta INT NOT NULL,
+                chave_nfe VARCHAR(44) NOT NULL,
+                tp_evento VARCHAR(10) DEFAULT NULL,
+                n_seq INT DEFAULT NULL,
+                descricao VARCHAR(160) DEFAULT NULL,
+                protocolo VARCHAR(30) DEFAULT NULL,
+                dh_evento VARCHAR(40) DEFAULT NULL,
+                dh_reg_evento VARCHAR(40) DEFAULT NULL,
+                orgao VARCHAR(80) DEFAULT NULL,
+                x_correcao TEXT,
+                PRIMARY KEY (id),
+                KEY idx_conf_sefaz_evento_consulta (id_consulta),
+                KEY idx_conf_sefaz_evento_chave (chave_nfe),
+                CONSTRAINT fk_conf_sefaz_evento_consulta
+                    FOREIGN KEY (id_consulta) REFERENCES ${tabelaConfnf('conf_sefaz_consulta')} (id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+        tabelasSefazConsultaOk = true;
+        return true;
+    } catch (error) {
+        console.error('[SEFAZ tabelas confnf]', error?.message || error);
+        return false;
+    }
+}
+
+function colRow(row, ...names) {
+    if (!row) return undefined;
+    const keys = Object.keys(row);
+    for (const n of names) {
+        const k = keys.find((x) => x.toLowerCase() === n.toLowerCase());
+        if (k !== undefined) return row[k];
+    }
+    return undefined;
+}
+
+function montarPainelSefaz(row, eventosRows) {
+    if (!row) return null;
+    return {
+        id: colRow(row, 'id'),
+        chave: colRow(row, 'chave_nfe', 'chave'),
+        estab: colRow(row, 'estab') || null,
+        consultadoEm: colRow(row, 'consultado_em'),
+        situacao: colRow(row, 'situacao'),
+        situacaoLabel: colRow(row, 'situacao_label'),
+        cStat: colRow(row, 'c_stat'),
+        xMotivo: colRow(row, 'x_motivo'),
+        ambiente: colRow(row, 'ambiente') || '',
+        temCce: Number(colRow(row, 'tem_cce')) === 1,
+        detalhe: colRow(row, 'detalhe') || null,
+        eventos: (eventosRows || []).map((ev) => ({
+            tpEvento: colRow(ev, 'tp_evento'),
+            nSeqEvento: colRow(ev, 'n_seq'),
+            descricao: colRow(ev, 'descricao'),
+            protocolo: colRow(ev, 'protocolo'),
+            dhEvento: colRow(ev, 'dh_evento'),
+            dhRegEvento: colRow(ev, 'dh_reg_evento'),
+            orgao: colRow(ev, 'orgao'),
+            xCorrecao: colRow(ev, 'x_correcao') || '',
+        })),
+    };
+}
+
+async function buscarUltimaConsultaSefaz(chave) {
+    try {
+        if (!(await garantirTabelasSefazConsulta())) return null;
+        const [rows] = await pool.query(
+            `SELECT * FROM ${tabelaConfnf('conf_sefaz_consulta')} WHERE chave_nfe = ? ORDER BY id DESC LIMIT 1`,
+            [chave]
+        );
+        if (!rows || rows.length === 0) return null;
+        const idConsulta = colRow(rows[0], 'id');
+        const [evs] = await pool.query(
+            `SELECT * FROM ${tabelaConfnf('conf_sefaz_evento')} WHERE id_consulta = ? ORDER BY id ASC`,
+            [idConsulta]
+        );
+        return montarPainelSefaz(rows[0], evs);
+    } catch (error) {
+        console.error('[SEFAZ buscar consulta]', error?.message || error);
+        return null;
+    }
+}
+
+async function salvarConsultaSefaz(chave, estab, statusSefaz) {
+    try {
+        if (!(await garantirTabelasSefazConsulta())) return null;
+        const eventos = Array.isArray(statusSefaz.eventos) ? statusSefaz.eventos : [];
+        const temCce = statusSefaz.temCce || eventos.some((e) => String(e.tpEvento) === '110110');
+        const [ins] = await pool.query(
+            `INSERT INTO ${tabelaConfnf('conf_sefaz_consulta')}
+                (chave_nfe, estab, consultado_em, situacao, situacao_label, c_stat, x_motivo, ambiente, tem_cce, detalhe)
+             VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                chave,
+                estab || null,
+                statusSefaz.situacao || null,
+                statusSefaz.label || null,
+                statusSefaz.cStat != null ? String(statusSefaz.cStat) : null,
+                statusSefaz.xMotivo ? String(statusSefaz.xMotivo).slice(0, 255) : null,
+                statusSefaz.ambiente || '',
+                temCce ? 1 : 0,
+                statusSefaz.detalhe || null,
+            ]
+        );
+        const idConsulta = ins.insertId;
+        for (const ev of eventos) {
+            await pool.query(
+                `INSERT INTO ${tabelaConfnf('conf_sefaz_evento')}
+                    (id_consulta, chave_nfe, tp_evento, n_seq, descricao, protocolo, dh_evento, dh_reg_evento, orgao, x_correcao)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    idConsulta,
+                    chave,
+                    ev.tpEvento || null,
+                    ev.nSeqEvento || 0,
+                    ev.descricao || null,
+                    ev.protocolo || null,
+                    ev.dhEvento || null,
+                    ev.dhRegEvento || null,
+                    ev.orgao || null,
+                    ev.xCorrecao || null,
+                ]
+            );
+        }
+        return buscarUltimaConsultaSefaz(chave);
+    } catch (error) {
+        console.error('[SEFAZ salvar consulta]', error?.message || error);
+        return null;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 // API de consulta SEFAZ por chave
 // ─────────────────────────────────────────────────────────────
+
 
 /** GET /api/sefaz/diagnostico?cnpj=14digitos → diagnóstico de certificados visíveis */
 app.get('/api/sefaz/diagnostico', async (req, res) => {
@@ -1080,12 +1242,21 @@ app.post('/api/nfe/consultar-status-sefaz', async (req, res) => {
             mensagem += ' Nenhuma alteração no banco (situação não identificada como cancelada).';
         }
 
+        const painel = await salvarConsultaSefaz(chave, codEstab, statusSefaz);
+        if (statusSefaz.temCce) {
+            mensagem += ' Há carta de correção (CCe) registrada.';
+        }
+
         return res.json({
             situacaoSefaz: statusSefaz.situacao,
             situacaoLabel: statusSefaz.label,
             cStat: statusSefaz.cStat,
             xMotivo: statusSefaz.xMotivo,
             detalhe: statusSefaz.detalhe,
+            ambiente: statusSefaz.ambiente || '',
+            temCce: Boolean(statusSefaz.temCce),
+            eventos: statusSefaz.eventos || [],
+            consulta: painel,
             existeNoBanco: !!registroBanco,
             idNfe: registroBanco ? registroBanco.IDNFE_XML : null,
             sitnfeAnterior,
@@ -1097,6 +1268,21 @@ app.post('/api/nfe/consultar-status-sefaz', async (req, res) => {
         console.error('[ConsultarStatusSEFAZ]', error?.message || error);
         const fmt = formatarErroRespostaSefaz(error);
         return res.status(fmt.status).json(fmt.body);
+    }
+});
+
+/** GET /api/nfe/sefaz-consulta/:chave → última consulta de situação/eventos gravada */
+app.get('/api/nfe/sefaz-consulta/:chave', async (req, res) => {
+    const chave = String(req.params.chave || '').replace(/\D/g, '');
+    if (chave.length !== 44) {
+        return res.status(400).json({ erro: 'Chave de acesso inválida.' });
+    }
+    try {
+        const consulta = await buscarUltimaConsultaSefaz(chave);
+        return res.json({ consulta });
+    } catch (error) {
+        console.error('[SEFAZ consulta gravada]', error?.message || error);
+        return res.status(500).json({ erro: error?.message || 'Falha ao ler consulta gravada.' });
     }
 });
 
@@ -1248,7 +1434,7 @@ app.get('/detalhes/:chave', async (req, res) => {
 
     try {
         const [rows] = await pool.query(
-            'SELECT XML FROM nfe_xml WHERE CHAVE = ? LIMIT 1',
+            'SELECT XML, ESTAB, SITNFE FROM nfe_xml WHERE CHAVE = ? LIMIT 1',
             [chave]
         );
         
@@ -1257,6 +1443,8 @@ app.get('/detalhes/:chave', async (req, res) => {
         }
 
         const xmlData = rows[0].XML;
+        const estabNfe = rows[0].ESTAB != null ? String(rows[0].ESTAB).trim() : '';
+        const sitnfe = rows[0].SITNFE != null ? Number(rows[0].SITNFE) : null;
         const parser = new xml2js.Parser({ 
             explicitArray: false, 
             mergeAttrs: true,
@@ -2212,7 +2400,10 @@ app.get('/detalhes/:chave', async (req, res) => {
             tolerancia: tolerancia,
             produtos: produtos,
             compraCFOP: compraCFOP,
-            compraStatus: compraStatus
+            compraStatus: compraStatus,
+            estab: estabNfe,
+            sitnfe,
+            sefazConsulta: await buscarUltimaConsultaSefaz(chave)
         };
 
         res.json(dadosNfe);

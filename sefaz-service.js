@@ -605,6 +605,138 @@ function coletarInfEventos(obj, lista = []) {
     return lista;
 }
 
+const DESC_TP_EVENTO = {
+    '110110': 'Carta de Correção',
+    '110111': 'Cancelamento',
+    '110112': 'Encerramento',
+    '110140': 'EPEC',
+    '111500': 'Pedido de Prorrogação 1º prazo',
+    '111501': 'Pedido de Prorrogação 2º prazo',
+    '210200': 'Confirmação da Operação pelo Destinatário',
+    '210210': 'Ciência da Operação pelo Destinatário',
+    '210220': 'Desconhecimento da Operação',
+    '210240': 'Operação não Realizada',
+};
+
+function textoCampo(v) {
+    if (v === undefined || v === null) return '';
+    if (typeof v === 'object') return String(v['#text'] ?? v._text ?? '').trim();
+    return String(v).trim();
+}
+
+function rotuloOrgaoSefaz(cOrgao) {
+    const c = textoCampo(cOrgao);
+    if (c === '91') return 'AN';
+    return c;
+}
+
+function rotuloEventoSefaz(tpEvento, descXml) {
+    const tp = textoCampo(tpEvento);
+    return DESC_TP_EVENTO[tp] || textoCampo(descXml) || (tp ? `Evento ${tp}` : 'Evento');
+}
+
+function rotuloAmbienteSefaz(tpAmb) {
+    const a = textoCampo(tpAmb);
+    if (a === '1') return 'produção';
+    if (a === '2') return 'homologação';
+    return a || '';
+}
+
+function comoLista(v) {
+    if (v == null) return [];
+    return Array.isArray(v) ? v : [v];
+}
+
+function eventoDeProcEvento(proc) {
+    if (!proc || typeof proc !== 'object') return null;
+    const inf = proc.evento?.infEvento || proc.infEvento || {};
+    const ret = proc.retEvento?.infEvento || {};
+    const det = inf.detEvento || {};
+    const tp = textoCampo(inf.tpEvento || ret.tpEvento);
+    if (!tp) return null;
+    const cOrgao = textoCampo(ret.cOrgao || inf.cOrgao);
+    const orgao = rotuloOrgaoSefaz(cOrgao);
+    let descricao = rotuloEventoSefaz(tp, det.descEvento);
+    if (orgao) descricao += ` (Órgão Autor: ${orgao})`;
+    return {
+        tpEvento: tp,
+        nSeqEvento: Number(textoCampo(inf.nSeqEvento || ret.nSeqEvento) || 1) || 1,
+        descricao,
+        protocolo: textoCampo(ret.nProt || inf.nProt),
+        dhEvento: textoCampo(inf.dhEvento),
+        dhRegEvento: textoCampo(ret.dhRegEvento),
+        orgao,
+        cOrgao,
+        xCorrecao: textoCampo(det.xCorrecao),
+    };
+}
+
+/**
+ * Monta a lista de eventos da NF-e (autorização + procEventoNFe) a partir dos docs da Dist DFe.
+ */
+function extrairEventosSefaz(docs) {
+    const eventos = [];
+    const vistos = new Set();
+    let ambiente = '';
+    let autorizacao = null;
+
+    const registrar = (ev) => {
+        if (!ev) return;
+        const chaveEv = `${ev.tpEvento}|${ev.nSeqEvento || 0}|${ev.protocolo || ''}`;
+        if (vistos.has(chaveEv)) return;
+        vistos.add(chaveEv);
+        eventos.push(ev);
+    };
+
+    for (const doc of docs || []) {
+        const xml = doc.xml;
+        if (!xml) continue;
+        let obj;
+        try {
+            obj = parserStatusXml.parse(xml);
+        } catch (_e) {
+            continue;
+        }
+
+        const infProt = obj.nfeProc?.protNFe?.infProt || obj.protNFe?.infProt;
+        if (infProt && textoCampo(infProt.nProt)) {
+            if (!ambiente) ambiente = rotuloAmbienteSefaz(infProt.tpAmb);
+            autorizacao = {
+                tpEvento: 'autorizacao',
+                nSeqEvento: 0,
+                descricao: 'Autorização de Uso',
+                protocolo: textoCampo(infProt.nProt),
+                dhEvento: textoCampo(infProt.dhRecbto),
+                dhRegEvento: textoCampo(infProt.dhRecbto),
+                orgao: rotuloOrgaoSefaz(infProt.cOrgao),
+                cOrgao: textoCampo(infProt.cOrgao),
+                xCorrecao: '',
+            };
+        }
+
+        const procs = [
+            ...comoLista(obj.procEventoNFe),
+            ...comoLista(obj.procEvento),
+        ];
+        if (procs.length) {
+            for (const proc of procs) {
+                const ev = eventoDeProcEvento(proc);
+                if (ev) {
+                    if (!ambiente) ambiente = rotuloAmbienteSefaz(proc.evento?.infEvento?.tpAmb || proc.retEvento?.infEvento?.tpAmb);
+                    registrar(ev);
+                }
+            }
+        } else if (obj.evento || obj.retEvento) {
+            const ev = eventoDeProcEvento(obj);
+            if (ev) registrar(ev);
+        }
+    }
+
+    if (autorizacao) eventos.unshift(autorizacao);
+    const temCce = eventos.some((e) => e.tpEvento === '110110');
+    return { eventos, ambiente, temCce };
+}
+
 /**
  * Interpreta documentos retornados pela Distribuição DFe (resNFe, procNFe, eventos).
  * Situação "cancelada" quando cSitNFe=3 ou evento tpEvento 110111 (cancelamento homologado).
@@ -723,15 +855,22 @@ async function consultarStatusPorChave(chave, dnCert, uf, opts = {}) {
             cStat: cStat != null ? String(cStat) : null,
             xMotivo: xMotivo != null ? String(xMotivo) : null,
             origemDeteccao: 'resposta_sefaz_653',
+            eventos: [],
+            ambiente: '',
+            temCce: false,
         };
     }
 
     const analise = analisarSituacaoNFeSefaz(docs, cStat, xMotivo);
+    const extra = extrairEventosSefaz(docs);
     return {
         chave: chaveLimpa,
         cnpj,
         ...analise,
         origemDeteccao: 'documento_distribuicao',
+        eventos: extra.eventos,
+        ambiente: extra.ambiente,
+        temCce: extra.temCce,
     };
 }
 
@@ -806,6 +945,7 @@ module.exports = {
     consultarXmlPorChave,
     consultarStatusPorChave,
     analisarSituacaoNFeSefaz,
+    extrairEventosSefaz,
     nfCanceladaNaRespostaSefaz,
     extrairCnpjDoDN,
     diagnosticarCertificados,
