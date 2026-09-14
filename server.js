@@ -910,6 +910,12 @@ function gravarCacheSefaz(chave, painel) {
     if (!chave || !painel) return;
     try {
         const all = lerCacheSefazDisco();
+        const prev = all[chave];
+        const eventosPrev = (prev && prev.eventos) || [];
+        const eventosNovo = painel.eventos || [];
+        if (eventosPrev.length > eventosNovo.length) {
+            painel = { ...painel, eventos: eventosPrev, temCce: painel.temCce || prev.temCce };
+        }
         all[chave] = painel;
         fs.writeFileSync(SEFAZ_CACHE_PATH, JSON.stringify(all));
     } catch (error) {
@@ -917,10 +923,59 @@ function gravarCacheSefaz(chave, painel) {
     }
 }
 
+const PREFIXO_DETALHE_EVT = 'SEFAZ_EVT:';
+
+function empacotarDetalheSefaz(detalhe, eventos) {
+    return PREFIXO_DETALHE_EVT + JSON.stringify({ detalhe: detalhe || null, eventos: eventos || [] });
+}
+
+function desempacotarDetalheSefaz(raw) {
+    const s = String(raw || '');
+    if (!s.startsWith(PREFIXO_DETALHE_EVT)) return { detalhe: raw || null, eventos: null };
+    try {
+        const o = JSON.parse(s.slice(PREFIXO_DETALHE_EVT.length));
+        return { detalhe: o.detalhe || null, eventos: Array.isArray(o.eventos) ? o.eventos : [] };
+    } catch (_e) {
+        return { detalhe: raw, eventos: null };
+    }
+}
+
+async function criarTabelaEventoSefaz() {
+    try {
+        await getConfNfPool().query(`
+            CREATE TABLE IF NOT EXISTS ${tabelaConfnf('conf_sefaz_evento')} (
+                id INT NOT NULL AUTO_INCREMENT,
+                id_consulta INT NOT NULL,
+                chave_nfe VARCHAR(44) NOT NULL,
+                tp_evento VARCHAR(10) DEFAULT NULL,
+                n_seq INT DEFAULT NULL,
+                descricao VARCHAR(255) DEFAULT NULL,
+                protocolo VARCHAR(30) DEFAULT NULL,
+                dh_evento VARCHAR(40) DEFAULT NULL,
+                dh_reg_evento VARCHAR(40) DEFAULT NULL,
+                orgao VARCHAR(80) DEFAULT NULL,
+                x_correcao TEXT,
+                PRIMARY KEY (id),
+                KEY idx_conf_sefaz_evento_consulta (id_consulta),
+                KEY idx_conf_sefaz_evento_chave (chave_nfe)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+        return true;
+    } catch (error) {
+        console.error('[SEFAZ tabela evento]', error?.message || error);
+        return false;
+    }
+}
+
 async function garantirTabelasSefazConsulta() {
     if (tabelasSefazConsultaOk) return true;
     try {
         await getConfNfPool().query(`SELECT 1 FROM ${tabelaConfnf('conf_sefaz_consulta')} LIMIT 1`);
+        try {
+            await getConfNfPool().query(`SELECT 1 FROM ${tabelaConfnf('conf_sefaz_evento')} LIMIT 1`);
+        } catch (_errEvt) {
+            await criarTabelaEventoSefaz();
+        }
         tabelasSefazConsultaOk = true;
         return true;
     } catch (_errSelect) {
@@ -1024,6 +1079,18 @@ function colRow(row, ...names) {
 
 function montarPainelSefaz(row, eventosRows) {
     if (!row) return null;
+    const unpacked = desempacotarDetalheSefaz(colRow(row, 'detalhe'));
+    const eventosTabela = (eventosRows || []).map((ev) => ({
+        tpEvento: colRow(ev, 'tp_evento'),
+        nSeqEvento: colRow(ev, 'n_seq'),
+        descricao: colRow(ev, 'descricao'),
+        protocolo: colRow(ev, 'protocolo'),
+        dhEvento: colRow(ev, 'dh_evento'),
+        dhRegEvento: colRow(ev, 'dh_reg_evento'),
+        orgao: colRow(ev, 'orgao'),
+        xCorrecao: colRow(ev, 'x_correcao') || '',
+    }));
+    const eventos = eventosTabela.length ? eventosTabela : (unpacked.eventos || []);
     return {
         id: colRow(row, 'id'),
         chave: colRow(row, 'chave_nfe', 'chave'),
@@ -1034,18 +1101,9 @@ function montarPainelSefaz(row, eventosRows) {
         cStat: colRow(row, 'c_stat'),
         xMotivo: colRow(row, 'x_motivo'),
         ambiente: colRow(row, 'ambiente') || '',
-        temCce: Number(colRow(row, 'tem_cce')) === 1,
-        detalhe: colRow(row, 'detalhe') || null,
-        eventos: (eventosRows || []).map((ev) => ({
-            tpEvento: colRow(ev, 'tp_evento'),
-            nSeqEvento: colRow(ev, 'n_seq'),
-            descricao: colRow(ev, 'descricao'),
-            protocolo: colRow(ev, 'protocolo'),
-            dhEvento: colRow(ev, 'dh_evento'),
-            dhRegEvento: colRow(ev, 'dh_reg_evento'),
-            orgao: colRow(ev, 'orgao'),
-            xCorrecao: colRow(ev, 'x_correcao') || '',
-        })),
+        temCce: Number(colRow(row, 'tem_cce')) === 1 || eventos.some((e) => String(e.tpEvento) === '110110'),
+        detalhe: unpacked.detalhe,
+        eventos,
     };
 }
 
@@ -1076,11 +1134,23 @@ async function buscarUltimaConsultaSefaz(chave) {
             );
             if (rows && rows.length > 0) {
                 const idConsulta = colRow(rows[0], 'id');
-                const [evs] = await getConfNfPool().query(
-                    `SELECT * FROM ${tabelaConfnf('conf_sefaz_evento')} WHERE id_consulta = ? ORDER BY id ASC`,
-                    [idConsulta]
-                );
-                return montarPainelSefaz(rows[0], evs);
+                let evs = [];
+                try {
+                    const [evRows] = await getConfNfPool().query(
+                        `SELECT * FROM ${tabelaConfnf('conf_sefaz_evento')} WHERE id_consulta = ? ORDER BY id ASC`,
+                        [idConsulta]
+                    );
+                    evs = evRows || [];
+                } catch (_errEvs) {
+                    evs = [];
+                }
+                const painel = montarPainelSefaz(rows[0], evs);
+                const cache = lerCacheSefaz(chave);
+                if (painel && !(painel.eventos || []).length && cache && (cache.eventos || []).length) {
+                    painel.eventos = cache.eventos;
+                    painel.temCce = painel.temCce || cache.temCce;
+                }
+                return painel;
             }
         }
     } catch (error) {
@@ -1108,31 +1178,36 @@ async function salvarConsultaSefaz(chave, estab, statusSefaz) {
                 painelMemoria.xMotivo ? String(painelMemoria.xMotivo).slice(0, 255) : null,
                 painelMemoria.ambiente,
                 painelMemoria.temCce ? 1 : 0,
-                painelMemoria.detalhe,
+                empacotarDetalheSefaz(painelMemoria.detalhe, eventos),
             ]
         );
         const idConsulta = ins.insertId;
-        for (const ev of eventos) {
-            await getConfNfPool().query(
-                `INSERT INTO ${tabelaConfnf('conf_sefaz_evento')}
+        try {
+            for (const ev of eventos) {
+                await getConfNfPool().query(
+                    `INSERT INTO ${tabelaConfnf('conf_sefaz_evento')}
                     (id_consulta, chave_nfe, tp_evento, n_seq, descricao, protocolo, dh_evento, dh_reg_evento, orgao, x_correcao)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [
-                    idConsulta,
-                    chave,
-                    ev.tpEvento || null,
-                    ev.nSeqEvento || 0,
-                    ev.descricao ? String(ev.descricao).slice(0, 160) : null,
-                    ev.protocolo || null,
-                    ev.dhEvento || null,
-                    ev.dhRegEvento || null,
-                    ev.orgao || null,
-                    ev.xCorrecao || null,
-                ]
-            );
+                    [
+                        idConsulta,
+                        chave,
+                        ev.tpEvento || null,
+                        ev.nSeqEvento || 0,
+                        ev.descricao ? String(ev.descricao).slice(0, 160) : null,
+                        ev.protocolo || null,
+                        ev.dhEvento || null,
+                        ev.dhRegEvento || null,
+                        ev.orgao || null,
+                        ev.xCorrecao || null,
+                    ]
+                );
+            }
+        } catch (errEv) {
+            console.warn('[SEFAZ salvar eventos]', errEv?.message || errEv);
+            await criarTabelaEventoSefaz();
         }
         const gravado = await buscarUltimaConsultaSefaz(chave);
-        if (gravado) {
+        if (gravado && (gravado.eventos || []).length) {
             gravarCacheSefaz(chave, gravado);
             return gravado;
         }
