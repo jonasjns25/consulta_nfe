@@ -906,17 +906,19 @@ function lerCacheSefaz(chave) {
     return all[chave] || null;
 }
 
-function gravarCacheSefaz(chave, painel) {
+function historicoDoCache(chave) {
+    const cache = lerCacheSefaz(chave);
+    if (!cache) return [];
+    if (Array.isArray(cache.historico) && cache.historico.length) return cache.historico;
+    return [cache];
+}
+
+function gravarCacheSefaz(chave, painel, historico) {
     if (!chave || !painel) return;
     try {
         const all = lerCacheSefazDisco();
-        const prev = all[chave];
-        const eventosPrev = (prev && prev.eventos) || [];
-        const eventosNovo = painel.eventos || [];
-        if (eventosPrev.length > eventosNovo.length) {
-            painel = { ...painel, eventos: eventosPrev, temCce: painel.temCce || prev.temCce };
-        }
-        all[chave] = painel;
+        const lista = Array.isArray(historico) && historico.length ? historico : [painel];
+        all[chave] = { ...lista[0], historico: lista };
         fs.writeFileSync(SEFAZ_CACHE_PATH, JSON.stringify(all));
     } catch (error) {
         console.warn('[SEFAZ cache arquivo]', error?.message || error);
@@ -1125,45 +1127,53 @@ function painelSefazMemoria(chave, estab, statusSefaz) {
     };
 }
 
-async function buscarUltimaConsultaSefaz(chave) {
+async function buscarConsultasSefaz(chave) {
+    const fallback = historicoDoCache(chave);
     try {
-        if (await garantirTabelasSefazConsulta()) {
-            const [rows] = await getConfNfPool().query(
-                `SELECT * FROM ${tabelaConfnf('conf_sefaz_consulta')} WHERE chave_nfe = ? ORDER BY id DESC LIMIT 1`,
-                [chave]
-            );
-            if (rows && rows.length > 0) {
-                const idConsulta = colRow(rows[0], 'id');
-                let evs = [];
-                try {
-                    const [evRows] = await getConfNfPool().query(
-                        `SELECT * FROM ${tabelaConfnf('conf_sefaz_evento')} WHERE id_consulta = ? ORDER BY id ASC`,
-                        [idConsulta]
-                    );
-                    evs = evRows || [];
-                } catch (_errEvs) {
-                    evs = [];
-                }
-                const painel = montarPainelSefaz(rows[0], evs);
-                const cache = lerCacheSefaz(chave);
-                if (painel && !(painel.eventos || []).length && cache && (cache.eventos || []).length) {
-                    painel.eventos = cache.eventos;
-                    painel.temCce = painel.temCce || cache.temCce;
-                }
-                return painel;
+        if (!(await garantirTabelasSefazConsulta())) return fallback;
+        const [rows] = await getConfNfPool().query(
+            `SELECT * FROM ${tabelaConfnf('conf_sefaz_consulta')} WHERE chave_nfe = ? ORDER BY id DESC`,
+            [chave]
+        );
+        if (!rows || rows.length === 0) return fallback;
+        const ids = rows.map((r) => colRow(r, 'id')).filter((id) => id != null);
+        let evs = [];
+        if (ids.length) {
+            try {
+                const [evRows] = await getConfNfPool().query(
+                    `SELECT * FROM ${tabelaConfnf('conf_sefaz_evento')} WHERE id_consulta IN (${ids.map(() => '?').join(',')}) ORDER BY id ASC`,
+                    ids
+                );
+                evs = evRows || [];
+            } catch (_errEvs) {
+                evs = [];
             }
         }
+        const porConsulta = {};
+        for (const ev of evs) {
+            const id = colRow(ev, 'id_consulta');
+            (porConsulta[id] || (porConsulta[id] = [])).push(ev);
+        }
+        return rows.map((row) => montarPainelSefaz(row, porConsulta[colRow(row, 'id')] || []));
     } catch (error) {
-        console.error('[SEFAZ buscar consulta]', error?.message || error);
+        console.error('[SEFAZ buscar historico]', error?.message || error);
+        return fallback;
     }
-    return lerCacheSefaz(chave);
+}
+
+async function buscarUltimaConsultaSefaz(chave) {
+    const lista = await buscarConsultasSefaz(chave);
+    return lista[0] || null;
 }
 
 async function salvarConsultaSefaz(chave, estab, statusSefaz) {
     const painelMemoria = painelSefazMemoria(chave, estab, statusSefaz);
-    gravarCacheSefaz(chave, painelMemoria);
+    const historicoLocal = [painelMemoria, ...historicoDoCache(chave)];
+    gravarCacheSefaz(chave, painelMemoria, historicoLocal);
     try {
-        if (!(await garantirTabelasSefazConsulta())) return painelMemoria;
+        if (!(await garantirTabelasSefazConsulta())) {
+            return { consulta: painelMemoria, historico: historicoLocal };
+        }
         const eventos = painelMemoria.eventos;
         const [ins] = await getConfNfPool().query(
             `INSERT INTO ${tabelaConfnf('conf_sefaz_consulta')}
@@ -1206,15 +1216,14 @@ async function salvarConsultaSefaz(chave, estab, statusSefaz) {
             console.warn('[SEFAZ salvar eventos]', errEv?.message || errEv);
             await criarTabelaEventoSefaz();
         }
-        const gravado = await buscarUltimaConsultaSefaz(chave);
-        if (gravado && (gravado.eventos || []).length) {
-            gravarCacheSefaz(chave, gravado);
-            return gravado;
-        }
-        return painelMemoria;
+        const historico = await buscarConsultasSefaz(chave);
+        const gravado = historico[0] || painelMemoria;
+        const lista = historico.length ? historico : [gravado];
+        gravarCacheSefaz(chave, gravado, lista);
+        return { consulta: gravado, historico: lista };
     } catch (error) {
         console.error('[SEFAZ salvar consulta]', error?.message || error);
-        return painelMemoria;
+        return { consulta: painelMemoria, historico: [painelMemoria, ...historicoDoCache(chave)] };
     }
 }
 
@@ -1453,7 +1462,9 @@ app.post('/api/nfe/consultar-status-sefaz', async (req, res) => {
             mensagem += ' Nenhuma alteração no banco (situação não identificada como cancelada).';
         }
 
-        const painel = await salvarConsultaSefaz(chave, codEstab, statusSefaz);
+        const salvo = await salvarConsultaSefaz(chave, codEstab, statusSefaz);
+        const painel = salvo.consulta || salvo;
+        const historico = salvo.historico || [painel];
         if (statusSefaz.temCce) {
             mensagem += ' Há carta de correção (CCe) registrada.';
         }
@@ -1468,6 +1479,7 @@ app.post('/api/nfe/consultar-status-sefaz', async (req, res) => {
             temCce: Boolean(statusSefaz.temCce),
             eventos: statusSefaz.eventos || [],
             consulta: painel,
+            historico,
             existeNoBanco: !!registroBanco,
             idNfe: registroBanco ? registroBanco.IDNFE_XML : null,
             sitnfeAnterior,
@@ -1489,8 +1501,8 @@ app.get('/api/nfe/sefaz-consulta/:chave', async (req, res) => {
         return res.status(400).json({ erro: 'Chave de acesso inválida.' });
     }
     try {
-        const consulta = await buscarUltimaConsultaSefaz(chave);
-        return res.json({ consulta });
+        const historico = await buscarConsultasSefaz(chave);
+        return res.json({ consulta: historico[0] || null, historico });
     } catch (error) {
         console.error('[SEFAZ consulta gravada]', error?.message || error);
         return res.status(500).json({ erro: error?.message || 'Falha ao ler consulta gravada.' });
@@ -2551,6 +2563,7 @@ app.get('/detalhes/:chave', async (req, res) => {
             compraStatus = null;
         }
 
+        const sefazHistorico = await buscarConsultasSefaz(chave);
         const dadosNfe = {
             chave: chave,
             numero: ide.nNF || '',
@@ -2614,7 +2627,8 @@ app.get('/detalhes/:chave', async (req, res) => {
             compraStatus: compraStatus,
             estab: estabNfe,
             sitnfe,
-            sefazConsulta: await buscarUltimaConsultaSefaz(chave)
+            sefazConsulta: sefazHistorico[0] || null,
+            sefazHistorico
         };
 
         res.json(dadosNfe);

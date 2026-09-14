@@ -270,9 +270,37 @@
       margin-bottom: 0.75rem;
     }
 
-    .sefaz-bloco-cab h3 {
-      margin: 0;
-      font-size: 1.05rem;
+    .sefaz-hist-item {
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 10px;
+      margin: 0 0 0.65rem 0;
+      padding: 0.2rem 0.85rem 0.7rem;
+      background: #fff;
+    }
+
+    .sefaz-hist-item summary {
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      font-weight: 600;
+      padding: 0.55rem 0;
+      list-style: none;
+    }
+
+    .sefaz-hist-item summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .sefaz-hist-data {
+      color: var(--lumi-dark);
+    }
+
+    .sefaz-hist-titulo {
+      margin: 0.85rem 0 0.5rem 0;
+      font-size: 0.92rem;
+      font-weight: 700;
       color: var(--lumi-dark);
     }
 
@@ -1000,16 +1028,25 @@
           throw new Error(erro.error || 'Falha ao carregar detalhes da NF-e.');
         }
         const dados = await resposta.json();
+        dados.sefazHistorico = Array.isArray(dados.sefazHistorico) ? dados.sefazHistorico : [];
         dados.sefazConsulta = mesclarConsultaSefazLocal(chave, dados.sefazConsulta);
-        if (!dados.sefazConsulta || !(dados.sefazConsulta.eventos || []).length) {
+        if (!dados.sefazHistorico.length || !dados.sefazConsulta || !(dados.sefazConsulta.eventos || []).length) {
           try {
             const rSefaz = await fetch(`/api/nfe/sefaz-consulta/${chave}`);
             const jSefaz = await rSefaz.json().catch(() => ({}));
+            if (Array.isArray(jSefaz?.historico) && jSefaz.historico.length) {
+              dados.sefazHistorico = jSefaz.historico;
+            }
             if (jSefaz?.consulta) {
               dados.sefazConsulta = mesclarConsultaSefazLocal(chave, jSefaz.consulta);
             }
           } catch (_e) { /* mantém sem consulta gravada */ }
         }
+        const local = lerConsultaSefazLocal(chave);
+        if (Array.isArray(local?.historico) && local.historico.length && dados.sefazHistorico.length < local.historico.length) {
+          dados.sefazHistorico = local.historico;
+        }
+        if (!dados.sefazConsulta && dados.sefazHistorico[0]) dados.sefazConsulta = dados.sefazHistorico[0];
         exibirDetalhes(dados);
       } catch (error) {
         console.error(error);
@@ -1031,7 +1068,7 @@
 
       window.nfeChave = dados.chave;
       window.nfeEstab = String(dados.estab || dados.destinatario?.cnpj || '').replace(/\D/g, '');
-      renderizarPainelSefaz(dados.sefazConsulta || null);
+      renderizarPainelSefaz(dados.sefazConsulta || null, dados.sefazHistorico || []);
       atualizarInfoCertSefaz();
       const btnConsultarSefaz = document.getElementById('btn-consultar-sefaz');
       const btnCertSefaz = document.getElementById('btn-sefaz-cert');
@@ -1412,17 +1449,18 @@
         return null;
       }
     }
-    function gravarConsultaSefazLocal(chaveNFe, consulta) {
+    function gravarConsultaSefazLocal(chaveNFe, consulta, historico) {
       if (!chaveNFe || !consulta) return;
       try {
-        sessionStorage.setItem(chaveCacheSefaz(chaveNFe), JSON.stringify(consulta));
+        const lista = Array.isArray(historico) && historico.length ? historico : [consulta];
+        sessionStorage.setItem(chaveCacheSefaz(chaveNFe), JSON.stringify({ ...consulta, historico: lista }));
       } catch (_e) { /* quota */ }
     }
     function mesclarConsultaSefazLocal(chaveNFe, consulta) {
       const local = lerConsultaSefazLocal(chaveNFe);
       if (!consulta) return local;
       if ((consulta.eventos || []).length || !local) return consulta;
-      return { ...consulta, ...local, eventos: local.eventos || [], temCce: consulta.temCce || local.temCce };
+      return { ...consulta, eventos: local.eventos || [], temCce: consulta.temCce || local.temCce };
     }
     function lerCertSefaz() {
       try {
@@ -1483,21 +1521,7 @@
       });
     }
 
-    function renderizarPainelSefaz(consulta) {
-      const painel = document.getElementById('sefaz-painel');
-      if (!painel) return;
-      atualizarBadgesSefaz(consulta);
-      if (consulta && (consulta.eventos || []).length) {
-        gravarConsultaSefazLocal(window.nfeChave || chave, consulta);
-        const infoContent = document.getElementById('info-nfe-content');
-        const btnInfo = document.getElementById('btn-toggle-info');
-        if (infoContent) infoContent.classList.add('visible');
-        if (btnInfo) btnInfo.classList.remove('collapsed');
-      }
-      if (!consulta) {
-        painel.innerHTML = '<p class="sefaz-meta">Ainda não há consulta gravada. Clique em Consultar SEFAZ para buscar a situação e os eventos.</p>';
-        return;
-      }
+    function htmlEventosSefaz(consulta) {
       const info = classeSituacaoSefaz(consulta);
       const sit = escaparHtml(String(consulta.situacaoLabel || consulta.situacao || 'Indefinida').toUpperCase());
       const amb = consulta.ambiente ? ` (Ambiente de autorização: ${escaparHtml(consulta.ambiente)})` : '';
@@ -1516,9 +1540,9 @@
             cces.map((c) => c.xCorrecao ? `<div class="sefaz-cce-texto">${escaparHtml(c.xCorrecao)}</div>` : '').join('')
           }</div>`
         : '';
-      painel.innerHTML = `
-        <div class="sefaz-sit ${info.classe}">Situação atual: ${sit}${amb}</div>
-        <p class="sefaz-meta">Última consulta: ${formatarDataHoraSefaz(consulta.consultadoEm)}</p>
+      return `
+        <div class="sefaz-sit ${info.classe}">Situação: ${sit}${amb}</div>
+        <p class="sefaz-meta">Data da consulta: ${formatarDataHoraSefaz(consulta.consultadoEm)}</p>
         ${blocoCce}
         <div style="overflow:auto;">
           <table class="sefaz-tabela">
@@ -1535,6 +1559,41 @@
             </tbody>
           </table>
         </div>
+      `;
+    }
+
+    function renderizarPainelSefaz(consulta, historico) {
+      const painel = document.getElementById('sefaz-painel');
+      if (!painel) return;
+      const lista = Array.isArray(historico) && historico.length
+        ? historico
+        : (consulta ? [consulta] : []);
+      const atual = lista[0] || consulta || null;
+      atualizarBadgesSefaz(atual);
+      if (atual) {
+        gravarConsultaSefazLocal(window.nfeChave || chave, atual, lista);
+      }
+      if (!atual) {
+        painel.innerHTML = '<p class="sefaz-meta">Ainda não há consulta gravada. Clique em Consultar SEFAZ para buscar a situação e os eventos.</p>';
+        return;
+      }
+      const itens = lista.map((c, i) => {
+        const info = classeSituacaoSefaz(c);
+        const rotulo = i === 0 ? 'Consulta mais recente' : `Consulta ${lista.length - i}`;
+        return `
+          <details class="sefaz-hist-item" ${i === 0 ? 'open' : ''}>
+            <summary>
+              <span class="sefaz-hist-data">${escaparHtml(formatarDataHoraSefaz(c.consultadoEm))}</span>
+              <span class="sefaz-badge ${info.classe}">${escaparHtml(info.texto)}</span>
+              <span class="sefaz-meta" style="margin:0;">${escaparHtml(rotulo)}</span>
+            </summary>
+            ${htmlEventosSefaz(c)}
+          </details>
+        `;
+      }).join('');
+      painel.innerHTML = `
+        ${lista.length > 1 ? `<p class="sefaz-hist-titulo">${lista.length} consultas realizadas nesta NF-e</p>` : ''}
+        ${itens}
       `;
     }
 
@@ -1584,12 +1643,8 @@
           consultadoEm: consulta.consultadoEm || new Date().toISOString(),
           eventos: (data.eventos && data.eventos.length) ? data.eventos : (consulta.eventos || [])
         };
-        gravarConsultaSefazLocal(chaveNFe, painel);
-        renderizarPainelSefaz(painel);
-        const infoContent = document.getElementById('info-nfe-content');
-        const btnInfo = document.getElementById('btn-toggle-info');
-        if (infoContent) infoContent.classList.add('visible');
-        if (btnInfo) btnInfo.classList.remove('collapsed');
+        gravarConsultaSefazLocal(chaveNFe, painel, data.historico || [painel]);
+        renderizarPainelSefaz(painel, data.historico || [painel]);
         msgEl.textContent = data.mensagem || 'Consulta concluída.';
       } catch (e) {
         erroEl.textContent = e?.message || 'Falha ao consultar a SEFAZ.';
