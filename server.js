@@ -2,6 +2,7 @@ const express = require('express');
 const mysql = require('mysql2/promise');
 const axios = require('axios');
 const path = require('path');
+const fs = require('fs');
 const {
     consultarXmlPorChave,
     consultarStatusPorChave,
@@ -201,8 +202,36 @@ let pool;
 carregarServidores();
 pool = getPool();
 
+const CONFN_DB_NAME = process.env.CONFNF_DB_NAME || 'confnf';
+let confnfPool = null;
+{
+    const host = String(process.env.CONFNF_HOST || '').trim();
+    if (host) {
+        confnfPool = mysql.createPool({
+            host,
+            port: Number(process.env.CONFNF_PORT) || 3306,
+            user: process.env.CONFNF_USER || 'root',
+            password: process.env.CONFNF_PASSWORD || '',
+            database: CONFN_DB_NAME,
+            waitForConnections: true,
+            connectionLimit: Number(process.env.CONFNF_CONNECTION_LIMIT) || 5,
+            timezone: 'Z',
+            enableKeepAlive: true,
+            keepAliveInitialDelay: 0
+        });
+        console.log(`[INFO] Banco ConfNF em servidor separado: ${host}:${process.env.CONFNF_PORT || 3306}/${CONFN_DB_NAME}`);
+    } else {
+        console.log('[INFO] CONFNF_HOST não definido — ConfNF usa o mesmo MySQL do SAC (schema confnf).');
+    }
+}
+
+function getConfNfPool() {
+    return confnfPool || pool;
+}
+
 registerConfNfRoutes(app, {
     getPool: () => pool,
+    getConfNfPool,
     xml2js
 });
 
@@ -218,6 +247,17 @@ async function testarConexao(serverId = null) {
         console.log(`[INFO] Conexão com o servidor "${config.name}" estabelecida com sucesso!`);
         console.log(`[INFO] Host: ${config.host}`);
         console.log(`[INFO] Database: ${config.database}`);
+        if (confnfPool) {
+            try {
+                const cnf = await getConfNfPool().getConnection();
+                await cnf.ping();
+                cnf.release();
+                console.log(`[INFO] Conexão ConfNF: ${process.env.CONFNF_HOST}/${CONFN_DB_NAME}`);
+            } catch (errCnf) {
+                console.error(`[ERRO] Falha ao conectar no ConfNF (${process.env.CONFNF_HOST}/${CONFN_DB_NAME}):`, errCnf?.message || errCnf);
+                throw errCnf;
+            }
+        }
         return true;
     } catch (error) {
         console.error('\n==================================================');
@@ -849,15 +889,43 @@ app.get('/danfe/:chave', async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 // Persistência da consulta de situação/eventos na SEFAZ (banco confnf)
 // ─────────────────────────────────────────────────────────────
-const CONFN_DB_NAME = process.env.CONFNF_DB_NAME || 'confnf';
 const tabelaConfnf = (name) => `\`${CONFN_DB_NAME}\`.\`${name}\``;
+const SEFAZ_CACHE_PATH = path.join(__dirname, '.sefaz-consulta-cache.json');
 let tabelasSefazConsultaOk = false;
+
+function lerCacheSefazDisco() {
+    try {
+        return JSON.parse(fs.readFileSync(SEFAZ_CACHE_PATH, 'utf8'));
+    } catch (_e) {
+        return {};
+    }
+}
+
+function lerCacheSefaz(chave) {
+    const all = lerCacheSefazDisco();
+    return all[chave] || null;
+}
+
+function gravarCacheSefaz(chave, painel) {
+    if (!chave || !painel) return;
+    try {
+        const all = lerCacheSefazDisco();
+        all[chave] = painel;
+        fs.writeFileSync(SEFAZ_CACHE_PATH, JSON.stringify(all));
+    } catch (error) {
+        console.warn('[SEFAZ cache arquivo]', error?.message || error);
+    }
+}
 
 async function garantirTabelasSefazConsulta() {
     if (tabelasSefazConsultaOk) return true;
     try {
-        await pool.query(`CREATE DATABASE IF NOT EXISTS \`${CONFN_DB_NAME}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
-        await pool.query(`
+        await getConfNfPool().query(`SELECT 1 FROM ${tabelaConfnf('conf_sefaz_consulta')} LIMIT 1`);
+        tabelasSefazConsultaOk = true;
+        return true;
+    } catch (_errSelect) {
+        try {
+            await getConfNfPool().query(`
             CREATE TABLE IF NOT EXISTS ${tabelaConfnf('conf_sefaz_consulta')} (
                 id INT NOT NULL AUTO_INCREMENT,
                 chave_nfe VARCHAR(44) NOT NULL,
@@ -874,14 +942,14 @@ async function garantirTabelasSefazConsulta() {
                 KEY idx_conf_sefaz_consulta_chave (chave_nfe)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         `);
-        await pool.query(`
+            await getConfNfPool().query(`
             CREATE TABLE IF NOT EXISTS ${tabelaConfnf('conf_sefaz_evento')} (
                 id INT NOT NULL AUTO_INCREMENT,
                 id_consulta INT NOT NULL,
                 chave_nfe VARCHAR(44) NOT NULL,
                 tp_evento VARCHAR(10) DEFAULT NULL,
                 n_seq INT DEFAULT NULL,
-                descricao VARCHAR(160) DEFAULT NULL,
+                descricao VARCHAR(255) DEFAULT NULL,
                 protocolo VARCHAR(30) DEFAULT NULL,
                 dh_evento VARCHAR(40) DEFAULT NULL,
                 dh_reg_evento VARCHAR(40) DEFAULT NULL,
@@ -894,11 +962,53 @@ async function garantirTabelasSefazConsulta() {
                     FOREIGN KEY (id_consulta) REFERENCES ${tabelaConfnf('conf_sefaz_consulta')} (id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         `);
-        tabelasSefazConsultaOk = true;
-        return true;
-    } catch (error) {
-        console.error('[SEFAZ tabelas confnf]', error?.message || error);
-        return false;
+            tabelasSefazConsultaOk = true;
+            return true;
+        } catch (errCreate) {
+            try {
+                await getConfNfPool().query(`CREATE DATABASE IF NOT EXISTS \`${CONFN_DB_NAME}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+                await getConfNfPool().query(`
+            CREATE TABLE IF NOT EXISTS ${tabelaConfnf('conf_sefaz_consulta')} (
+                id INT NOT NULL AUTO_INCREMENT,
+                chave_nfe VARCHAR(44) NOT NULL,
+                estab VARCHAR(20) DEFAULT NULL,
+                consultado_em DATETIME NOT NULL,
+                situacao VARCHAR(20) DEFAULT NULL,
+                situacao_label VARCHAR(80) DEFAULT NULL,
+                c_stat VARCHAR(10) DEFAULT NULL,
+                x_motivo VARCHAR(255) DEFAULT NULL,
+                ambiente VARCHAR(20) DEFAULT NULL,
+                tem_cce TINYINT(1) NOT NULL DEFAULT 0,
+                detalhe TEXT,
+                PRIMARY KEY (id),
+                KEY idx_conf_sefaz_consulta_chave (chave_nfe)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci
+        `);
+                await getConfNfPool().query(`
+            CREATE TABLE IF NOT EXISTS ${tabelaConfnf('conf_sefaz_evento')} (
+                id INT NOT NULL AUTO_INCREMENT,
+                id_consulta INT NOT NULL,
+                chave_nfe VARCHAR(44) NOT NULL,
+                tp_evento VARCHAR(10) DEFAULT NULL,
+                n_seq INT DEFAULT NULL,
+                descricao VARCHAR(255) DEFAULT NULL,
+                protocolo VARCHAR(30) DEFAULT NULL,
+                dh_evento VARCHAR(40) DEFAULT NULL,
+                dh_reg_evento VARCHAR(40) DEFAULT NULL,
+                orgao VARCHAR(80) DEFAULT NULL,
+                x_correcao TEXT,
+                PRIMARY KEY (id),
+                KEY idx_conf_sefaz_evento_consulta (id_consulta),
+                KEY idx_conf_sefaz_evento_chave (chave_nfe)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci
+        `);
+                tabelasSefazConsultaOk = true;
+                return true;
+            } catch (error) {
+                console.error('[SEFAZ tabelas confnf]', error?.message || errCreate?.message || error);
+                return false;
+            }
+        }
     }
 }
 
@@ -939,50 +1049,71 @@ function montarPainelSefaz(row, eventosRows) {
     };
 }
 
+function painelSefazMemoria(chave, estab, statusSefaz) {
+    const eventos = Array.isArray(statusSefaz.eventos) ? statusSefaz.eventos : [];
+    const temCce = Boolean(statusSefaz.temCce) || eventos.some((e) => String(e.tpEvento) === '110110');
+    return {
+        chave,
+        estab: estab || null,
+        consultadoEm: new Date().toISOString(),
+        situacao: statusSefaz.situacao || null,
+        situacaoLabel: statusSefaz.label || null,
+        cStat: statusSefaz.cStat != null ? String(statusSefaz.cStat) : null,
+        xMotivo: statusSefaz.xMotivo || null,
+        ambiente: statusSefaz.ambiente || '',
+        temCce,
+        detalhe: statusSefaz.detalhe || null,
+        eventos,
+    };
+}
+
 async function buscarUltimaConsultaSefaz(chave) {
     try {
-        if (!(await garantirTabelasSefazConsulta())) return null;
-        const [rows] = await pool.query(
-            `SELECT * FROM ${tabelaConfnf('conf_sefaz_consulta')} WHERE chave_nfe = ? ORDER BY id DESC LIMIT 1`,
-            [chave]
-        );
-        if (!rows || rows.length === 0) return null;
-        const idConsulta = colRow(rows[0], 'id');
-        const [evs] = await pool.query(
-            `SELECT * FROM ${tabelaConfnf('conf_sefaz_evento')} WHERE id_consulta = ? ORDER BY id ASC`,
-            [idConsulta]
-        );
-        return montarPainelSefaz(rows[0], evs);
+        if (await garantirTabelasSefazConsulta()) {
+            const [rows] = await getConfNfPool().query(
+                `SELECT * FROM ${tabelaConfnf('conf_sefaz_consulta')} WHERE chave_nfe = ? ORDER BY id DESC LIMIT 1`,
+                [chave]
+            );
+            if (rows && rows.length > 0) {
+                const idConsulta = colRow(rows[0], 'id');
+                const [evs] = await getConfNfPool().query(
+                    `SELECT * FROM ${tabelaConfnf('conf_sefaz_evento')} WHERE id_consulta = ? ORDER BY id ASC`,
+                    [idConsulta]
+                );
+                return montarPainelSefaz(rows[0], evs);
+            }
+        }
     } catch (error) {
         console.error('[SEFAZ buscar consulta]', error?.message || error);
-        return null;
     }
+    return lerCacheSefaz(chave);
 }
 
 async function salvarConsultaSefaz(chave, estab, statusSefaz) {
+    const painelMemoria = painelSefazMemoria(chave, estab, statusSefaz);
+    gravarCacheSefaz(chave, painelMemoria);
     try {
-        if (!(await garantirTabelasSefazConsulta())) return null;
-        const eventos = Array.isArray(statusSefaz.eventos) ? statusSefaz.eventos : [];
-        const temCce = statusSefaz.temCce || eventos.some((e) => String(e.tpEvento) === '110110');
-        const [ins] = await pool.query(
+        if (!(await garantirTabelasSefazConsulta())) return painelMemoria;
+        const eventos = painelMemoria.eventos;
+        const [ins] = await getConfNfPool().query(
             `INSERT INTO ${tabelaConfnf('conf_sefaz_consulta')}
                 (chave_nfe, estab, consultado_em, situacao, situacao_label, c_stat, x_motivo, ambiente, tem_cce, detalhe)
              VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?)`,
             [
                 chave,
                 estab || null,
-                statusSefaz.situacao || null,
-                statusSefaz.label || null,
-                statusSefaz.cStat != null ? String(statusSefaz.cStat) : null,
-                statusSefaz.xMotivo ? String(statusSefaz.xMotivo).slice(0, 255) : null,
-                statusSefaz.ambiente || '',
-                temCce ? 1 : 0,
-                statusSefaz.detalhe || null,
+                painelMemoria.situacao,
+                painelMemoria.situacaoLabel,
+                painelMemoria.cStat,
+                painelMemoria.xMotivo ? String(painelMemoria.xMotivo).slice(0, 255) : null,
+                painelMemoria.ambiente,
+                painelMemoria.temCce ? 1 : 0,
+                painelMemoria.detalhe,
             ]
         );
         const idConsulta = ins.insertId;
         for (const ev of eventos) {
-            await pool.query(
+            await getConfNfPool().query(
                 `INSERT INTO ${tabelaConfnf('conf_sefaz_evento')}
                     (id_consulta, chave_nfe, tp_evento, n_seq, descricao, protocolo, dh_evento, dh_reg_evento, orgao, x_correcao)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -991,7 +1122,7 @@ async function salvarConsultaSefaz(chave, estab, statusSefaz) {
                     chave,
                     ev.tpEvento || null,
                     ev.nSeqEvento || 0,
-                    ev.descricao || null,
+                    ev.descricao ? String(ev.descricao).slice(0, 160) : null,
                     ev.protocolo || null,
                     ev.dhEvento || null,
                     ev.dhRegEvento || null,
@@ -1000,10 +1131,15 @@ async function salvarConsultaSefaz(chave, estab, statusSefaz) {
                 ]
             );
         }
-        return buscarUltimaConsultaSefaz(chave);
+        const gravado = await buscarUltimaConsultaSefaz(chave);
+        if (gravado) {
+            gravarCacheSefaz(chave, gravado);
+            return gravado;
+        }
+        return painelMemoria;
     } catch (error) {
         console.error('[SEFAZ salvar consulta]', error?.message || error);
-        return null;
+        return painelMemoria;
     }
 }
 

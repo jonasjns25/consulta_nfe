@@ -189,7 +189,7 @@ CREATE TABLE IF NOT EXISTS conf_sefaz_evento (
   chave_nfe         VARCHAR(44) NOT NULL,
   tp_evento         VARCHAR(10) DEFAULT NULL,
   n_seq             INT DEFAULT NULL,
-  descricao         VARCHAR(160) DEFAULT NULL,
+  descricao         VARCHAR(255) DEFAULT NULL,
   protocolo         VARCHAR(30) DEFAULT NULL,
   dh_evento         VARCHAR(40) DEFAULT NULL,
   dh_reg_evento     VARCHAR(40) DEFAULT NULL,

@@ -980,6 +980,13 @@
           throw new Error(erro.error || 'Falha ao carregar detalhes da NF-e.');
         }
         const dados = await resposta.json();
+        if (!dados.sefazConsulta) {
+          try {
+            const rSefaz = await fetch(`/api/nfe/sefaz-consulta/${chave}`);
+            const jSefaz = await rSefaz.json().catch(() => ({}));
+            if (jSefaz?.consulta) dados.sefazConsulta = jSefaz.consulta;
+          } catch (_e) { /* mantém sem consulta gravada */ }
+        }
         exibirDetalhes(dados);
       } catch (error) {
         console.error(error);
@@ -1515,13 +1522,15 @@
           if (data?.orientacao) msg += '\n\n' + data.orientacao;
           throw new Error(msg);
         }
-        renderizarPainelSefaz(data.consulta || {
-          situacao: data.situacaoSefaz,
-          situacaoLabel: data.situacaoLabel,
-          ambiente: data.ambiente,
-          temCce: data.temCce,
-          consultadoEm: new Date().toISOString(),
-          eventos: data.eventos || []
+        const consulta = data.consulta || {};
+        renderizarPainelSefaz({
+          ...consulta,
+          situacao: data.situacaoSefaz || consulta.situacao,
+          situacaoLabel: data.situacaoLabel || consulta.situacaoLabel,
+          ambiente: data.ambiente || consulta.ambiente || '',
+          temCce: data.temCce || consulta.temCce,
+          consultadoEm: consulta.consultadoEm || new Date().toISOString(),
+          eventos: (data.eventos && data.eventos.length) ? data.eventos : (consulta.eventos || [])
         });
         msgEl.textContent = data.mensagem || 'Consulta concluída.';
       } catch (e) {

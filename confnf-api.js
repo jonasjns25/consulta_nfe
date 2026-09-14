@@ -302,11 +302,10 @@ async function buscarConversaoProdutoEmbalagem(getPool, tabela, emitenteCnpj, it
   const sql = `
     SELECT
       pe.*,
-      p.codigo AS erp_codigo,
-      COALESCE(p.DESCRICAO, p.descricao, pe.descricao_forn, '') AS erp_descricao,
+      pe.id_produto_erp AS erp_codigo,
+      COALESCE(pe.descricao_forn, '') AS erp_descricao,
       COALESCE(pe.unid_erp, '') AS erp_unidade_cadastro
     FROM ${tabela('produto_embalagem')} pe
-    LEFT JOIN produto p ON p.codigo = pe.id_produto_erp
     WHERE cnpj_fornecedor = ?
       AND (
         pe.id_produto_erp = ?
@@ -503,13 +502,13 @@ async function buscarVinculosSacNfNaoLancada(getPool, emitenteCnpj, destinatario
   return resultado;
 }
 
-async function enriquecerItensComErp(getPool, tabela, contexto, itens) {
+async function enriquecerItensComErp(getSacPool, getCnfPool, tabela, contexto, itens) {
   const emitenteCnpj = normalizeDigits(contexto?.emitenteCnpj || '');
   const destinatarioCnpj = normalizeDigits(contexto?.destinatarioCnpj || '');
   if (!emitenteCnpj || !Array.isArray(itens) || itens.length === 0) {
     return Array.isArray(itens) ? itens : [];
   }
-  const vinculosSac = await buscarVinculosSacNfNaoLancada(getPool, emitenteCnpj, destinatarioCnpj, itens).catch(() => ({}));
+  const vinculosSac = await buscarVinculosSacNfNaoLancada(getSacPool, emitenteCnpj, destinatarioCnpj, itens).catch(() => ({}));
   const enriquecidos = await Promise.all(
     itens.map(async (item) => {
       const codigo = normalizeText(item.cProd);
@@ -519,7 +518,7 @@ async function enriquecerItensComErp(getPool, tabela, contexto, itens) {
         || barcodeCandidates(item).map((code) => vinculosSac[code]).find(Boolean)
         || null;
       const conversao = await buscarConversaoProdutoEmbalagem(
-        getPool,
+        getCnfPool,
         tabela,
         emitenteCnpj,
         item,
@@ -594,12 +593,15 @@ function montarItensSupervisor(itens) {
 
 module.exports = function registerConfNfRoutes(app, options) {
   const {
-    getPool,
+    getPool: getSacPool,
+    getConfNfPool,
     xml2js,
     confDbName = process.env.CONFNF_DB_NAME || 'confnf',
     jwtSecret = process.env.CONFNF_JWT_SECRET || 'confnf-dev-secret',
     sessionHours = Number(process.env.CONFNF_SESSION_HOURS) || 8
   } = options;
+
+  const getPool = getConfNfPool || getSacPool;
 
   const tabela = (name) => `\`${confDbName}\`.\`${name}\``;
 
@@ -796,7 +798,7 @@ module.exports = function registerConfNfRoutes(app, options) {
     }
 
     try {
-      const xmlRow = await buscarXmlNfe(getPool, chave);
+      const xmlRow = await buscarXmlNfe(getSacPool, chave);
       if (!xmlRow) {
         return res.status(404).json({ error: 'NF-e não encontrada em SAC.NFE_XML.' });
       }
@@ -806,7 +808,7 @@ module.exports = function registerConfNfRoutes(app, options) {
       const infNFe = extrairInfNfe(parsed);
       const prot = extrairProt(parsed);
       const header = montarHeaderNfe(infNFe, prot);
-      const itens = await enriquecerItensComErp(getPool, tabela, {
+      const itens = await enriquecerItensComErp(getSacPool, getPool, tabela, {
         emitenteCnpj: header.emitente.cnpj,
         destinatarioCnpj: header.destinatario.cnpj
       }, montarItensNfe(infNFe));
@@ -865,7 +867,7 @@ module.exports = function registerConfNfRoutes(app, options) {
         return res.json({ id_conferencia: existente.id, status: existente.status, retomada: true });
       }
 
-      const xmlRow = await buscarXmlNfe(getPool, chave);
+      const xmlRow = await buscarXmlNfe(getSacPool, chave);
       if (!xmlRow) {
         return res.status(404).json({ error: 'NF-e não encontrada em SAC.NFE_XML.' });
       }
@@ -875,7 +877,7 @@ module.exports = function registerConfNfRoutes(app, options) {
       const infNFe = extrairInfNfe(parsed);
       const prot = extrairProt(parsed);
       const header = montarHeaderNfe(infNFe, prot);
-      const itens = await enriquecerItensComErp(getPool, tabela, {
+      const itens = await enriquecerItensComErp(getSacPool, getPool, tabela, {
         emitenteCnpj: header.emitente.cnpj,
         destinatarioCnpj: header.destinatario.cnpj
       }, montarItensNfe(infNFe));
@@ -973,7 +975,7 @@ module.exports = function registerConfNfRoutes(app, options) {
       const itensArr = Array.isArray(itens) ? itens : [];
       const extrasArr = Array.isArray(extras) ? extras : [];
       const itensOriginaisBase = await carregarItensConferencia(id_conferencia);
-      const itensOriginais = await enriquecerItensComErp(getPool, tabela, {
+      const itensOriginais = await enriquecerItensComErp(getSacPool, getPool, tabela, {
         emitenteCnpj: cabecalho.cnpj_emitente,
         destinatarioCnpj: cabecalho.cnpj_destinatario
       }, itensOriginaisBase);
@@ -1073,7 +1075,7 @@ module.exports = function registerConfNfRoutes(app, options) {
       }
 
       const itensBase = await carregarItensConferencia(id);
-      const itens = await enriquecerItensComErp(getPool, tabela, {
+      const itens = await enriquecerItensComErp(getSacPool, getPool, tabela, {
         emitenteCnpj: cabecalho.cnpj_emitente,
         destinatarioCnpj: cabecalho.cnpj_destinatario
       }, itensBase);

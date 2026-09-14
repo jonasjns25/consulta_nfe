@@ -24,7 +24,38 @@ const parserStatusXml = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: '_',
     parseAttributeValue: false,
+    removeNSPrefix: true,
 });
+
+const https = require('https');
+const zlib = require('zlib');
+const axios = require('axios');
+
+const SVRS_CONSULTA_PROT = 'https://nfe.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx';
+const SVRS_CONSULTA_PROT_HOM = 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx';
+const SVAN_CONSULTA_PROT = 'https://www.sefazvirtual.fazenda.gov.br/NFeConsultaProtocolo4/NFeConsultaProtocolo4.asmx';
+
+const MAP_CONSULTA_PROTOCOLO = {
+    11: SVRS_CONSULTA_PROT, 12: SVRS_CONSULTA_PROT,
+    13: 'https://nfe.sefaz.am.gov.br/services2/services/NfeConsulta4',
+    14: SVRS_CONSULTA_PROT, 15: SVAN_CONSULTA_PROT, 16: SVRS_CONSULTA_PROT, 17: SVRS_CONSULTA_PROT,
+    21: SVAN_CONSULTA_PROT, 22: SVRS_CONSULTA_PROT,
+    23: 'https://nfe.sefaz.ce.gov.br/nfe4/services/NFeConsultaProtocolo4',
+    24: SVRS_CONSULTA_PROT, 25: SVRS_CONSULTA_PROT,
+    26: 'https://nfe.sefaz.pe.gov.br/nfe-service/services/NFeConsultaProtocolo4',
+    27: SVRS_CONSULTA_PROT, 28: SVRS_CONSULTA_PROT,
+    29: 'https://nfe.sefaz.ba.gov.br/webservices/NFeConsultaProtocolo4/NFeConsultaProtocolo4.asmx',
+    31: 'https://nfe.fazenda.mg.gov.br/nfe2/services/NFeConsultaProtocolo4',
+    32: SVRS_CONSULTA_PROT, 33: SVRS_CONSULTA_PROT,
+    35: 'https://nfe.fazenda.sp.gov.br/ws/nfeconsultaprotocolo4.asmx',
+    41: 'https://nfe.sefa.pr.gov.br/nfe/NFeConsultaProtocolo4',
+    42: SVRS_CONSULTA_PROT,
+    43: 'https://nfe.sefazrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
+    50: 'https://nfe.sefaz.ms.gov.br/ws/NFeConsultaProtocolo4',
+    51: 'https://nfe.sefaz.mt.gov.br/nfews/v2/services/NfeConsulta4',
+    52: 'https://nfe.sefaz.go.gov.br/nfe/services/NFeConsultaProtocolo4',
+    53: SVRS_CONSULTA_PROT,
+};
 
 let winca = null;
 try {
@@ -671,37 +702,109 @@ function eventoDeProcEvento(proc) {
     };
 }
 
-/**
- * Monta a lista de eventos da NF-e (autorização + procEventoNFe) a partir dos docs da Dist DFe.
- */
-function extrairEventosSefaz(docs) {
-    const eventos = [];
-    const vistos = new Set();
-    let ambiente = '';
-    let autorizacao = null;
-
-    const registrar = (ev) => {
-        if (!ev) return;
-        const chaveEv = `${ev.tpEvento}|${ev.nSeqEvento || 0}|${ev.protocolo || ''}`;
-        if (vistos.has(chaveEv)) return;
-        vistos.add(chaveEv);
-        eventos.push(ev);
-    };
-
-    for (const doc of docs || []) {
-        const xml = doc.xml;
-        if (!xml) continue;
-        let obj;
+function xmlDocParaTexto(xml) {
+    if (xml == null) return '';
+    let buf = Buffer.isBuffer(xml) ? xml : null;
+    if (!buf && typeof xml === 'string' && xml.charCodeAt(0) === 0x1f) {
+        buf = Buffer.from(xml, 'binary');
+    }
+    if (!buf && typeof xml === 'string' && xml.trim() && !xml.trim().startsWith('<')) {
         try {
-            obj = parserStatusXml.parse(xml);
-        } catch (_e) {
-            continue;
-        }
+            const b64 = Buffer.from(xml.replace(/\s+/g, ''), 'base64');
+            if (b64.length > 2 && ((b64[0] === 0x1f && b64[1] === 0x8b) || b64.toString('utf8').trim().startsWith('<'))) {
+                buf = b64;
+            }
+        } catch (_e) { /* não é base64 */ }
+    }
+    if (buf && buf.length > 2 && buf[0] === 0x1f && buf[1] === 0x8b) {
+        try { return zlib.gunzipSync(buf).toString('utf8'); } catch (_e) { /* mantém */ }
+    }
+    if (buf) return buf.toString('utf8');
+    return String(xml);
+}
 
-        const infProt = obj.nfeProc?.protNFe?.infProt || obj.protNFe?.infProt;
-        if (infProt && textoCampo(infProt.nProt)) {
-            if (!ambiente) ambiente = rotuloAmbienteSefaz(infProt.tpAmb);
-            autorizacao = {
+function expandirXmlAninhado(obj, profundidade = 0) {
+    if (!obj || typeof obj !== 'object' || profundidade > 12) return obj;
+    for (const [k, v] of Object.entries(obj)) {
+        if (typeof v === 'string' && v.includes('<') && /retConsSitNFe|procEventoNFe|infEvento|protNFe/.test(v)) {
+            try {
+                const txt = v
+                    .replace(/&lt;/g, '<')
+                    .replace(/&gt;/g, '>')
+                    .replace(/&quot;/g, '"')
+                    .replace(/&amp;/g, '&');
+                obj[k] = parserStatusXml.parse(txt);
+            } catch (_e) { /* mantém string */ }
+        }
+        if (obj[k] && typeof obj[k] === 'object') expandirXmlAninhado(obj[k], profundidade + 1);
+    }
+    return obj;
+}
+
+function nomeLocalTag(chave) {
+    const s = String(chave || '');
+    return s.includes(':') ? s.split(':').pop() : s.replace(/^_+/, '');
+}
+
+function coletarPorNomeLocal(obj, nomeAlvo, acc = []) {
+    if (!obj || typeof obj !== 'object') return acc;
+    for (const [k, v] of Object.entries(obj)) {
+        if (nomeLocalTag(k) === nomeAlvo) {
+            comoLista(v).forEach((item) => acc.push(item));
+        }
+        if (v && typeof v === 'object') coletarPorNomeLocal(v, nomeAlvo, acc);
+    }
+    return acc;
+}
+
+function mergeEventoParcial(prev, partial) {
+    const base = prev || {};
+    return {
+        tpEvento: partial.tpEvento || base.tpEvento,
+        nSeqEvento: partial.nSeqEvento || base.nSeqEvento || 1,
+        descricao: partial.descricao && !String(partial.descricao).startsWith('Evento ')
+            ? partial.descricao
+            : (base.descricao || partial.descricao || ''),
+        protocolo: partial.protocolo || base.protocolo || '',
+        dhEvento: partial.dhEvento || base.dhEvento || '',
+        dhRegEvento: partial.dhRegEvento || base.dhRegEvento || '',
+        orgao: partial.orgao || base.orgao || '',
+        cOrgao: partial.cOrgao || base.cOrgao || '',
+        xCorrecao: partial.xCorrecao || base.xCorrecao || '',
+    };
+}
+
+function eventoDeInfEvento(inf) {
+    if (!inf || typeof inf !== 'object') return null;
+    const det = inf.detEvento || {};
+    const tp = textoCampo(inf.tpEvento);
+    if (!tp) return null;
+    const cOrgao = textoCampo(inf.cOrgao);
+    const orgao = rotuloOrgaoSefaz(cOrgao);
+    let descricao = rotuloEventoSefaz(tp, det.descEvento);
+    if (orgao) descricao += ` (Órgão Autor: ${orgao})`;
+    return {
+        tpEvento: tp,
+        nSeqEvento: Number(textoCampo(inf.nSeqEvento) || 1) || 1,
+        descricao,
+        protocolo: textoCampo(inf.nProt),
+        dhEvento: textoCampo(inf.dhEvento),
+        dhRegEvento: textoCampo(inf.dhRegEvento),
+        orgao,
+        cOrgao,
+        xCorrecao: textoCampo(det.xCorrecao),
+    };
+}
+
+function coletarEventosDeObjeto(obj, registrar, setAmbiente) {
+    if (!obj || typeof obj !== 'object') return;
+    expandirXmlAninhado(obj);
+
+    const infProts = coletarPorNomeLocal(obj, 'infProt');
+    for (const infProt of infProts) {
+            if (textoCampo(infProt.nProt) && textoCampo(infProt.cStat) !== '101') {
+            setAmbiente(rotuloAmbienteSefaz(infProt.tpAmb));
+            registrar({
                 tpEvento: 'autorizacao',
                 nSeqEvento: 0,
                 descricao: 'Autorização de Uso',
@@ -711,30 +814,199 @@ function extrairEventosSefaz(docs) {
                 orgao: rotuloOrgaoSefaz(infProt.cOrgao),
                 cOrgao: textoCampo(infProt.cOrgao),
                 xCorrecao: '',
-            };
-        }
-
-        const procs = [
-            ...comoLista(obj.procEventoNFe),
-            ...comoLista(obj.procEvento),
-        ];
-        if (procs.length) {
-            for (const proc of procs) {
-                const ev = eventoDeProcEvento(proc);
-                if (ev) {
-                    if (!ambiente) ambiente = rotuloAmbienteSefaz(proc.evento?.infEvento?.tpAmb || proc.retEvento?.infEvento?.tpAmb);
-                    registrar(ev);
-                }
-            }
-        } else if (obj.evento || obj.retEvento) {
-            const ev = eventoDeProcEvento(obj);
-            if (ev) registrar(ev);
+            }, true);
         }
     }
 
-    if (autorizacao) eventos.unshift(autorizacao);
+    const procs = [
+        ...coletarPorNomeLocal(obj, 'procEventoNFe'),
+        ...coletarPorNomeLocal(obj, 'procEvento'),
+        ...coletarPorNomeLocal(obj, 'resEvento'),
+    ];
+    for (const proc of procs) {
+        const ev = eventoDeProcEvento(proc) || eventoDeInfEvento(proc.infEvento || proc);
+        if (ev) registrar(ev);
+    }
+
+    for (const inf of coletarInfEventos(obj)) {
+        const ev = eventoDeInfEvento(inf);
+        if (ev && ev.tpEvento !== 'autorizacao') registrar(ev);
+    }
+}
+
+/**
+ * Monta a lista de eventos da NF-e (autorização + procEventoNFe) a partir dos docs da Dist DFe / Consulta Protocolo.
+ */
+function extrairEventosSefaz(docs) {
+    const mapa = new Map();
+    let ambiente = '';
+    let autorizacao = null;
+
+    const registrar = (ev, ehAutorizacao = false) => {
+        if (!ev || !ev.tpEvento) return;
+        if (ehAutorizacao || ev.tpEvento === 'autorizacao') {
+            autorizacao = mergeEventoParcial(autorizacao, { ...ev, tpEvento: 'autorizacao', nSeqEvento: 0, descricao: 'Autorização de Uso' });
+            return;
+        }
+        const chaveEv = `${ev.tpEvento}|${ev.nSeqEvento || 1}`;
+        mapa.set(chaveEv, mergeEventoParcial(mapa.get(chaveEv), ev));
+    };
+    const setAmbiente = (amb) => {
+        if (amb && !ambiente) ambiente = amb;
+    };
+
+    for (const doc of docs || []) {
+        if (doc && typeof doc === 'object' && doc.json) {
+            coletarEventosDeObjeto(doc.json, registrar, setAmbiente);
+        }
+        const xml = xmlDocParaTexto(doc && doc.xml);
+        if (xml) {
+            try {
+                coletarEventosDeObjeto(parserStatusXml.parse(xml), registrar, setAmbiente);
+            } catch (_e) { /* ignora xml inválido */ }
+            const blocos = xml.match(/<(?:[\w.-]+:)?procEventoNFe\b[\s\S]*?<\/(?:[\w.-]+:)?procEventoNFe>/gi) || [];
+            for (const bloco of blocos) {
+                try {
+                    coletarEventosDeObjeto(parserStatusXml.parse(bloco), registrar, setAmbiente);
+                } catch (_e) { /* ignora bloco inválido */ }
+            }
+        }
+        if (doc && typeof doc === 'object' && !doc.xml && !doc.json) {
+            coletarEventosDeObjeto(doc, registrar, setAmbiente);
+        }
+    }
+
+    const eventos = [];
+    if (autorizacao) eventos.push(autorizacao);
+    for (const ev of mapa.values()) eventos.push(ev);
+    eventos.sort((a, b) => String(a.dhEvento || '').localeCompare(String(b.dhEvento || '')));
     const temCce = eventos.some((e) => e.tpEvento === '110110');
     return { eventos, ambiente, temCce };
+}
+
+function urlConsultaProtocolo(chave, tpAmb) {
+    const cUF = String(chave || '').replace(/\D/g, '').slice(0, 2);
+    if (String(tpAmb) === '2') {
+        if (['11', '12', '14', '16', '17', '22', '24', '25', '27', '28', '32', '33', '42', '53'].includes(cUF)) {
+            return SVRS_CONSULTA_PROT_HOM;
+        }
+    }
+    return MAP_CONSULTA_PROTOCOLO[cUF] || SVRS_CONSULTA_PROT;
+}
+
+function envelopesConsultaProtocolo(chave, tpAmb) {
+    const cons =
+        `<consSitNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">` +
+        `<tpAmb>${tpAmb}</tpAmb><xServ>CONSULTAR</xServ><chNFe>${chave}</chNFe></consSitNFe>`;
+    const soapAction = 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4/nfeConsultaNF';
+    return [
+        {
+            body:
+                `<?xml version="1.0" encoding="utf-8"?>` +
+                `<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">` +
+                `<soap12:Body><nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4">${cons}</nfeDadosMsg></soap12:Body></soap12:Envelope>`,
+            headers: {
+                'Content-Type': `application/soap+xml; charset=utf-8; action="${soapAction}"`,
+                SOAPAction: `"${soapAction}"`,
+            },
+        },
+        {
+            body:
+                `<?xml version="1.0" encoding="utf-8"?>` +
+                `<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:nfe="http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4">` +
+                `<soap:Body><nfe:nfeDadosMsg>${cons}</nfe:nfeDadosMsg></soap:Body></soap:Envelope>`,
+            headers: {
+                'Content-Type': 'text/xml; charset=utf-8',
+                SOAPAction: `"${soapAction}"`,
+            },
+        },
+    ];
+}
+
+async function postConsultaProtocolo(url, envelope, headers, agent) {
+    const resp = await axios.post(url, envelope, {
+        httpsAgent: agent,
+        timeout: 60000,
+        responseType: 'text',
+        transformResponse: [(d) => d],
+        headers,
+        validateStatus: () => true,
+    });
+    const xmlResp = typeof resp.data === 'string' ? resp.data : String(resp.data || '');
+    return { status: resp.status, xmlResp };
+}
+
+/**
+ * Consulta Protocolo (nfeConsultaNF) — é o webservice do portal que devolve todos os eventos.
+ */
+async function consultarEventosPorProtocolo(chave, dnCert, opts = {}) {
+    const tpAmb = opts.tpAmb || '1';
+    const cnpj = extrairCnpjDoDN(dnCert);
+    const cred = await obterCredenciais(cnpj, opts.thumbprint);
+    const url = urlConsultaProtocolo(chave, tpAmb);
+    const agent = new https.Agent({
+        pfx: cred.pfx,
+        passphrase: cred.passphrase || '',
+        rejectUnauthorized: false,
+    });
+
+    let ultimoErro = null;
+    for (const env of envelopesConsultaProtocolo(chave, tpAmb)) {
+        try {
+            const { status, xmlResp } = await postConsultaProtocolo(url, env.body, env.headers, agent);
+            if (status >= 400) {
+                ultimoErro = new Error(`Consulta protocolo HTTP ${status}`);
+                continue;
+            }
+            if (!xmlResp || /<\s*html[\s>]/i.test(xmlResp)) {
+                ultimoErro = new Error('Consulta protocolo retornou HTML em vez de XML');
+                continue;
+            }
+            const parsed = parserStatusXml.parse(xmlResp);
+            expandirXmlAninhado(parsed);
+            const extra = extrairEventosSefaz([{ json: parsed, xml: xmlResp }]);
+            const rets = coletarPorNomeLocal(parsed, 'retConsSitNFe');
+            const cStatRet = textoCampo((rets[0] || {}).cStat);
+            if (!rets.length && extra.eventos.length === 0) {
+                ultimoErro = new Error('Consulta protocolo sem retConsSitNFe');
+                continue;
+            }
+            if (cStatRet && !['100', '101', '110', '150', '151', '155'].includes(cStatRet) && extra.eventos.length <= 1) {
+                console.warn(`[SEFAZ consulta protocolo] cStat=${cStatRet} url=${url}`);
+            }
+            console.log(`[SEFAZ consulta protocolo] cStat=${cStatRet || '-'} eventos=${extra.eventos.length} url=${url}`);
+            return extra;
+        } catch (err) {
+            ultimoErro = err;
+        }
+    }
+    throw ultimoErro || new Error('Falha na consulta de protocolo da NF-e');
+}
+
+function mesclarExtraEventos(base, extra) {
+    const mapa = new Map();
+    let autorizacao = null;
+    const ambiente = (extra && extra.ambiente) || (base && base.ambiente) || '';
+    const push = (ev) => {
+        if (!ev || !ev.tpEvento) return;
+        if (ev.tpEvento === 'autorizacao') {
+            autorizacao = mergeEventoParcial(autorizacao, ev);
+            return;
+        }
+        const k = `${ev.tpEvento}|${ev.nSeqEvento || 1}`;
+        mapa.set(k, mergeEventoParcial(mapa.get(k), ev));
+    };
+    for (const ev of (base && base.eventos) || []) push(ev);
+    for (const ev of (extra && extra.eventos) || []) push(ev);
+    const eventos = [];
+    if (autorizacao) eventos.push(autorizacao);
+    for (const ev of mapa.values()) eventos.push(ev);
+    eventos.sort((a, b) => String(a.dhEvento || a.dhRegEvento || '').localeCompare(String(b.dhEvento || b.dhRegEvento || '')));
+    return {
+        eventos,
+        ambiente,
+        temCce: eventos.some((e) => e.tpEvento === '110110') || Boolean(base?.temCce) || Boolean(extra?.temCce),
+    };
 }
 
 /**
@@ -862,7 +1134,19 @@ async function consultarStatusPorChave(chave, dnCert, uf, opts = {}) {
     }
 
     const analise = analisarSituacaoNFeSefaz(docs, cStat, xMotivo);
-    const extra = extrairEventosSefaz(docs);
+    let extra = extrairEventosSefaz(docs);
+    try {
+        const extraProt = await consultarEventosPorProtocolo(chaveLimpa, dnCert, opts);
+        extra = mesclarExtraEventos(extra, extraProt);
+        if (extra.eventos.some((e) => String(e.tpEvento) === '110111')) {
+            analise.situacao = 'cancelada';
+            analise.label = 'Cancelado';
+            analise.cancelada = true;
+            analise.autorizada = false;
+        }
+    } catch (errProt) {
+        console.warn('[SEFAZ consulta protocolo]', errProt?.message || errProt);
+    }
     return {
         chave: chaveLimpa,
         cnpj,
