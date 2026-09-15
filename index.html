@@ -649,12 +649,22 @@
       transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
 
-    tbody tr:nth-child(even) {
+    tbody tr.nfe-alt {
       background: rgba(200, 16, 46, 0.05);
     }
 
     tbody tr:hover {
       transform: translateY(-2px);
+      box-shadow: 0 16px 26px rgba(34, 34, 34, 0.12);
+    }
+
+    tbody tr.nfe-main.tem-obs,
+    tbody tr.nfe-obs {
+      transform: none;
+    }
+
+    tbody tr.nfe-main.tem-obs:hover,
+    tbody tr.nfe-main.tem-obs:hover + tr.nfe-obs {
       box-shadow: 0 16px 26px rgba(34, 34, 34, 0.12);
     }
 
@@ -666,6 +676,27 @@
     tbody td:last-child {
       border-top-right-radius: 18px;
       border-bottom-right-radius: 18px;
+    }
+
+    tbody tr.nfe-main.tem-obs td:first-child {
+      border-bottom-left-radius: 0;
+    }
+
+    tbody tr.nfe-main.tem-obs td:last-child {
+      border-bottom-right-radius: 0;
+    }
+
+    tbody tr.nfe-obs td {
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+      border-bottom-left-radius: 18px;
+      border-bottom-right-radius: 18px;
+      padding-top: 0.15rem;
+    }
+
+    tbody tr.nfe-main.tem-obs td {
+      border-bottom: none;
+      padding-bottom: 0.35rem;
     }
 
     .col-emissao { width: 9%; }
@@ -683,17 +714,60 @@
     .col-numero { width: 9%; text-align: right; }
     .col-usuario { width: 8%; text-align: center; }
     .col-status { width: 14%; text-align: center; }
-    .col-obs { width: 14%; text-align: left; vertical-align: middle; }
-    .nfe-obs-select {
+    .nfe-obs-bar {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.65rem;
       width: 100%;
-      max-width: 220px;
-      font-size: 0.72rem;
+    }
+
+    .nfe-obs-label {
+      flex: 0 0 auto;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--lumi-muted);
+      padding-top: 0.2rem;
+    }
+
+    .nfe-obs-texto {
+      flex: 1 1 auto;
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--lumi-dark);
+      line-height: 1.35;
+      white-space: normal;
+      word-break: break-word;
+    }
+
+    .nfe-obs-select {
+      flex: 0 0 16rem;
+      width: 16rem;
+      max-width: 100%;
+      font-size: 0.78rem;
       line-height: 1.2;
-      padding: 0.28rem 0.35rem;
+      padding: 0.28rem 0.4rem;
       border: 1px solid #d8cfc8;
       border-radius: 6px;
       background: #fff;
       color: #333;
+    }
+
+    .cnpj-cell {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .btn-icon--mini {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      flex: 0 0 auto;
+    }
+
+    .btn-icon--mini svg {
+      width: 12px;
+      height: 12px;
     }
 
     .cell-text {
@@ -761,7 +835,18 @@
       border-bottom: 1px solid rgba(34, 34, 34, 0.06);
     }
 
+    tbody tr.nfe-main.tem-obs td {
+      border-bottom: none;
+    }
+
     tbody tr:hover {
+      background-color: rgba(200, 16, 46, 0.08);
+    }
+
+    tbody tr.nfe-main.tem-obs:hover,
+    tbody tr.nfe-obs:hover,
+    tbody tr.nfe-main.tem-obs:hover + tr.nfe-obs {
+      transform: none;
       background-color: rgba(200, 16, 46, 0.08);
     }
 
@@ -1620,7 +1705,6 @@
               <th class="col-valor">Valor</th>
               <th class="col-numero">Número NF</th>
               <th class="col-usuario">Usuário</th>
-              <th class="col-obs hidden" id="th-obs">Observação</th>
               <th class="col-status">Status</th>
       </tr>
     </thead>
@@ -2151,7 +2235,7 @@
             row.RAZAO,
             row.CHAVE,
             normalizarValor(row.VALOR).toFixed(2).replace('.', ','),
-            row.NUMERO_NF,
+            formatarNumeroNf(row.NUMERO_NF),
             statusInfo.label.toUpperCase()
           ];
           if (state.nfeObs.ativo) campos.push(row.OBSERVACAO || '');
@@ -2178,6 +2262,17 @@
       if (detalhesBtn) {
         const chave = detalhesBtn.getAttribute('data-detalhes');
         window.location.href = `/detalhes.html?chave=${chave}`;
+        return;
+      }
+
+      const copiaDocBtn = event.target.closest('[data-copy-doc]');
+      if (copiaDocBtn) {
+        const valor = copiaDocBtn.getAttribute('data-copy-doc') || '';
+        navigator.clipboard?.writeText(valor).then(() => {
+          mostrarToast('CNPJ/CPF copiado (somente números).');
+        }).catch(() => {
+          mostrarToast('Não foi possível copiar o documento.', true);
+        });
         return;
       }
 
@@ -2241,6 +2336,8 @@
           const item = lista.find((r) => r.CHAVE === chave);
           if (item) item.OBSERVACAO = observacao;
         });
+        const texto = sel.closest('.nfe-obs-bar')?.querySelector('.nfe-obs-texto');
+        if (texto) texto.textContent = observacao || '—';
         mostrarToast(observacao ? 'Observação gravada.' : 'Observação removida.');
       } catch (error) {
         mostrarToast(error.message || 'Falha ao gravar observação.', true);
@@ -2321,22 +2418,40 @@
 
     function atualizarTabela() {
       tbody.innerHTML = '';
-      state.filtered.forEach((row) => {
+      const colunas = 9;
+      state.filtered.forEach((row, indice) => {
         const tr = document.createElement('tr');
+        const alt = indice % 2 === 1;
+        const temObs = state.nfeObs.ativo;
+        tr.className = `nfe-main${temObs ? ' tem-obs' : ''}${alt ? ' nfe-alt' : ''}`;
         const emissao = resolverDataLinha(row);
         const chave = row.CHAVE ?? '';
         const possuiChave = Boolean(chave);
         const statusInfo = obterStatusLancamento(row);
         const razao = row.RAZAO ?? '-';
         const estabFantasia = row.ESTAB_FANTASIA ?? '-';
-        const numeroNF = row.NUMERO_NF ?? '-';
+        const numeroNF = formatarNumeroNf(row.NUMERO_NF);
         const valorFormatado = formatarMoeda(normalizarValor(row.VALOR));
         const chaveTexto = chave || '-';
         const usuarioCodigo = row.USUARIO_CODIGO ?? '-';
         const usuarioNome = row.USUARIO_NOME ?? '';
+        const cnpjDigits = String(row.CNPJ_CPF || '').replace(/\D/g, '');
+        const cnpjMascara = formatarDocumento(row.CNPJ_CPF);
         tr.innerHTML = `
           <td class="col-emissao"><span class="cell-text cell-text--nowrap" title="${escaparHtml(formatarDataHumana(emissao))}">${formatarDataHumana(emissao)}</span></td>
-          <td class="col-cnpj"><span class="badge cell-text--nowrap" title="${escaparHtml(formatarDocumento(row.CNPJ_CPF))}">${formatarDocumento(row.CNPJ_CPF)}</span></td>
+          <td class="col-cnpj">
+            <div class="cnpj-cell">
+              <span class="badge cell-text--nowrap" title="${escaparHtml(cnpjMascara)}">${cnpjMascara}</span>
+              ${
+                cnpjDigits
+                  ? `<button type="button" class="btn-icon btn-icon--mini" data-copy-doc="${escaparHtml(cnpjDigits)}" title="Copiar somente números">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h11a2 2 0 0 1 2 2v11h-2V5H8V3Zm8 4a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h11Zm0 2H5v11h11V9Z"/></svg>
+                      <span class="sr-only">Copiar CNPJ/CPF</span>
+                    </button>`
+                  : ''
+              }
+            </div>
+          </td>
           <td class="col-razao">
             <div class="cell-stack">
               <span class="cell-text cell-text--wrap cell-strong" title="${escaparHtml(razao)}">${razao}</span>
@@ -2360,7 +2475,6 @@
           <td class="col-usuario">
             <span class="badge cell-text--nowrap" title="${escaparHtml(usuarioNome)}">${escaparHtml(usuarioCodigo)}</span>
           </td>
-          ${htmlCelulaObs(row)}
           <td class="col-status">
             <div style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem;">
               <span class="status-pill ${statusInfo.className}">${statusInfo.label}</span>
@@ -2401,6 +2515,8 @@
           </td>
         `;
         tbody.appendChild(tr);
+        const linhaObs = htmlLinhaObs(row, colunas, alt);
+        if (linhaObs) tbody.appendChild(linhaObs);
       });
     }
 
@@ -2845,6 +2961,13 @@
       return documento;
     }
 
+    function formatarNumeroNf(numero) {
+      const s = String(numero ?? '').trim();
+      if (!s || s === '-') return '-';
+      const limpo = s.replace(/^0+/, '');
+      return limpo || '0';
+    }
+
     function aplicarFiltrosStatus() {
       const filtroStatusNF = statusSelect.value;
       const filtroStatusCompra = statusCompraSelect.value;
@@ -3026,8 +3149,6 @@
       } catch (_e) {
         state.nfeObs = { ativo: false, opcoes: [] };
       }
-      const thObs = document.getElementById('th-obs');
-      if (thObs) thObs.classList.toggle('hidden', !state.nfeObs.ativo);
       const wrap = document.getElementById('filtro-obs-wrap');
       const sel = document.getElementById('filtro-observacao');
       if (wrap) wrap.classList.toggle('hidden', !state.nfeObs.ativo);
@@ -3057,8 +3178,8 @@
       return `<span class="${cls}" title="${escaparHtml(title)}">${escaparHtml(txt)}</span>`;
     }
 
-    function htmlCelulaObs(row) {
-      if (!state.nfeObs.ativo) return '';
+    function htmlLinhaObs(row, colunas, alt) {
+      if (!state.nfeObs.ativo) return null;
       const chave = row.CHAVE || '';
       const atual = row.OBSERVACAO || '';
       const opts = ['<option value="">—</option>'].concat(
@@ -3067,7 +3188,16 @@
           return `<option value="${escaparHtml(opcao)}"${sel}>${escaparHtml(opcao)}</option>`;
         })
       );
-      return `<td class="col-obs"><select class="nfe-obs-select" data-obs-chave="${escaparHtml(chave)}" ${chave ? '' : 'disabled'}>${opts.join('')}</select></td>`;
+      const tr = document.createElement('tr');
+      tr.className = `nfe-obs${alt ? ' nfe-alt' : ''}`;
+      tr.innerHTML = `<td colspan="${colunas}">
+        <div class="nfe-obs-bar">
+          <span class="nfe-obs-label">Observação</span>
+          <span class="nfe-obs-texto">${escaparHtml(atual || '—')}</span>
+          <select class="nfe-obs-select" data-obs-chave="${escaparHtml(chave)}" ${chave ? '' : 'disabled'}>${opts.join('')}</select>
+        </div>
+      </td>`;
+      return tr;
     }
 
     async function carregarUsuarios() {
@@ -3203,7 +3333,7 @@
           (row.RAZAO || '-').toUpperCase(),
           row.CHAVE || '',
           formatarMoeda(normalizarValor(row.VALOR)),
-          row.NUMERO_NF || '-',
+          formatarNumeroNf(row.NUMERO_NF),
           status.label.toUpperCase()
         ];
         if (state.nfeObs.ativo) linha.push(row.OBSERVACAO || '');
