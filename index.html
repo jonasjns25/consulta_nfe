@@ -700,10 +700,10 @@
     }
 
     .col-emissao { width: 9%; }
-    .col-cnpj { width: 13%; }
+    .col-cnpj { width: 15%; overflow: hidden; }
     .col-razao { width: 17%; font-size: 0.9rem; }
     .col-estab { width: 15%; font-size: 0.9rem; }
-    .col-chave { width: 20%; font-size: 0.85rem; white-space: normal; }
+    .col-chave { width: 18%; font-size: 0.85rem; white-space: normal; }
 
     .cell-key {
       font-family: "Space Mono", "Fira Code", monospace;
@@ -753,9 +753,16 @@
     }
 
     .cnpj-cell {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.3rem;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.2rem;
+      max-width: 100%;
+    }
+
+    .cnpj-cell .badge {
+      font-size: 0.72rem;
+      max-width: 100%;
     }
 
     .btn-icon--mini {
@@ -763,6 +770,8 @@
       height: 22px;
       border-radius: 6px;
       flex: 0 0 auto;
+      position: relative;
+      z-index: 1;
     }
 
     .btn-icon--mini svg {
@@ -2441,7 +2450,7 @@
           <td class="col-emissao"><span class="cell-text cell-text--nowrap" title="${escaparHtml(formatarDataHumana(emissao))}">${formatarDataHumana(emissao)}</span></td>
           <td class="col-cnpj">
             <div class="cnpj-cell">
-              <span class="badge cell-text--nowrap" title="${escaparHtml(cnpjMascara)}">${cnpjMascara}</span>
+              <span class="badge" title="${escaparHtml(cnpjMascara)}">${cnpjMascara}</span>
               ${
                 cnpjDigits
                   ? `<button type="button" class="btn-icon btn-icon--mini" data-copy-doc="${escaparHtml(cnpjDigits)}" title="Copiar somente números">
