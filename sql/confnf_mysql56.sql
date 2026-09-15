@@ -200,3 +200,10 @@ CREATE TABLE IF NOT EXISTS conf_sefaz_evento (
   KEY idx_conf_sefaz_evento_chave (chave_nfe),
   CONSTRAINT fk_conf_sefaz_evento_consulta FOREIGN KEY (id_consulta) REFERENCES conf_sefaz_consulta (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS conf_nfe_obs (
+  chave_nfe     VARCHAR(44) NOT NULL,
+  observacao    VARCHAR(160) NOT NULL DEFAULT '',
+  atualizado_em DATETIME NOT NULL,
+  PRIMARY KEY (chave_nfe)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

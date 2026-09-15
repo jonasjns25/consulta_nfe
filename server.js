@@ -618,6 +618,7 @@ app.get('/consulta', async (req, res) => {
 
     try {
         const [rows] = await pool.query(sql, valores);
+        await anexarObservacoesNfe(rows);
         res.json({
             data: rows,
             meta: {
@@ -632,6 +633,50 @@ app.get('/consulta', async (req, res) => {
             });
         }
         res.status(500).json({ error: 'Falha ao consultar notas fiscais.' });
+    }
+});
+
+app.get('/api/nfe/obs-config', (_req, res) => {
+    res.json({
+        ativo: nfeObsAtivo(),
+        opcoes: nfeObsAtivo() ? nfeObsOpcoes() : [],
+    });
+});
+
+app.post('/api/nfe/obs', async (req, res) => {
+    if (!nfeObsAtivo()) {
+        return res.status(400).json({ error: 'Classificação de NF-e desativada.' });
+    }
+    const chave = String(req.body?.chave || '').replace(/\D/g, '');
+    const observacao = String(req.body?.observacao || '').trim();
+    if (chave.length !== 44) {
+        return res.status(400).json({ error: 'Chave da NF-e inválida.' });
+    }
+    const opcoes = nfeObsOpcoes();
+    if (observacao && !opcoes.includes(observacao)) {
+        return res.status(400).json({ error: 'Observação não está na lista configurada.' });
+    }
+    if (!(await garantirTabelaNfeObs())) {
+        return res.status(500).json({ error: 'Tabela de observações indisponível.' });
+    }
+    try {
+        if (!observacao) {
+            await getConfNfPool().query(
+                `DELETE FROM ${tabelaConfnf('conf_nfe_obs')} WHERE chave_nfe = ?`,
+                [chave]
+            );
+        } else {
+            await getConfNfPool().query(
+                `INSERT INTO ${tabelaConfnf('conf_nfe_obs')} (chave_nfe, observacao, atualizado_em)
+                 VALUES (?, ?, NOW())
+                 ON DUPLICATE KEY UPDATE observacao = VALUES(observacao), atualizado_em = NOW()`,
+                [chave, observacao]
+            );
+        }
+        res.json({ ok: true, chave, observacao });
+    } catch (error) {
+        console.error('[NFE obs gravar]', error?.message || error);
+        res.status(500).json({ error: 'Falha ao gravar observação.' });
     }
 });
 
@@ -890,6 +935,89 @@ app.get('/danfe/:chave', async (req, res) => {
 // Persistência da consulta de situação/eventos na SEFAZ (banco confnf)
 // ─────────────────────────────────────────────────────────────
 const tabelaConfnf = (name) => `\`${CONFN_DB_NAME}\`.\`${name}\``;
+
+const NFE_OBS_PADRAO = [
+    'BONIFICAÇÃO S/ PEDIDO (EMAIL ENVIADO)',
+    'CANCELADA',
+    'CONSUMO INTERNO',
+    'DEVOLUÇÃO DE VENDA',
+    'DEVOLUÇÃO INTERNA',
+    'DEVOLUÇÃO TOTAL',
+    'DIVERGÊNCIA NO PEDIDO (VALOR MAIOR)',
+    'DIVERGÊNCIA NO PEDIDO (CONDIÇÃO DE PAGAMENTO)',
+    'DIVERGÊNCIA NO PEDIDO (QUANTIDADE)',
+    'LANÇADA',
+    'NF INCORRETA',
+    'SEM PEDIDO (EMAIL ENVIADO)',
+    'SERÁ CANCELADA',
+    'TRANSF.INSUMO P/ PRODUCAO ROTISSERIA',
+    'TROCA PRODUTO IMPROPRIO',
+];
+
+function nfeObsAtivo() {
+    const v = String(process.env.NFE_OBS_ATIVO || '').trim().toLowerCase();
+    return v === '1' || v === 'true' || v === 'sim' || v === 'yes';
+}
+
+function nfeObsOpcoes() {
+    const raw = String(process.env.NFE_OBS_LISTA || '');
+    const lista = raw.split(/[|;]/).map((s) => s.trim()).filter(Boolean);
+    return lista.length ? lista : NFE_OBS_PADRAO;
+}
+
+let tabelaNfeObsOk = false;
+async function garantirTabelaNfeObs() {
+    if (tabelaNfeObsOk) return true;
+    try {
+        await getConfNfPool().query(`SELECT 1 FROM ${tabelaConfnf('conf_nfe_obs')} LIMIT 1`);
+        tabelaNfeObsOk = true;
+        return true;
+    } catch (_e) {
+        try {
+            await getConfNfPool().query(`
+                CREATE TABLE IF NOT EXISTS ${tabelaConfnf('conf_nfe_obs')} (
+                    chave_nfe VARCHAR(44) NOT NULL,
+                    observacao VARCHAR(160) NOT NULL DEFAULT '',
+                    atualizado_em DATETIME NOT NULL,
+                    PRIMARY KEY (chave_nfe)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+            tabelaNfeObsOk = true;
+            return true;
+        } catch (error) {
+            console.error('[NFE obs tabela]', error?.message || error);
+            return false;
+        }
+    }
+}
+
+async function anexarObservacoesNfe(rows) {
+    if (!nfeObsAtivo() || !Array.isArray(rows) || !rows.length) return rows;
+    if (!(await garantirTabelaNfeObs())) return rows;
+    const chaves = [...new Set(rows.map((r) => r.CHAVE || r.chave).filter(Boolean))];
+    if (!chaves.length) return rows;
+    try {
+        const [obs] = await getConfNfPool().query(
+            `SELECT chave_nfe, observacao FROM ${tabelaConfnf('conf_nfe_obs')} WHERE chave_nfe IN (${chaves.map(() => '?').join(',')})`,
+            chaves
+        );
+        const mapa = {};
+        for (const o of obs || []) {
+            const k = o.chave_nfe || o.CHAVE_NFE;
+            if (k) mapa[k] = o.observacao || o.OBSERVACAO || '';
+        }
+        for (const row of rows) {
+            row.OBSERVACAO = mapa[row.CHAVE] || '';
+        }
+    } catch (error) {
+        console.warn('[NFE obs listar]', error?.message || error);
+    }
+    return rows;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Persistência da consulta de situação/eventos na SEFAZ (banco confnf)
+// ─────────────────────────────────────────────────────────────
 const SEFAZ_CACHE_PATH = path.join(__dirname, '.sefaz-consulta-cache.json');
 let tabelasSefazConsultaOk = false;
 

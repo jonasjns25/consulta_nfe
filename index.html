@@ -680,6 +680,18 @@
     .col-numero { width: 9%; text-align: right; }
     .col-usuario { width: 8%; text-align: center; }
     .col-status { width: 14%; text-align: center; }
+    .col-obs { width: 14%; text-align: left; vertical-align: middle; }
+    .nfe-obs-select {
+      width: 100%;
+      max-width: 220px;
+      font-size: 0.72rem;
+      line-height: 1.2;
+      padding: 0.28rem 0.35rem;
+      border: 1px solid #d8cfc8;
+      border-radius: 6px;
+      background: #fff;
+      color: #333;
+    }
 
     .cell-text {
       display: block;
@@ -1557,6 +1569,7 @@
               <th class="col-valor">Valor</th>
               <th class="col-numero">Número NF</th>
               <th class="col-usuario">Usuário</th>
+              <th class="col-obs hidden" id="th-obs">Observação</th>
               <th class="col-status">Status</th>
       </tr>
     </thead>
@@ -1672,7 +1685,8 @@
       usuarios: [],
       estabelecimentos: [],
       servidores: [],
-      servidorAtual: null
+      servidorAtual: null,
+      nfeObs: { ativo: false, opcoes: [] }
     };
 
     // Carregar servidores primeiro, depois os outros dados
@@ -1680,6 +1694,7 @@
       definirPeriodoPadrao(true);
       carregarUsuarios();
       carregarEstabelecimentos();
+      carregarNfeObsConfig();
       carregarContagemStatusCompra();
       atualizarResumo();
       toggleEmptyState(true);
@@ -2065,11 +2080,13 @@
     tipoNfSelect.addEventListener('change', () => carregarContagemStatusCompra());
     btnExport.addEventListener('click', () => {
       if (!state.filtered.length) return;
-      const linhas = [
-        ['Emissao', 'CNPJ_CPF', 'Razao', 'Chave', 'Valor', 'NumeroNF', 'Status'].join(';'),
+        const linhas = [
+        ['Emissao', 'CNPJ_CPF', 'Razao', 'Chave', 'Valor', 'NumeroNF', 'Status']
+          .concat(state.nfeObs.ativo ? ['Observacao'] : [])
+          .join(';'),
         ...state.filtered.map((row) => {
           const statusInfo = obterStatusLancamento(row);
-          return [
+          const campos = [
             resolverDataLinha(row),
             formatarDocumento(row.CNPJ_CPF),
             row.RAZAO,
@@ -2077,7 +2094,9 @@
             normalizarValor(row.VALOR).toFixed(2).replace('.', ','),
             row.NUMERO_NF,
             statusInfo.label.toUpperCase()
-          ].map((campo) => `"${(campo ?? '').toString().replace(/"/g, '""')}"`).join(';');
+          ];
+          if (state.nfeObs.ativo) campos.push(row.OBSERVACAO || '');
+          return campos.map((campo) => `"${(campo ?? '').toString().replace(/"/g, '""')}"`).join(';');
         })
       ];
       const blob = new Blob([linhas.join('\n')], { type: 'text/csv;charset=utf-8;' });
@@ -2095,6 +2114,7 @@
     btnExportPdf.addEventListener('click', gerarRelatorioPdf);
 
     tbody.addEventListener('click', async (event) => {
+      if (event.target.closest('select[data-obs-chave]')) return;
       const detalhesBtn = event.target.closest('[data-detalhes]');
       if (detalhesBtn) {
         const chave = detalhesBtn.getAttribute('data-detalhes');
@@ -2141,6 +2161,34 @@
         Object.entries(params).forEach(([k, v]) => { if (v) query.append(k, v); });
         window.location.href = 'autorizacao-recepcao-xml.html?' + query.toString();
         return;
+      }
+    });
+
+    tbody.addEventListener('change', async (event) => {
+      const sel = event.target.closest('select[data-obs-chave]');
+      if (!sel) return;
+      const chave = sel.getAttribute('data-obs-chave') || '';
+      const observacao = sel.value || '';
+      sel.disabled = true;
+      try {
+        const resp = await fetch('/api/nfe/obs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chave, observacao })
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.error || 'Falha ao gravar observação.');
+        [state.rows, state.filtered].forEach((lista) => {
+          const item = lista.find((r) => r.CHAVE === chave);
+          if (item) item.OBSERVACAO = observacao;
+        });
+        mostrarToast(observacao ? 'Observação gravada.' : 'Observação removida.');
+      } catch (error) {
+        mostrarToast(error.message || 'Falha ao gravar observação.', true);
+        const item = state.rows.find((r) => r.CHAVE === chave);
+        sel.value = item?.OBSERVACAO || '';
+      } finally {
+        sel.disabled = false;
       }
     });
 
@@ -2251,6 +2299,7 @@
           <td class="col-usuario">
             <span class="badge cell-text--nowrap" title="${escaparHtml(usuarioNome)}">${escaparHtml(usuarioCodigo)}</span>
           </td>
+          ${htmlCelulaObs(row)}
           <td class="col-status">
             <div style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem;">
               <span class="status-pill ${statusInfo.className}">${statusInfo.label}</span>
@@ -2904,6 +2953,36 @@
         .replace(/'/g, '&#39;') || '';
     }
 
+    async function carregarNfeObsConfig() {
+      try {
+        const resp = await fetch('/api/nfe/obs-config');
+        if (resp.ok) {
+          const data = await resp.json();
+          state.nfeObs = {
+            ativo: Boolean(data.ativo),
+            opcoes: Array.isArray(data.opcoes) ? data.opcoes : []
+          };
+        }
+      } catch (_e) {
+        state.nfeObs = { ativo: false, opcoes: [] };
+      }
+      const thObs = document.getElementById('th-obs');
+      if (thObs) thObs.classList.toggle('hidden', !state.nfeObs.ativo);
+    }
+
+    function htmlCelulaObs(row) {
+      if (!state.nfeObs.ativo) return '';
+      const chave = row.CHAVE || '';
+      const atual = row.OBSERVACAO || '';
+      const opts = ['<option value="">—</option>'].concat(
+        state.nfeObs.opcoes.map((opcao) => {
+          const sel = opcao === atual ? ' selected' : '';
+          return `<option value="${escaparHtml(opcao)}"${sel}>${escaparHtml(opcao)}</option>`;
+        })
+      );
+      return `<td class="col-obs"><select class="nfe-obs-select" data-obs-chave="${escaparHtml(chave)}" ${chave ? '' : 'disabled'}>${opts.join('')}</select></td>`;
+    }
+
     async function carregarUsuarios() {
       try {
         const resp = await fetch('/usuarios');
@@ -3031,7 +3110,7 @@
 
       const tabela = state.filtered.map((row) => {
         const status = obterStatusLancamento(row);
-        return [
+        const linha = [
           formatarDataHumana(resolverDataLinha(row)),
           formatarDocumento(row.CNPJ_CPF),
           (row.RAZAO || '-').toUpperCase(),
@@ -3040,11 +3119,27 @@
           row.NUMERO_NF || '-',
           status.label.toUpperCase()
         ];
+        if (state.nfeObs.ativo) linha.push(row.OBSERVACAO || '');
+        return linha;
       });
+
+      const cabecalho = ['Emissão', 'CNPJ/CPF', 'Razão social', 'Chave', 'Valor', 'Número NF', 'Status'];
+      if (state.nfeObs.ativo) cabecalho.push('Observação');
+
+      const colunas = {
+          0: { cellWidth: 22, halign: 'center' },
+          1: { cellWidth: 32 },
+          2: { cellWidth: state.nfeObs.ativo ? 42 : 55 },
+          3: { cellWidth: state.nfeObs.ativo ? 52 : 85 },
+          4: { cellWidth: 26, halign: 'right' },
+          5: { cellWidth: 22, halign: 'right' },
+          6: { cellWidth: 20, halign: 'center', fontSize: 8 }
+      };
+      if (state.nfeObs.ativo) colunas[7] = { cellWidth: 42, fontSize: 7 };
 
       doc.autoTable({
         startY: 40,
-        head: [['Emissão', 'CNPJ/CPF', 'Razão social', 'Chave', 'Valor', 'Número NF', 'Status']],
+        head: [cabecalho],
         body: tabela,
         styles: {
           fontSize: 9,
@@ -3060,15 +3155,7 @@
         alternateRowStyles: {
           fillColor: [255, 248, 244]
         },
-        columnStyles: {
-          0: { cellWidth: 22, halign: 'center' },
-          1: { cellWidth: 36 },
-          2: { cellWidth: 55 },
-          3: { cellWidth: 85 },
-          4: { cellWidth: 28, halign: 'right' },
-          5: { cellWidth: 25, halign: 'right' },
-          6: { cellWidth: 20, halign: 'center', fontSize: 8 }
-        },
+        columnStyles: colunas,
         theme: 'grid'
       });
 
