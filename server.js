@@ -632,6 +632,7 @@ app.get('/consulta', async (req, res) => {
 
         const [rows] = await pool.query(sql, valores);
         await anexarObservacoesNfe(rows);
+        await anexarUltimasSefaz(rows);
         const data = (nfeObsAtivo() && observacaoFiltro === '__vazia__')
             ? rows.filter((r) => !r.OBSERVACAO)
             : rows;
@@ -1035,6 +1036,59 @@ async function anexarObservacoesNfe(rows) {
     return rows;
 }
 
+async function anexarUltimasSefaz(rows) {
+    if (!Array.isArray(rows) || !rows.length) return rows;
+    const chaves = [...new Set(rows.map((r) => String(r.CHAVE || '').replace(/\D/g, '')).filter((c) => c.length === 44))];
+    if (!chaves.length) return rows;
+    const mapa = {};
+    try {
+        if (await garantirTabelasSefazConsulta()) {
+            const [ult] = await getConfNfPool().query(
+                `SELECT c.chave_nfe, c.situacao, c.situacao_label, c.c_stat, c.tem_cce,
+                        DATE_FORMAT(c.consultado_em, '%Y-%m-%dT%H:%i:%s') AS consultado_em
+                 FROM ${tabelaConfnf('conf_sefaz_consulta')} c
+                 INNER JOIN (
+                     SELECT chave_nfe, MAX(id) AS id
+                     FROM ${tabelaConfnf('conf_sefaz_consulta')}
+                     WHERE chave_nfe IN (${chaves.map(() => '?').join(',')})
+                     GROUP BY chave_nfe
+                 ) u ON u.id = c.id`,
+                chaves
+            );
+            for (const r of ult || []) {
+                const k = colRow(r, 'chave_nfe');
+                if (!k) continue;
+                mapa[k] = {
+                    situacao: colRow(r, 'situacao') || null,
+                    situacaoLabel: colRow(r, 'situacao_label') || null,
+                    cStat: colRow(r, 'c_stat') || null,
+                    temCce: Number(colRow(r, 'tem_cce')) === 1,
+                    consultadoEm: dataConsultaSefaz(colRow(r, 'consultado_em')),
+                };
+            }
+        }
+    } catch (error) {
+        console.warn('[SEFAZ listar ultima]', error?.message || error);
+    }
+    for (const chave of chaves) {
+        if (mapa[chave]) continue;
+        const cache = historicoDoCache(chave)[0];
+        if (!cache) continue;
+        mapa[chave] = {
+            situacao: cache.situacao || null,
+            situacaoLabel: cache.situacaoLabel || null,
+            cStat: cache.cStat || null,
+            temCce: Boolean(cache.temCce),
+            consultadoEm: cache.consultadoEm || null,
+        };
+    }
+    for (const row of rows) {
+        const k = String(row.CHAVE || '').replace(/\D/g, '');
+        row.SEFAZ = mapa[k] || null;
+    }
+    return rows;
+}
+
 async function chavesPorObservacao(observacao) {
     if (!observacao || !(await garantirTabelaNfeObs())) return [];
     try {
@@ -1407,10 +1461,19 @@ async function salvarConsultaSefaz(chave, estab, statusSefaz) {
     }
 }
 
+async function persistirStatusSefazConsulta(chave, estab, dnCert, uf, opts, statusJaObtido) {
+    try {
+        const statusSefaz = statusJaObtido || await consultarStatusPorChave(chave, dnCert, uf, opts);
+        return await salvarConsultaSefaz(chave, estab, statusSefaz);
+    } catch (error) {
+        console.warn('[SEFAZ persistir status XML]', error?.message || error);
+        return null;
+    }
+}
+
 // ─────────────────────────────────────────────────────────────
 // API de consulta SEFAZ por chave
 // ─────────────────────────────────────────────────────────────
-
 
 /** GET /api/sefaz/diagnostico?cnpj=14digitos → diagnóstico de certificados visíveis */
 app.get('/api/sefaz/diagnostico', async (req, res) => {
@@ -1502,16 +1565,20 @@ app.post('/api/nfe/consultar-sefaz', async (req, res) => {
             'SELECT IDNFE_XML FROM nfe_xml WHERE CHAVE = ? AND ESTAB = ? LIMIT 1',
             [chave, codEstab]
         );
+        const tpAmb = process.env.SEFAZ_TPAMB || '1';
+        const optsSefaz = { tpAmb, thumbprint };
+
         if (jaExiste && jaExiste.length > 0) {
+            const salvo = await persistirStatusSefazConsulta(chave, codEstab, CERTIFICADO_NFE, UF, optsSefaz);
             return res.json({
                 origem: 'banco',
                 mensagem: 'Esta chave já existe na base de dados.',
                 idNfe: jaExiste[0].IDNFE_XML,
+                consulta: salvo && salvo.consulta,
             });
         }
 
-        const tpAmb = process.env.SEFAZ_TPAMB || '1';
-        const { xml } = await consultarXmlPorChave(chave, CERTIFICADO_NFE, UF, { tpAmb, thumbprint });
+        const { xml, statusSefaz } = await consultarXmlPorChave(chave, CERTIFICADO_NFE, UF, optsSefaz);
 
         const [[maxIdRow]] = await pool.query(
             'SELECT COALESCE(MAX(IDNFE_XML), 0) AS maxId FROM nfe_xml'
@@ -1541,10 +1608,15 @@ app.post('/api/nfe/consultar-sefaz', async (req, res) => {
             ]
         );
 
+        const salvo = await persistirStatusSefazConsulta(
+            chave, codEstab, CERTIFICADO_NFE, UF, optsSefaz, statusSefaz
+        );
+
         return res.json({
             origem: 'sefaz',
             idInserido: dados.IDNFE_XML,
             nsuInserido: dados.NSU,
+            consulta: salvo && salvo.consulta,
             dados: {
                 IDNFE_XML: dados.IDNFE_XML,
                 NSU: dados.NSU,

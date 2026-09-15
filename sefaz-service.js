@@ -1116,22 +1116,8 @@ function analisarSituacaoNFeSefaz(docs, cStat, xMotivo) {
  * @param {string} uf      sigla da UF do estabelecimento
  * @param {object} [opts]  { tpAmb, thumbprint }
  */
-async function consultarXmlPorChave(chave, dnCert, uf, opts = {}) {
-    const { cnpj, docs } = await consultarDistribuicaoPorChave(chave, dnCert, uf, opts);
-    const doc = docs.find((d) => String(d.schema || '').startsWith('procNFe'))
-        || docs.find((d) => String(d.schema || '').startsWith('resNFe'))
-        || docs[0];
-    return { xml: doc.xml, cnpj, schema: doc.schema };
-}
-
-/**
- * Consulta a situação da NF-e na SEFAZ (Distribuição DFe por chave).
- * Usa o mesmo certificado/estabelecimento do download de XML.
- */
-async function consultarStatusPorChave(chave, dnCert, uf, opts = {}) {
-    const { chaveLimpa, cnpj, cStat, xMotivo, docs, canceladaSemDocumento } =
-        await consultarDistribuicaoPorChave(chave, dnCert, uf, { ...opts, tratarCanceladaSemDoc: true });
-
+async function statusAposDistribuicao(dist, dnCert, opts = {}) {
+    const { chaveLimpa, cnpj, cStat, xMotivo, docs, canceladaSemDocumento } = dist;
     if (canceladaSemDocumento) {
         return {
             chave: chaveLimpa,
@@ -1154,8 +1140,7 @@ async function consultarStatusPorChave(chave, dnCert, uf, opts = {}) {
     const analise = analisarSituacaoNFeSefaz(docs, cStat, xMotivo);
     let extra = extrairEventosSefaz(docs);
     try {
-        const extraProt = await consultarEventosPorProtocolo(chaveLimpa, dnCert, opts);
-        extra = mesclarExtraEventos(extra, extraProt);
+        extra = mesclarExtraEventos(extra, await consultarEventosPorProtocolo(chaveLimpa, dnCert, opts));
         if (extra.eventos.some((e) => String(e.tpEvento) === '110111')) {
             analise.situacao = 'cancelada';
             analise.label = 'Cancelado';
@@ -1174,6 +1159,24 @@ async function consultarStatusPorChave(chave, dnCert, uf, opts = {}) {
         ambiente: extra.ambiente,
         temCce: extra.temCce,
     };
+}
+
+async function consultarXmlPorChave(chave, dnCert, uf, opts = {}) {
+    const dist = await consultarDistribuicaoPorChave(chave, dnCert, uf, opts);
+    const doc = dist.docs.find((d) => String(d.schema || '').startsWith('procNFe'))
+        || dist.docs.find((d) => String(d.schema || '').startsWith('resNFe'))
+        || dist.docs[0];
+    const statusSefaz = await statusAposDistribuicao(dist, dnCert, opts);
+    return { xml: doc.xml, cnpj: dist.cnpj, schema: doc.schema, statusSefaz };
+}
+
+/**
+ * Consulta a situação da NF-e na SEFAZ (Distribuição DFe por chave).
+ * Usa o mesmo certificado/estabelecimento do download de XML.
+ */
+async function consultarStatusPorChave(chave, dnCert, uf, opts = {}) {
+    const dist = await consultarDistribuicaoPorChave(chave, dnCert, uf, { ...opts, tratarCanceladaSemDoc: true });
+    return statusAposDistribuicao(dist, dnCert, opts);
 }
 
 /** Diagnóstico: lista certificados disponíveis + info de ambiente. */

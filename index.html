@@ -851,6 +851,42 @@
       color: var(--danger);
     }
 
+    .sefaz-chip {
+      display: inline-block;
+      max-width: 9.5rem;
+      padding: 0.05rem 0.42rem;
+      border-radius: 999px;
+      font-size: 0.64rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      line-height: 1.35;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      opacity: 0.88;
+    }
+
+    .sefaz-chip--ok {
+      background: rgba(40, 167, 69, 0.12);
+      color: #2d7a45;
+    }
+
+    .sefaz-chip--cce {
+      background: rgba(255, 193, 7, 0.22);
+      color: #8a6a00;
+    }
+
+    .sefaz-chip--cancelada {
+      background: rgba(220, 53, 69, 0.12);
+      color: #b42334;
+    }
+
+    .sefaz-chip--denegada,
+    .sefaz-chip--outro {
+      background: rgba(73, 80, 87, 0.1);
+      color: #5c636a;
+    }
+
     .valor {
       font-variant-numeric: tabular-nums;
       font-weight: 600;
@@ -2328,6 +2364,7 @@
           <td class="col-status">
             <div style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem;">
               <span class="status-pill ${statusInfo.className}">${statusInfo.label}</span>
+              ${htmlChipSefaz(row)}
               ${
                 possuiChave
                   ? `
@@ -3001,6 +3038,23 @@
           .join('');
         sel.value = [...sel.options].some((o) => o.value === atual) ? atual : '';
       }
+    }
+
+    function htmlChipSefaz(row) {
+      const s = row.SEFAZ;
+      if (!s || !(s.situacaoLabel || s.situacao)) return '';
+      const sit = String(s.situacao || '').toLowerCase();
+      let cls = 'sefaz-chip sefaz-chip--outro';
+      let txt = s.situacaoLabel || s.situacao;
+      if (sit === 'cancelada') cls = 'sefaz-chip sefaz-chip--cancelada';
+      else if (sit === 'denegada') cls = 'sefaz-chip sefaz-chip--denegada';
+      else if (sit === 'autorizada' && s.temCce) {
+        cls = 'sefaz-chip sefaz-chip--cce';
+        txt = `${s.situacaoLabel || 'Autorizada'} · CCe`;
+      } else if (sit === 'autorizada') cls = 'sefaz-chip sefaz-chip--ok';
+      const quando = String(s.consultadoEm || '').replace('T', ' ').slice(0, 16);
+      const title = `Última consulta SEFAZ: ${txt}${quando ? ` · ${quando}` : ''}`;
+      return `<span class="${cls}" title="${escaparHtml(title)}">${escaparHtml(txt)}</span>`;
     }
 
     function htmlCelulaObs(row) {
