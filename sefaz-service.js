@@ -129,23 +129,30 @@ function raizCnpj(cnpj) {
     return apenasDigitos(cnpj).slice(0, 8);
 }
 
-/** Extrai todos os CNPJs de 14 dígitos presentes em um texto (Subject, CN, etc.). */
+/** Extrai CNPJs de 14 dígitos (seguidos ou formatados 00.000.000/0000-00). */
 function extrairCnpjsDoTexto(texto) {
-    const matches = String(texto || '').match(/\d{14}/g);
-    return matches ? [...new Set(matches)] : [];
+    const s = String(texto || '');
+    const achados = new Set(s.match(/\d{14}/g) || []);
+    for (const m of s.match(/\d{2}[.\s]?\d{3}[.\s]?\d{3}[\/\s]?\d{4}[-\s]?\d{2}/g) || []) {
+        const d = m.replace(/\D/g, '');
+        if (d.length === 14) achados.add(d);
+    }
+    return [...achados];
 }
 
 /**
  * Certificado e-CNPJ da matriz é válido para filiais com a mesma raiz.
- * Compara CNPJ completo ou raiz (8 dígitos).
+ * Compara CNPJ completo ou raiz (8 dígitos), inclusive com pontuação.
  */
 function certificadoCompativelComEstabelecimento(textoCert, cnpjEstabelecimento) {
     const estab = apenasDigitos(cnpjEstabelecimento);
     if (estab.length !== 14) return false;
     const raizEstab = estab.slice(0, 8);
-    const cnpjsNoCert = extrairCnpjsDoTexto(textoCert);
-    if (cnpjsNoCert.some((c) => c === estab)) return true;
-    return cnpjsNoCert.some((c) => c.slice(0, 8) === raizEstab);
+    const blob = String(textoCert || '');
+    const cnpjsNoCert = extrairCnpjsDoTexto(blob);
+    if (cnpjsNoCert.some((c) => c === estab || c.slice(0, 8) === raizEstab)) return true;
+    const soDigitos = blob.replace(/\D/g, '');
+    return soDigitos.includes(estab) || soDigitos.includes(raizEstab);
 }
 
 /** Extrai o CNPJ (14 dígitos) do campo CERTIFICADO_NFE (Distinguished Name). */
@@ -223,6 +230,8 @@ async function listarCertsPowerShell() {
         '        Store = $loc.Nome',
         '        Thumbprint = $c.Thumbprint',
         '        Subject = $c.Subject',
+        '        FriendlyName = $c.FriendlyName',
+        '        SimpleName = $c.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false)',
         '        Issuer = $c.Issuer',
         '        NotAfter = $c.NotAfter.ToString("o")',
         '        NotBefore = $c.NotBefore.ToString("o")',
@@ -399,9 +408,11 @@ async function exportarPfxPorCnpj(cnpj) {
         '$pwd = \'' + pwdEscapado + '\'',
         '$raiz = if ($cnpj.Length -ge 8) { $cnpj.Substring(0, 8) } else { $cnpj }',
         '$candidatos = $allCerts | Where-Object {',
-        '  $subj = $_.Subject',
+        '  $subj = ([string]$_.Subject) + " " + ([string]$_.FriendlyName)',
+        '  $dig = $subj -replace "\\D",""',
         '  if ($subj -like ("*" + $cnpj + "*")) { return $true }',
-        '  if ($raiz.Length -eq 8 -and $subj -match $raiz) { return $true }',
+        '  if ($dig.Contains($cnpj)) { return $true }',
+        '  if ($raiz.Length -eq 8 -and $dig.Contains($raiz)) { return $true }',
         '  return $false',
         '} | Sort-Object NotAfter -Descending',
         'if ($candidatos.Count -eq 0) {',
@@ -493,6 +504,10 @@ function tentarPfxDeArquivo(cnpj) {
 
     for (const p of paths) {
         if (p && fs.existsSync(p)) {
+            if (!pass) {
+                console.warn(`[SEFAZ] PFX encontrado sem senha, ignorando (defina SEFAZ_PFX_PASS): ${p}`);
+                continue;
+            }
             return { pfx: fs.readFileSync(p), passphrase: pass };
         }
     }
@@ -530,7 +545,10 @@ async function obterCredenciais(cnpj, thumbprint) {
         }
         const { lista } = await listarCertsPowerShell();
         const compativeis = lista.filter((c) =>
-            certificadoCompativelComEstabelecimento(c.Subject, cnpj)
+            certificadoCompativelComEstabelecimento(
+                [c.Subject, c.FriendlyName, c.SimpleName].filter(Boolean).join(' '),
+                cnpj
+            )
         );
         const listaStr = compativeis.slice(0, 5)
             .map((c) => ` - [${c.Thumbprint}] ${c.Subject} (HasPrivateKey=${c.HasPrivateKey})`)
@@ -1183,11 +1201,13 @@ function extrairCN(subject) {
 async function listarCertificadosParaUI() {
     const { lista, debug } = await listarCertsPowerShell();
     const certificados = lista.map((c) => {
-        const cnpjs = extrairCnpjsDoTexto(c.Subject);
+        const textos = [c.Subject, c.FriendlyName, c.SimpleName].filter(Boolean).join(' | ');
+        const cnpjs = extrairCnpjsDoTexto(textos);
         return {
             thumbprint: c.Thumbprint,
-            nome: extrairCN(c.Subject),
+            nome: extrairCN(c.Subject) || c.FriendlyName || c.SimpleName || '',
             subject: c.Subject,
+            friendlyName: c.FriendlyName || '',
             cnpj: cnpjs[0] || null,
             cnpjs,
             issuer: extrairCN(c.Issuer),

@@ -2597,7 +2597,7 @@
         const totalBruto = certsCarregados.length;
         const cnpjEst = cnpjEstabelecimentoAtual();
         let html = filtroAtivo && totalBruto > 0
-          ? `<p style="color:#888;">Nenhum certificado encontrado para o estabelecimento <strong>${cnpjEst}</strong> (incluindo certificados da matriz com mesma raiz <strong>${raizCnpj(cnpjEst)}</strong>).<br>Há ${totalBruto} certificado(s) instalado(s) no Windows. Desmarque o filtro acima para ver todos.</p>`
+          ? `<p style="color:#888;">Nenhum certificado encontrado para o estabelecimento <strong>${cnpjEst}</strong> (incluindo certificados da matriz com mesma raiz <strong>${raizCnpj(cnpjEst)}</strong>).<br>Há ${totalBruto} certificado(s) visível(is) para o processo Node. Desmarque o filtro acima para ver todos.<br><span style="display:block;margin-top:0.4rem;">Se o A1 aparece no Windows mas não nesta lista, o serviço está rodando com outro usuário. Importe o certificado em <strong>Local Computer → Personal</strong> ou execute o Node/PM2 com a mesma conta que importou o A1. Se usar arquivo .pfx, preencha SEFAZ_PFX_PATH e SEFAZ_PFX_PASS no .env.</span></p>`
           : '<p style="color:#888;">Nenhum certificado encontrado no Windows.</p>';
         if (debug) {
           const dbgStr = [
@@ -2665,14 +2665,12 @@
       const estab = (cnpjEstab || '').replace(/\D/g, '');
       if (estab.length !== 14) return false;
       const raizEstab = estab.slice(0, 8);
-      const textos = [cert.subject, cert.nome, ...(cert.cnpjs || [])].filter(Boolean);
-      for (const texto of textos) {
-        const encontrados = String(texto).match(/\d{14}/g) || [];
-        if (encontrados.some((c) => c === estab || c.slice(0, 8) === raizEstab)) {
-          return true;
-        }
-      }
-      return false;
+      const textos = [cert.subject, cert.nome, cert.friendlyName, ...(cert.cnpjs || [])].filter(Boolean);
+      const blob = textos.join(' ');
+      const consecutivos = blob.match(/\d{14}/g) || [];
+      if (consecutivos.some((c) => c === estab || c.slice(0, 8) === raizEstab)) return true;
+      const soDigitos = blob.replace(/\D/g, '');
+      return soDigitos.includes(estab) || soDigitos.includes(raizEstab);
     }
 
     function aplicarFiltroEstab(certs) {
