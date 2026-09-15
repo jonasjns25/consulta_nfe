@@ -1513,6 +1513,13 @@
             Usuário (código ou nome)
             <input type="text" id="usuario" name="usuario" list="usuarios-list" placeholder="Ex.: 12345-6 ou João">
           </label>
+          <label id="filtro-obs-wrap" class="hidden" style="grid-column: span 6;">
+            Observação
+            <select id="filtro-observacao" name="observacao">
+              <option value="">Todas</option>
+              <option value="__vazia__">Sem classificação</option>
+            </select>
+          </label>
         </div>
         <datalist id="usuarios-list"></datalist>
 
@@ -1690,11 +1697,11 @@
     };
 
     // Carregar servidores primeiro, depois os outros dados
-    carregarServidores().then(() => {
+    carregarServidores().then(async () => {
       definirPeriodoPadrao(true);
       carregarUsuarios();
       carregarEstabelecimentos();
-      carregarNfeObsConfig();
+      await carregarNfeObsConfig();
       carregarContagemStatusCompra();
       atualizarResumo();
       toggleEmptyState(true);
@@ -2025,6 +2032,12 @@
       if (params.usuario) {
         tags.push(`<span class="filtro-tag"><strong>Usuário:</strong> ${params.usuario}</span>`);
       }
+
+      if (params.observacao) {
+        const obsSel = document.getElementById('filtro-observacao');
+        const label = obsSel?.selectedOptions[0]?.textContent || params.observacao;
+        tags.push(`<span class="filtro-tag"><strong>Obs.:</strong> ${escaparHtml(label)}</span>`);
+      }
       
       filtrosResumo.innerHTML = tags.join('');
     }
@@ -2036,6 +2049,8 @@
       statusCompraSelect.value = '';
       estabelecimentoSelect.value = '';
       tipoNfSelect.value = '1'; // Padrão: Saída
+      const filtroObs = document.getElementById('filtro-observacao');
+      if (filtroObs) filtroObs.value = '';
       state.rows = [];
       state.filtered = [];
       atualizarTabela();
@@ -2193,6 +2208,7 @@
     });
 
     async function consultarNotas() {
+      await carregarNfeObsConfig();
       const params = obterParametrosConsulta();
       if (!params.data_inicial || !params.data_final) {
         atualizarStatus('Informe as duas datas para realizar a consulta.', 'error');
@@ -2254,7 +2270,8 @@
         status_compra: formData.get('status_compra'),
         usuario: (formData.get('usuario') || '').trim(),
         estabelecimento: (rawEstab != null && String(rawEstab).trim() !== '') ? String(rawEstab).trim() : '',
-        tipo_nf: formData.get('tipo_nf')
+        tipo_nf: formData.get('tipo_nf'),
+        observacao: (formData.get('observacao') || '').trim()
       };
     }
 
@@ -2968,6 +2985,16 @@
       }
       const thObs = document.getElementById('th-obs');
       if (thObs) thObs.classList.toggle('hidden', !state.nfeObs.ativo);
+      const wrap = document.getElementById('filtro-obs-wrap');
+      const sel = document.getElementById('filtro-observacao');
+      if (wrap) wrap.classList.toggle('hidden', !state.nfeObs.ativo);
+      if (sel && state.nfeObs.ativo) {
+        const atual = sel.value;
+        sel.innerHTML = ['<option value="">Todas</option>', '<option value="__vazia__">Sem classificação</option>']
+          .concat(state.nfeObs.opcoes.map((opcao) => `<option value="${escaparHtml(opcao)}">${escaparHtml(opcao)}</option>`))
+          .join('');
+        sel.value = [...sel.options].some((o) => o.value === atual) ? atual : '';
+      }
     }
 
     function htmlCelulaObs(row) {

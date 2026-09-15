@@ -20,7 +20,7 @@ try {
     console.error('AVISO: xml2js não está instalado. Execute: npm install xml2js');
     console.error('A funcionalidade de detalhamento de NF-e não estará disponível até que o módulo seja instalado.');
 }
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '.env'), override: true });
 
 let updater = null;
 try {
@@ -527,7 +527,7 @@ app.get('/status-compra-contagem', async (req, res) => {
 });
 
 app.get('/consulta', async (req, res) => {
-    const { data_inicial, data_final, fornecedor, numero, chave, status, usuario, estabelecimento, tipo_nf, status_compra } = req.query;
+    const { data_inicial, data_final, fornecedor, numero, chave, status, usuario, estabelecimento, tipo_nf, status_compra, observacao } = req.query;
     const inicio = normalizarData(data_inicial);
     const fim = normalizarData(data_final);
 
@@ -590,7 +590,21 @@ app.get('/consulta', async (req, res) => {
         }
     }
 
-    const sql = `
+    try {
+        const observacaoFiltro = String(observacao || '').trim();
+        if (nfeObsAtivo() && observacaoFiltro && observacaoFiltro !== '__vazia__') {
+            if (!nfeObsOpcoes().includes(observacaoFiltro)) {
+                return res.json({ data: [], meta: { total: 0 } });
+            }
+            const chavesObs = await chavesPorObservacao(observacaoFiltro);
+            if (!chavesObs.length) {
+                return res.json({ data: [], meta: { total: 0 } });
+            }
+            filtros.push(`n.CHAVE IN (${chavesObs.map(() => '?').join(',')})`);
+            valores.push(...chavesObs);
+        }
+
+        const sql = `
         SELECT 
             DATE_FORMAT(${DATA_EMISSAO_EXPR}, '%Y-%m-%d') AS EMISSAO_NORMALIZADA,
             n.EMISSAO AS EMISSAO_ORIGINAL, 
@@ -616,13 +630,15 @@ app.get('/consulta', async (req, res) => {
         ORDER BY ${DATA_EMISSAO_EXPR} DESC, n.IDNFE_XML DESC
     `;
 
-    try {
         const [rows] = await pool.query(sql, valores);
         await anexarObservacoesNfe(rows);
+        const data = (nfeObsAtivo() && observacaoFiltro === '__vazia__')
+            ? rows.filter((r) => !r.OBSERVACAO)
+            : rows;
         res.json({
-            data: rows,
+            data,
             meta: {
-                total: rows.length
+                total: data.length
             }
         });
     } catch (error) {
@@ -680,7 +696,10 @@ app.post('/api/nfe/obs', async (req, res) => {
     }
 });
 
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.get('/', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 
 app.get('/usuarios', async (req, res) => {
     try {
@@ -979,7 +998,8 @@ async function garantirTabelaNfeObs() {
                     chave_nfe VARCHAR(44) NOT NULL,
                     observacao VARCHAR(160) NOT NULL DEFAULT '',
                     atualizado_em DATETIME NOT NULL,
-                    PRIMARY KEY (chave_nfe)
+                    PRIMARY KEY (chave_nfe),
+                    KEY idx_conf_nfe_obs_observacao (observacao)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             `);
             tabelaNfeObsOk = true;
@@ -1013,6 +1033,20 @@ async function anexarObservacoesNfe(rows) {
         console.warn('[NFE obs listar]', error?.message || error);
     }
     return rows;
+}
+
+async function chavesPorObservacao(observacao) {
+    if (!observacao || !(await garantirTabelaNfeObs())) return [];
+    try {
+        const [rows] = await getConfNfPool().query(
+            `SELECT chave_nfe FROM ${tabelaConfnf('conf_nfe_obs')} WHERE observacao = ?`,
+            [observacao]
+        );
+        return (rows || []).map((r) => r.chave_nfe || r.CHAVE_NFE).filter(Boolean);
+    } catch (error) {
+        console.warn('[NFE obs filtro]', error?.message || error);
+        return [];
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -3261,7 +3295,13 @@ app.post('/admin/atualizar', async (req, res) => {
 });
 
 // Middleware estático deve vir depois das rotas de API
-app.use(express.static(__dirname));
+app.use(express.static(__dirname, {
+    setHeaders: (res, filePath) => {
+        if (String(filePath).toLowerCase().endsWith('.html')) {
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        }
+    }
+}));
 
 // Iniciar servidor e testar conexão
 async function iniciarServidor() {
@@ -3299,7 +3339,8 @@ async function iniciarServidor() {
     }
     
     app.listen(PORT, () => {
-        console.log(`\n[INFO] Servidor rodando em http://localhost:${PORT}\n`);
+        console.log(`\n[INFO] Servidor rodando em http://localhost:${PORT}`);
+        console.log(`[INFO] Classificacao NF-e: ${nfeObsAtivo() ? 'ATIVA' : 'desligada'} (NFE_OBS_ATIVO no .env)\n`);
     });
 }
 
