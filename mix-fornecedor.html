@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
-  <title>Mix do Fornecedor — CODFOR × cProd</title>
+  <title>Lumi NF-e · Mix do Fornecedor</title>
   <link rel="icon" href="data:,">
   <style>
     :root {
@@ -52,6 +52,10 @@
     p { margin: 0; }
     .muted { color: var(--lumi-muted); }
     .hidden { display: none !important; }
+
+    .brand { display: flex; align-items: center; gap: 0.75rem; }
+    .brand-logo { height: 48px; width: auto; display: block; }
+    .brand-name { display: block; font-size: 0.82rem; font-weight: 700; color: var(--lumi-primary); text-decoration: none; margin-bottom: 0.1rem; }
 
     .nav-links {
       display: flex;
@@ -314,16 +318,22 @@
 </head>
 <body>
   <header>
-    <div>
-      <h1>Mix do Fornecedor</h1>
-      <p class="muted">OK se achar o item da tabfor em qualquer uma destas chaves: <strong>CODFOR = cProd</strong> (XML), <strong>BARRA = cEAN</strong> (XML) ou <strong>CODFOR/NSU = REFFOR/NSU</strong> (itemcomp). Sem match = divergência.</p>
-      <p class="muted" id="build-info" style="margin-top:0.4rem;font-size:0.85rem;"></p>
+    <div class="brand">
+      <a href="index.html"><img src="logo-lumi.png" alt="Lumi" class="brand-logo"></a>
+      <div>
+        <a href="index.html" class="brand-name">Lumi NF-e</a>
+        <h1>Mix do Fornecedor</h1>
+        <p class="muted">OK se achar o item da tabfor em qualquer uma destas chaves: <strong>CODFOR = cProd</strong> (XML), <strong>BARRA = cEAN</strong> (XML) ou <strong>CODFOR/NSU = REFFOR/NSU</strong> (itemcomp). Sem match = divergência.</p>
+        <p class="muted" id="build-info" style="margin-top:0.4rem;font-size:0.85rem;"></p>
+      </div>
     </div>
     <nav class="nav-links">
-      <a href="index.html">Análise NFe</a>
+      <a href="index.html">Lumi NF-e</a>
+      <!-- temporario: ocultar atalhos; paginas continuam no ar
       <a href="autorizacao-recepcao-xml.html">Autorização de Recepção</a>
       <a href="confnf.html">ConfNF</a>
       <a href="mix-fornecedor.html"><strong>Mix Fornecedor</strong></a>
+      -->
     </nav>
   </header>
 

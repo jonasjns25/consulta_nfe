@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ConfNF - Conferencia Cega</title>
+  <title>Lumi NF-e · ConfNF</title>
   <link rel="icon" href="data:,">
   <style>
     :root {
@@ -50,6 +50,10 @@
 
     .muted { color: var(--lumi-muted); }
     .hidden { display: none !important; }
+
+    .brand { display: flex; align-items: center; gap: 0.75rem; }
+    .brand-logo { height: 48px; width: auto; display: block; }
+    .brand-name { display: block; font-size: 0.82rem; font-weight: 700; color: var(--lumi-primary); text-decoration: none; margin-bottom: 0.1rem; }
 
     .nav-links {
       display: flex;
@@ -303,15 +307,21 @@
 </head>
 <body>
   <header>
-    <div>
-      <h1>ConfNF</h1>
-      <p class="muted">Conferencia cega de NF-e para recebimento.</p>
+    <div class="brand">
+      <a href="index.html"><img src="logo-lumi.png" alt="Lumi" class="brand-logo"></a>
+      <div>
+        <a href="index.html" class="brand-name">Lumi NF-e</a>
+        <h1>ConfNF</h1>
+        <p class="muted">Conferencia cega de NF-e para recebimento.</p>
+      </div>
     </div>
     <nav class="nav-links">
-      <a href="index.html">Consulta NF-e</a>
+      <a href="index.html">Lumi NF-e</a>
+      <!-- temporario: ocultar atalhos; paginas continuam no ar
       <a href="autorizacao-recepcao-xml.html">Autorizacao de Recepcao</a>
       <a href="confnf.html"><strong>ConfNF</strong></a>
       <a href="mix-fornecedor.html?v=codfor">Mix Fornecedor</a>
+      -->
     </nav>
   </header>
 

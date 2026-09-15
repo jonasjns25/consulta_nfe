@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Autorização de Recepção de XML</title>
+  <title>Lumi NF-e · Autorização de Recepção</title>
   <style>
     :root {
       color-scheme: light;
@@ -67,6 +67,9 @@
       color: var(--lumi-dark);
     }
     header p { margin: 0; color: var(--lumi-muted); }
+    .brand { display: flex; align-items: center; gap: 0.75rem; }
+    .brand-logo { height: 48px; width: auto; display: block; }
+    .brand-name { display: block; font-size: 0.82rem; font-weight: 700; color: var(--lumi-primary); text-decoration: none; margin-bottom: 0.1rem; }
     main {
       max-width: 1200px;
       margin: 0 auto;
@@ -250,15 +253,23 @@
 </head>
 <body>
   <nav class="nav-links">
-    <a href="index.html">Consulta NF-e</a>
+    <a href="index.html">Lumi NF-e</a>
+    <!-- temporario: ocultar atalhos; paginas continuam no ar
     <a href="autorizacao-recepcao-xml.html" class="active">Autorização de Recepção de XML</a>
     <a href="confnf.html">ConfNF</a>
     <a href="mix-fornecedor.html?v=codfor">Mix Fornecedor</a>
+    -->
   </nav>
 
   <header>
-    <h1>Autorização de Recepção de XML</h1>
-    <p>Selecione o XML da nota, valide os itens (REF/PLU) e autorize a recepção para facilitar o lançamento das NFs no sistema.</p>
+    <div class="brand">
+      <a href="index.html"><img src="logo-lumi.png" alt="Lumi" class="brand-logo"></a>
+      <div>
+        <a href="index.html" class="brand-name">Lumi NF-e</a>
+        <h1>Autorização de Recepção de XML</h1>
+        <p>Selecione o XML da nota, valide os itens (REF/PLU) e autorize a recepção para facilitar o lançamento das NFs no sistema.</p>
+      </div>
+    </div>
   </header>
 
   <main>
