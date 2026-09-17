@@ -516,6 +516,16 @@
 
     chaveInfo.textContent = `Chave: ${chave}`;
 
+    fetch('/api/auth/me').then((r) => r.json()).then((u) => {
+      if (u && u.podeAlterar === false) {
+        [btnSalvar, btnUnirTodos].forEach((el) => {
+          if (!el) return;
+          el.hidden = true;
+          el.style.display = 'none';
+        });
+      }
+    }).catch(() => {});
+
     let xmlOriginal = null;
     let itensProcessados = [];
     let xmlModificado = false;

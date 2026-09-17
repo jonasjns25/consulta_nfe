@@ -132,6 +132,58 @@ function isAdminAcesso(acesso) {
     return String(acesso || '').trim().toUpperCase().startsWith('S');
 }
 
+function escolheuTodasLojas(raw) {
+    const v = String(raw || '').trim().toUpperCase();
+    return v === 'ALL' || v === 'ADMIN' || v === 'ADMINISTRATIVO';
+}
+
+function cnpjDaSessao(req) {
+    const u = req && req.usuario;
+    if (!u) return { todasLojas: false, cnpj: '' };
+    if (u.todasLojas) return { todasLojas: true, cnpj: '' };
+    return { todasLojas: false, cnpj: onlyDigits(u.cnpj) };
+}
+
+function cnpjEfetivo(req, pedido) {
+    const escopo = cnpjDaSessao(req);
+    if (escopo.todasLojas) return onlyDigits(pedido);
+    return escopo.cnpj;
+}
+
+function matriculasAlteracao() {
+    return String(process.env.NFE_ALTERAR_MATRICULAS || '')
+        .split(/[,;|]/)
+        .map((s) => onlyDigits(s))
+        .filter(Boolean);
+}
+
+function variantesMatricula(raw) {
+    const d = onlyDigits(raw);
+    if (!d) return new Set();
+    const semZero = d.replace(/^0+/, '') || '0';
+    const out = new Set([d, semZero, d.padStart(6, '0'), d.padStart(7, '0')]);
+    if (d.length >= 7) {
+        const base = d.slice(0, -1);
+        out.add(base);
+        out.add(base.replace(/^0+/, '') || '0');
+        out.add(base.padStart(6, '0'));
+    }
+    return out;
+}
+
+function podeAlterarNfe(usuario) {
+    const lista = matriculasAlteracao();
+    if (!lista.length) return true;
+    const userVars = variantesMatricula(usuario && usuario.matricula);
+    if (!userVars.size) return false;
+    return lista.some((cod) => {
+        for (const v of variantesMatricula(cod)) {
+            if (userVars.has(v)) return true;
+        }
+        return false;
+    });
+}
+
 async function listarEstabelecimentos(pool) {
     const [rows] = await pool.query(
         `SELECT CNPJ AS cnpj, COALESCE(NULLIF(TRIM(FANTASIA), ''), NULLIF(TRIM(RAZAO), ''), CNPJ) AS nome
@@ -220,6 +272,17 @@ function selfCheck() {
     if (!softlumiPasswordMatches('2713', Buffer.from('82B2C7D278213ECEB9D8', 'hex'))) {
         throw new Error('SoftLumi match self-check falhou.');
     }
+    const prev = process.env.NFE_ALTERAR_MATRICULAS;
+    try {
+        process.env.NFE_ALTERAR_MATRICULAS = '';
+        if (!podeAlterarNfe({ matricula: '1' })) throw new Error('alterar: vazio deve liberar.');
+        process.env.NFE_ALTERAR_MATRICULAS = '558';
+        if (!podeAlterarNfe({ matricula: '0000558' })) throw new Error('alterar: 558 vs 0000558.');
+        if (podeAlterarNfe({ matricula: '0000999' })) throw new Error('alterar: 999 deve bloquear.');
+    } finally {
+        if (prev == null) delete process.env.NFE_ALTERAR_MATRICULAS;
+        else process.env.NFE_ALTERAR_MATRICULAS = prev;
+    }
 }
 selfCheck();
 
@@ -289,37 +352,59 @@ function registerAuthRoutes(app, { getPool }) {
 
             const admin = isAdminAcesso(func.ACESSO);
             let cnpjSessao = cnpjVinculo;
+            let todasLojas = false;
             if (admin) {
-                if (!cnpjInformado) {
+                if (escolheuTodasLojas(req.body?.cnpj)) {
+                    todasLojas = true;
+                    cnpjSessao = '';
+                } else if (!cnpjInformado) {
                     const estabelecimentos = await listarEstabelecimentos(pool);
                     return res.json({
                         ok: false,
                         precisaEstab: true,
                         estabelecimentos,
                     });
+                } else {
+                    const [lojasAdmin] = await pool.query(
+                        `SELECT CNPJ, FANTASIA, RAZAO FROM ESTAB
+                         WHERE REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(CNPJ,''), '.', ''), '/', ''), '-', ''), ' ', '') = ?
+                         LIMIT 1`,
+                        [cnpjInformado]
+                    );
+                    if (!lojasAdmin || !lojasAdmin.length) {
+                        return res.status(400).json({ erro: 'Selecione um estabelecimento válido.' });
+                    }
+                    cnpjSessao = onlyDigits(lojasAdmin[0].CNPJ);
                 }
-                const [lojasAdmin] = await pool.query(
-                    'SELECT CNPJ, FANTASIA, RAZAO FROM ESTAB WHERE CNPJ = ? LIMIT 1',
-                    [cnpjInformado]
-                );
-                if (!lojasAdmin || !lojasAdmin.length) {
-                    return res.status(400).json({ erro: 'Selecione um estabelecimento válido.' });
-                }
-                cnpjSessao = onlyDigits(lojasAdmin[0].CNPJ);
+            } else if (escolheuTodasLojas(req.body?.cnpj)) {
+                return res.status(403).json({
+                    erro: 'Seu usuário não tem acesso administrativo. Selecione a loja do cadastro.',
+                });
+            } else if (cnpjInformado && cnpjInformado !== cnpjVinculo) {
+                return res.status(403).json({ erro: 'Sem permissão para este estabelecimento.' });
             }
 
-            const [lojas] = await pool.query(
-                'SELECT CNPJ, FANTASIA, RAZAO FROM ESTAB WHERE CNPJ = ? LIMIT 1',
-                [cnpjSessao]
-            );
-            const loja = (lojas && lojas[0]) || { CNPJ: cnpjSessao };
+            let fantasia = cnpjSessao;
+            if (todasLojas) {
+                fantasia = 'Administrativo';
+            } else {
+                const [lojas] = await pool.query(
+                    `SELECT CNPJ, FANTASIA, RAZAO FROM ESTAB
+                     WHERE REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(CNPJ,''), '.', ''), '/', ''), '-', ''), ' ', '') = ?
+                     LIMIT 1`,
+                    [cnpjSessao]
+                );
+                const loja = (lojas && lojas[0]) || { CNPJ: cnpjSessao };
+                fantasia = loja.FANTASIA || loja.RAZAO || cnpjSessao;
+            }
             const hours = sessionHours();
             const user = {
                 matricula: func.MATRICULA_DV,
                 nome: func.NOME || func.APELIDO || func.MATRICULA_DV,
                 cnpj: cnpjSessao,
-                fantasia: loja.FANTASIA || loja.RAZAO || cnpjSessao,
+                fantasia,
                 admin,
+                todasLojas,
             };
             const token = jwt.sign(user, jwtSecret(), { expiresIn: `${hours}h` });
             setSessionCookie(res, token, hours);
@@ -344,6 +429,8 @@ function registerAuthRoutes(app, { getPool }) {
             cnpj: user.cnpj,
             fantasia: user.fantasia,
             admin: Boolean(user.admin),
+            todasLojas: Boolean(user.todasLojas),
+            podeAlterar: podeAlterarNfe(user),
         });
     });
 
@@ -357,6 +444,14 @@ function registerAuthRoutes(app, { getPool }) {
         if (querHtml(req)) return res.redirect('/login.html');
         return res.status(401).json({ erro: 'Faça login para continuar.' });
     });
+
+    app.use((req, res, next) => {
+        if (req.method !== 'POST') return next();
+        const p = String(req.path || '');
+        if (!(p.startsWith('/xml-salvar/') || p.startsWith('/itemcomp/'))) return next();
+        if (podeAlterarNfe(req.usuario)) return next();
+        return res.status(403).json({ erro: 'Sem permissão para alterar.' });
+    });
 }
 
 module.exports = {
@@ -364,4 +459,6 @@ module.exports = {
     encodeSoftlumiPassword,
     softlumiPasswordMatches,
     normalizeMatriculaInput,
+    cnpjEfetivo,
+    cnpjDaSessao,
 };

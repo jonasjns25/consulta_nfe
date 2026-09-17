@@ -13,7 +13,7 @@ const {
 const { extrairDadosNFe } = require('./nfe-parser');
 const registerConfNfRoutes = require('./confnf-api');
 const registerMixFornecedorRoutes = require('./mix-fornecedor-api');
-const { registerAuthRoutes } = require('./auth-erp');
+const { registerAuthRoutes, cnpjEfetivo, cnpjDaSessao } = require('./auth-erp');
 let xml2js;
 try {
     xml2js = require('xml2js');
@@ -402,9 +402,9 @@ app.get('/status-compra-contagem', async (req, res) => {
     }
 
     // Filtro por estabelecimento (igual à rota /consulta, usando CNPJ da tabela ESTAB associado)
-    const estabelecimentoFiltrar = (estabelecimento || '').trim();
+    const estabelecimentoFiltrar = cnpjEfetivo(req, estabelecimento);
     if (estabelecimentoFiltrar) {
-        filtros.push("e.CNPJ = ?");
+        filtros.push("REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(e.CNPJ,''), '.', ''), '/', ''), '-', ''), ' ', '') = ?");
         valores.push(estabelecimentoFiltrar);
     }
 
@@ -567,7 +567,7 @@ app.get('/consulta', async (req, res) => {
     }
 
     // Filtro por estabelecimento (usando sempre o CNPJ da tabela ESTAB associado à NF)
-    const estabelecimentoNorm = normalizarCnpjApenasDigitos(estabelecimento);
+    const estabelecimentoNorm = cnpjEfetivo(req, estabelecimento);
     if (estabelecimentoNorm) {
         filtros.push("REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(e.CNPJ,''), '.', ''), '/', ''), '-', ''), ' ', '') = ?");
         valores.push(estabelecimentoNorm);
@@ -874,6 +874,11 @@ app.get('/estabelecimentos', async (req, res) => {
             `;
             [rows] = await pool.query(sql);
         }
+
+        const escopo = cnpjDaSessao(req);
+        if (!escopo.todasLojas && escopo.cnpj) {
+            rows = (rows || []).filter((r) => String(r.cnpj || '').replace(/\D/g, '') === escopo.cnpj);
+        }
         
         res.json(rows || []);
     } catch (error) {
@@ -897,7 +902,12 @@ app.get('/estabelecimentos', async (req, res) => {
                     ORDER BY c.ESTAB ASC
                 `;
                 const [rowsCompra] = await pool.query(sqlCompra);
-                return res.json(rowsCompra || []);
+                const escopo = cnpjDaSessao(req);
+                let rows = rowsCompra || [];
+                if (!escopo.todasLojas && escopo.cnpj) {
+                    rows = rows.filter((r) => String(r.cnpj || '').replace(/\D/g, '') === escopo.cnpj);
+                }
+                return res.json(rows);
             } catch (errorCompra) {
                 console.error('Erro ao buscar estabelecimentos da compra:', errorCompra);
             }
@@ -1504,7 +1514,7 @@ app.get('/api/sefaz/certificados', async (_req, res) => {
 /** GET /api/nfe/buscar?chave=44digitos&estab=CNPJ14  → verifica existência no banco */
 app.get('/api/nfe/buscar', async (req, res) => {
     const chave = String(req.query.chave || '').replace(/\D/g, '');
-    const estab = String(req.query.estab || '').replace(/\D/g, '');
+    const estab = cnpjEfetivo(req, req.query.estab);
     if (chave.length !== 44) {
         return res.status(400).json({ erro: 'Chave inválida. Informe os 44 dígitos.' });
     }
@@ -1534,7 +1544,7 @@ app.post('/api/nfe/consultar-sefaz', async (req, res) => {
     const estabRaw = (req.body && req.body.estab) || '';
     const thumbprint = ((req.body && req.body.thumbprint) || '').replace(/[^0-9A-Fa-f]/g, '') || null;
     const chave = String(chaveRaw).replace(/\D/g, '');
-    const estab = String(estabRaw).replace(/\D/g, '');
+    const estab = cnpjEfetivo(req, estabRaw);
 
     if (chave.length !== 44) {
         return res.status(400).json({ erro: 'Chave de acesso inválida.' });
@@ -1647,7 +1657,7 @@ app.post('/api/nfe/consultar-status-sefaz', async (req, res) => {
     const estabRaw = (req.body && req.body.estab) || '';
     const thumbprint = ((req.body && req.body.thumbprint) || '').replace(/[^0-9A-Fa-f]/g, '') || null;
     const chave = String(chaveRaw).replace(/\D/g, '');
-    const estab = String(estabRaw).replace(/\D/g, '');
+    const estab = cnpjEfetivo(req, estabRaw);
 
     if (chave.length !== 44) {
         return res.status(400).json({ erro: 'Chave de acesso inválida.' });

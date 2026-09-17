@@ -1259,6 +1259,11 @@
       const msgNFAusenteERP = 'Disponível somente quando a NF estiver lançada no ERP';
       [document.getElementById('btn-acoes-itemcomp')].forEach(btn => {
         if (btn) {
+          if (window.podeAlterar === false) {
+            btn.hidden = true;
+            btn.style.display = 'none';
+            return;
+          }
           const indisponivel = isNFRecebida || !window.nfEstaNoERP;
           btn.disabled = indisponivel;
           btn.title = isNFRecebida ? msgNFRecebida : (!window.nfEstaNoERP ? msgNFAusenteERP : 'Abrir ações em massa');
@@ -4640,6 +4645,16 @@ function abrirAcoesItemcomp() {
 
 // Vincular botões no topo
 document.addEventListener('DOMContentLoaded', () => {
+  fetch('/api/auth/me').then((r) => r.json()).then((u) => {
+    window.podeAlterar = !(u && u.podeAlterar === false);
+    if (window.podeAlterar === false) {
+      const btn = document.getElementById('btn-acoes-itemcomp');
+      if (btn) {
+        btn.hidden = true;
+        btn.style.display = 'none';
+      }
+    }
+  }).catch(() => { window.podeAlterar = true; });
   const btnAcoesItemcomp = document.getElementById('btn-acoes-itemcomp');
   if (btnAcoesItemcomp) {
     btnAcoesItemcomp.addEventListener('click', abrirAcoesItemcomp);

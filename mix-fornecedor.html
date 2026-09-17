@@ -492,6 +492,21 @@
           opt.textContent = item.nome || item.cnpj || '';
           el.estab.appendChild(opt);
         }
+        const me = await fetch('/api/auth/me');
+        if (!me.ok) return;
+        const user = await me.json();
+        if (user.todasLojas) return;
+        const cnpj = String(user.cnpj || '').replace(/\D/g, '');
+        if (!cnpj) return;
+        const match = [...el.estab.options].find((o) => String(o.value).replace(/\D/g, '') === cnpj);
+        if (!match) {
+          const opt = document.createElement('option');
+          opt.value = cnpj;
+          opt.textContent = user.fantasia || cnpj;
+          el.estab.appendChild(opt);
+        }
+        el.estab.value = match ? match.value : cnpj;
+        el.estab.disabled = true;
       } catch (_) {
         /* silencioso */
       }

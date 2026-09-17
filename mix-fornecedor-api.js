@@ -1,3 +1,5 @@
+const { cnpjEfetivo } = require('./auth-erp');
+
 const CAP_NFS = 500;
 
 function toArray(value) {
@@ -422,7 +424,7 @@ module.exports = function registerMixFornecedorRoutes(app, options = {}) {
       const fornecedor = padCnpj(fornecedorRaw) || normalizeDigits(fornecedorRaw);
       const dataInicial = normalizarData(req.query.data_inicial);
       const dataFinal = normalizarData(req.query.data_final);
-      const estab = padCnpj(req.query.estab) || normalizeDigits(req.query.estab || '');
+      const estab = cnpjEfetivo(req, req.query.estab);
 
       if (!fornecedor || fornecedor.length < 11) {
         return res.status(400).json({ error: 'Informe o CNPJ/CPF do fornecedor.' });

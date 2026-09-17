@@ -81,7 +81,7 @@
       <img src="logo-lumi.png" alt="Lumi">
       <h1>Lumi NF-e</h1>
     </div>
-    <p class="sub">Selecione o estabelecimento e entre com a matrícula (com dígito) e a senha do ERP.</p>
+    <p class="sub">Selecione Administrativo (todas as lojas) ou uma loja, depois entre com a matrícula (com dígito) e a senha do ERP.</p>
     <label for="estab">Estabelecimento</label>
     <select id="estab">
       <option value="">Carregando lojas…</option>
@@ -96,16 +96,18 @@
   <script>
     function soDigitos(v) { return String(v || '').replace(/\D/g, ''); }
     const selEstab = document.getElementById('estab');
+    function montarOpcoes(lista) {
+      selEstab.innerHTML = '<option value="">Selecione a loja</option>'
+        + '<option value="ALL">Administrativo</option>'
+        + (lista || []).map((e) => `<option value="${e.cnpj}">${e.nome}</option>`).join('');
+    }
     (async function carregarEstabs() {
       try {
         const resp = await fetch('/api/auth/estabelecimentos');
         const data = await resp.json().catch(() => ({}));
-        const lista = data.estabelecimentos || [];
-        selEstab.innerHTML = '<option value="">Selecione a loja</option>' +
-          lista.map((e) => `<option value="${e.cnpj}">${e.nome}</option>`).join('');
-        if (!lista.length) selEstab.innerHTML = '<option value="">Nenhuma loja encontrada</option>';
+        montarOpcoes(data.estabelecimentos || []);
       } catch (_e) {
-        selEstab.innerHTML = '<option value="">Falha ao carregar lojas</option>';
+        montarOpcoes([]);
       }
     })();
     document.getElementById('form-login').addEventListener('submit', async (ev) => {
@@ -115,6 +117,7 @@
       erro.classList.remove('visivel');
       btn.disabled = true;
       try {
+        if (!selEstab.value) throw new Error('Selecione o estabelecimento.');
         const payload = {
           matricula: soDigitos(document.getElementById('matricula').value),
           senha: document.getElementById('senha').value,
@@ -129,8 +132,7 @@
         if (!resp.ok) throw new Error(data.erro || 'Falha no login.');
         if (data.precisaEstab) {
           if (data.estabelecimentos && data.estabelecimentos.length) {
-            selEstab.innerHTML = '<option value="">Selecione a loja</option>' +
-              data.estabelecimentos.map((e) => `<option value="${e.cnpj}">${e.nome}</option>`).join('');
+            montarOpcoes(data.estabelecimentos);
           }
           erro.textContent = 'Selecione o estabelecimento para continuar.';
           erro.classList.add('visivel');
