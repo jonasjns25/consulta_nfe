@@ -13,6 +13,7 @@ const {
 const { extrairDadosNFe } = require('./nfe-parser');
 const registerConfNfRoutes = require('./confnf-api');
 const registerMixFornecedorRoutes = require('./mix-fornecedor-api');
+const { registerAuthRoutes } = require('./auth-erp');
 let xml2js;
 try {
     xml2js = require('xml2js');
@@ -75,6 +76,7 @@ function carregarServidores() {
                 database: config.database,
                 waitForConnections: true,
                 connectionLimit: config.connectionLimit,
+                connectTimeout: 15000,
                 timezone: 'Z',
                 enableKeepAlive: true,
                 keepAliveInitialDelay: 0
@@ -106,6 +108,7 @@ function carregarServidores() {
             database: config.database,
             waitForConnections: true,
             connectionLimit: config.connectionLimit,
+            connectTimeout: 15000,
             timezone: 'Z',
             enableKeepAlive: true,
             keepAliveInitialDelay: 0
@@ -215,6 +218,7 @@ let confnfPool = null;
             database: CONFN_DB_NAME,
             waitForConnections: true,
             connectionLimit: Number(process.env.CONFNF_CONNECTION_LIMIT) || 5,
+            connectTimeout: 4000,
             timezone: 'Z',
             enableKeepAlive: true,
             keepAliveInitialDelay: 0
@@ -228,6 +232,8 @@ let confnfPool = null;
 function getConfNfPool() {
     return confnfPool || pool;
 }
+
+registerAuthRoutes(app, { getPool: () => pool });
 
 registerConfNfRoutes(app, {
     getPool: () => pool,
@@ -247,17 +253,6 @@ async function testarConexao(serverId = null) {
         console.log(`[INFO] Conexão com o servidor "${config.name}" estabelecida com sucesso!`);
         console.log(`[INFO] Host: ${config.host}`);
         console.log(`[INFO] Database: ${config.database}`);
-        if (confnfPool) {
-            try {
-                const cnf = await getConfNfPool().getConnection();
-                await cnf.ping();
-                cnf.release();
-                console.log(`[INFO] Conexão ConfNF: ${process.env.CONFNF_HOST}/${CONFN_DB_NAME}`);
-            } catch (errCnf) {
-                console.error(`[ERRO] Falha ao conectar no ConfNF (${process.env.CONFNF_HOST}/${CONFN_DB_NAME}):`, errCnf?.message || errCnf);
-                throw errCnf;
-            }
-        }
         return true;
     } catch (error) {
         console.error('\n==================================================');
@@ -695,6 +690,11 @@ app.post('/api/nfe/obs', async (req, res) => {
         console.error('[NFE obs gravar]', error?.message || error);
         res.status(500).json({ error: 'Falha ao gravar observação.' });
     }
+});
+
+app.get('/login.html', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.sendFile(path.join(__dirname, 'login.html'));
 });
 
 app.get('/', (req, res) => {
@@ -3386,6 +3386,11 @@ async function iniciarServidor() {
     console.log(`[INFO] Iniciando servidor na porta ${PORT}...`);
     console.log('[INFO] Pressione Ctrl+C para parar o servidor\n');
 
+    app.listen(PORT, () => {
+        console.log(`\n[INFO] Servidor rodando em http://localhost:${PORT}`);
+        console.log(`[INFO] Classificacao NF-e: ${nfeObsAtivo() ? 'ATIVA' : 'desligada'} (NFE_OBS_ATIVO no .env)\n`);
+    });
+
     if (updater) {
         try {
             const atualizou = await updater.executarNoBoot();
@@ -3401,19 +3406,10 @@ async function iniciarServidor() {
         console.log(`[INFO] Verificacao de atualizacao a cada ${intervalo}h.`);
     }
 
-    // Testar conexão com o banco antes de iniciar o servidor
     const conexaoOk = await testarConexao();
-    
     if (!conexaoOk) {
-        console.error('\n[ERRO] Não foi possível conectar ao banco de dados.');
-        console.error('[ERRO] O servidor não será iniciado até que o problema seja resolvido.\n');
-        process.exit(1);
+        console.error('\n[AVISO] Banco indisponível no momento. A página de login está no ar; o login depende do MySQL.\n');
     }
-    
-    app.listen(PORT, () => {
-        console.log(`\n[INFO] Servidor rodando em http://localhost:${PORT}`);
-        console.log(`[INFO] Classificacao NF-e: ${nfeObsAtivo() ? 'ATIVA' : 'desligada'} (NFE_OBS_ATIVO no .env)\n`);
-    });
 }
 
 iniciarServidor();

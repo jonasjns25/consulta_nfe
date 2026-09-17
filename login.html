@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entrar — Lumi NF-e</title>
+  <style>
+    :root {
+      font-family: "Inter", "Segoe UI", "Roboto", sans-serif;
+      --lumi-primary: #C8102E;
+      --lumi-primary-strong: #DB2636;
+      --lumi-dark: #222222;
+      --lumi-muted: #3A3A3A;
+      --lumi-border: rgba(200, 16, 46, 0.2);
+      --shadow: 0 20px 45px rgba(34, 34, 34, 0.14);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      background: radial-gradient(circle at top left, #FFF8F4, #FFFFFF);
+      color: var(--lumi-dark);
+    }
+    .card {
+      width: 100%;
+      max-width: 420px;
+      background: #fff;
+      border-radius: 24px;
+      padding: 2rem 1.75rem 1.75rem;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--lumi-border);
+    }
+    .brand { display: flex; align-items: center; gap: 0.85rem; margin-bottom: 0.35rem; }
+    .brand img { height: 48px; width: auto; }
+    h1 { margin: 0; font-size: 1.55rem; }
+    p.sub { margin: 0.35rem 0 1.4rem; color: var(--lumi-muted); font-size: 0.92rem; }
+    label { display: block; font-size: 0.82rem; font-weight: 600; margin: 0.85rem 0 0.3rem; }
+    input, select {
+      width: 100%;
+      padding: 0.7rem 0.85rem;
+      border: 1px solid var(--lumi-border);
+      border-radius: 12px;
+      font-size: 1rem;
+      background: #fff;
+    }
+    input:focus, select:focus { outline: 2px solid rgba(200, 16, 46, 0.35); }
+    .oculto { display: none; }
+    button {
+      width: 100%;
+      margin-top: 1.25rem;
+      padding: 0.85rem 1rem;
+      border: 0;
+      border-radius: 14px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      color: #fff;
+      background: linear-gradient(135deg, var(--lumi-primary), var(--lumi-primary-strong));
+      box-shadow: 0 12px 30px rgba(200, 16, 46, 0.35);
+    }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .erro {
+      display: none;
+      margin-top: 0.9rem;
+      padding: 0.7rem 0.85rem;
+      border-radius: 10px;
+      background: rgba(219, 38, 54, 0.1);
+      color: #a71d2a;
+      font-size: 0.88rem;
+    }
+    .erro.visivel { display: block; }
+  </style>
+</head>
+<body>
+  <form class="card" id="form-login" autocomplete="on">
+    <div class="brand">
+      <img src="logo-lumi.png" alt="Lumi">
+      <h1>Lumi NF-e</h1>
+    </div>
+    <p class="sub">Selecione o estabelecimento e entre com a matrícula (com dígito) e a senha do ERP.</p>
+    <label for="estab">Estabelecimento</label>
+    <select id="estab">
+      <option value="">Carregando lojas…</option>
+    </select>
+    <label for="matricula">Matrícula</label>
+    <input id="matricula" name="matricula" inputmode="numeric" maxlength="10" required placeholder="0000132">
+    <label for="senha">Senha</label>
+    <input id="senha" name="senha" type="password" maxlength="10" autocomplete="current-password" required>
+    <button type="submit" id="btn">Entrar</button>
+    <div class="erro" id="erro" role="alert"></div>
+  </form>
+  <script>
+    function soDigitos(v) { return String(v || '').replace(/\D/g, ''); }
+    const selEstab = document.getElementById('estab');
+    (async function carregarEstabs() {
+      try {
+        const resp = await fetch('/api/auth/estabelecimentos');
+        const data = await resp.json().catch(() => ({}));
+        const lista = data.estabelecimentos || [];
+        selEstab.innerHTML = '<option value="">Selecione a loja</option>' +
+          lista.map((e) => `<option value="${e.cnpj}">${e.nome}</option>`).join('');
+        if (!lista.length) selEstab.innerHTML = '<option value="">Nenhuma loja encontrada</option>';
+      } catch (_e) {
+        selEstab.innerHTML = '<option value="">Falha ao carregar lojas</option>';
+      }
+    })();
+    document.getElementById('form-login').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const erro = document.getElementById('erro');
+      const btn = document.getElementById('btn');
+      erro.classList.remove('visivel');
+      btn.disabled = true;
+      try {
+        const payload = {
+          matricula: soDigitos(document.getElementById('matricula').value),
+          senha: document.getElementById('senha').value,
+          cnpj: selEstab.value || ''
+        };
+        const resp = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.erro || 'Falha no login.');
+        if (data.precisaEstab) {
+          if (data.estabelecimentos && data.estabelecimentos.length) {
+            selEstab.innerHTML = '<option value="">Selecione a loja</option>' +
+              data.estabelecimentos.map((e) => `<option value="${e.cnpj}">${e.nome}</option>`).join('');
+          }
+          erro.textContent = 'Selecione o estabelecimento para continuar.';
+          erro.classList.add('visivel');
+          selEstab.focus();
+          return;
+        }
+        const next = new URLSearchParams(location.search).get('next') || '/';
+        location.href = next.startsWith('/') ? next : '/';
+      } catch (e) {
+        erro.textContent = e.message || 'Não foi possível entrar.';
+        erro.classList.add('visivel');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

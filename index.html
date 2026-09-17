@@ -61,6 +61,24 @@
     .brand { display: flex; align-items: center; gap: 0.85rem; }
     .brand-logo { height: 52px; width: auto; display: block; }
 
+    .auth-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+      padding: 0.35rem 0.45rem 0.35rem 0.75rem;
+      border-radius: 999px;
+      background: rgba(200, 16, 46, 0.08);
+      border: 1px solid rgba(200, 16, 46, 0.18);
+      font-size: 0.82rem;
+      color: var(--lumi-dark);
+    }
+    .auth-chip strong { font-weight: 600; }
+    .auth-chip button {
+      padding: 0.25rem 0.7rem;
+      font-size: 0.78rem;
+      border-radius: 999px;
+    }
+
     main {
       max-width: 1200px;
       margin: 0 auto;
@@ -1449,6 +1467,10 @@
           <span id="server-status-text">Conectado</span>
         </span>
       </div>
+      <span class="auth-chip" id="auth-chip">
+        <strong id="auth-nome">…</strong>
+        <button type="button" class="btn-ghost" id="btn-sair">Sair</button>
+      </span>
     </div>
   </header>
 
@@ -3929,6 +3951,25 @@
 
     // Inicializar display do período
     atualizarDisplayPeriodo();
+
+    (async function iniciarSessao() {
+      try {
+        const resp = await fetch('/api/auth/me');
+        if (resp.status === 401) {
+          location.href = '/login.html';
+          return;
+        }
+        const user = await resp.json();
+        const nome = document.getElementById('auth-nome');
+        if (nome) nome.textContent = user.fantasia
+          ? `${user.nome} · ${user.fantasia}`
+          : (user.nome || user.matricula || '');
+      } catch (_e) { /* middleware já protege a página */ }
+      document.getElementById('btn-sair')?.addEventListener('click', async () => {
+        await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+        location.href = '/login.html';
+      });
+    })();
   </script>
 </body>
 </html>
