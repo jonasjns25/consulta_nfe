@@ -731,7 +731,7 @@
     .col-valor { width: 9%; text-align: right; }
     .col-numero { width: 9%; text-align: right; }
     .col-usuario { width: 8%; text-align: center; }
-    .col-status { width: 16%; text-align: center; }
+    .col-status { width: 14%; text-align: center; }
     .nfe-obs-bar {
       display: flex;
       align-items: flex-start;
@@ -887,10 +887,9 @@
     }
 
     .actions-group {
-      display: grid;
-      grid-template-columns: repeat(2, 36px);
-      justify-content: center;
-      gap: 0.35rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
     }
 
     .btn-ghost.btn-small {
@@ -936,7 +935,11 @@
 
     @media (min-width: 768px) {
       .actions-group {
-        grid-template-columns: repeat(2, 36px);
+        flex-direction: row;
+        flex-wrap: wrap;
+      }
+      .actions-group button {
+        flex: 1 1 auto;
       }
     }
 
@@ -2477,45 +2480,34 @@
       };
     }
 
-    function campoRow(row, ...nomes) {
-      if (!row) return '';
-      for (const n of nomes) {
-        if (row[n] != null && row[n] !== '') return row[n];
-        const k = Object.keys(row).find((x) => x.toLowerCase() === String(n).toLowerCase());
-        if (k != null && row[k] != null && row[k] !== '') return row[k];
-      }
-      return '';
-    }
-
     function atualizarTabela() {
       tbody.innerHTML = '';
       const colunas = 9;
-      const podeAlterar = !state.usuario || state.usuario.podeAlterar !== false;
+      const podeAlterar = !(state.usuario && state.usuario.podeAlterar === false);
       state.filtered.forEach((row, indice) => {
         const tr = document.createElement('tr');
         const alt = indice % 2 === 1;
         const temObs = state.nfeObs.ativo;
         tr.className = `nfe-main${temObs ? ' tem-obs' : ''}${alt ? ' nfe-alt' : ''}`;
         const emissao = resolverDataLinha(row);
-        const chave = String(campoRow(row, 'CHAVE') || '').trim();
+        const chave = row.CHAVE ?? '';
         const possuiChave = Boolean(chave);
         const statusInfo = obterStatusLancamento(row);
-        const razao = String(campoRow(row, 'RAZAO') || '-') || '-';
-        const estabFantasia = String(campoRow(row, 'ESTAB_FANTASIA') || '-') || '-';
-        const numeroNF = formatarNumeroNf(campoRow(row, 'NUMERO_NF'));
-        const valorFormatado = formatarMoeda(normalizarValor(campoRow(row, 'VALOR')));
+        const razao = row.RAZAO ?? '-';
+        const estabFantasia = row.ESTAB_FANTASIA ?? '-';
+        const numeroNF = formatarNumeroNf(row.NUMERO_NF);
+        const valorFormatado = formatarMoeda(normalizarValor(row.VALOR));
         const chaveTexto = chave || '-';
-        const usuarioCodigo = String(campoRow(row, 'USUARIO_CODIGO') || '-') || '-';
-        const usuarioNome = String(campoRow(row, 'USUARIO_NOME') || '');
-        const cnpjRaw = campoRow(row, 'CNPJ_CPF');
-        const cnpjDigits = String(cnpjRaw || '').replace(/\D/g, '');
-        const cnpjMascara = formatarDocumento(cnpjRaw);
+        const usuarioCodigo = row.USUARIO_CODIGO ?? '-';
+        const usuarioNome = row.USUARIO_NOME ?? '';
+        const cnpjDigits = String(row.CNPJ_CPF || '').replace(/\D/g, '');
+        const cnpjMascara = formatarDocumento(row.CNPJ_CPF);
         const extraAlterar = (possuiChave && podeAlterar) ? `
-                      <button type="button" class="btn-icon" data-manutencao="${escaparHtml(chave)}" title="Manutenção XML">
+                      <button type="button" class="btn-icon" data-manutencao="${chave}" title="Manutenção XML">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.82,11.69,4.82,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
                         <span class="sr-only">Manutenção XML</span>
                       </button>
-                      <button type="button" class="btn-icon" data-autorizacao="${escaparHtml(chave)}" title="Autorizar recepção de XML (incluir no sistema após análise)">
+                      <button type="button" class="btn-icon" data-autorizacao="${chave}" title="Autorizar recepção de XML (incluir no sistema após análise)">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
                         <span class="sr-only">Autorizar recepção de XML</span>
                       </button>` : '';
@@ -2536,7 +2528,7 @@
           </td>
           <td class="col-razao">
             <div class="cell-stack">
-              <span class="cell-text cell-text--wrap cell-strong" title="${escaparHtml(razao)}">${escaparHtml(razao)}</span>
+              <span class="cell-text cell-text--wrap cell-strong" title="${escaparHtml(razao)}">${razao}</span>
               <span class="cell-subtle">Fornecedor</span>
             </div>
           </td>
@@ -2548,12 +2540,12 @@
           </td>
           <td class="col-chave">
             <div class="cell-stack">
-              <span class="cell-text cell-text--wrap cell-key" title="${escaparHtml(chaveTexto)}">${escaparHtml(chaveTexto)}</span>
+              <span class="cell-text cell-text--wrap cell-key" title="${escaparHtml(chaveTexto)}">${chaveTexto}</span>
               <span class="cell-subtle">Chave completa</span>
             </div>
           </td>
-          <td class="col-valor valor"><span class="value-chip" title="${escaparHtml(valorFormatado)}">${escaparHtml(valorFormatado)}</span></td>
-          <td class="col-numero"><span class="numero-pill" title="${escaparHtml(numeroNF)}">${escaparHtml(numeroNF)}</span></td>
+          <td class="col-valor valor"><span class="value-chip" title="${escaparHtml(valorFormatado)}">${valorFormatado}</span></td>
+          <td class="col-numero"><span class="numero-pill" title="${escaparHtml(numeroNF)}">${numeroNF}</span></td>
           <td class="col-usuario">
             <span class="badge cell-text--nowrap" title="${escaparHtml(usuarioNome)}">${escaparHtml(usuarioCodigo)}</span>
           </td>
@@ -2564,20 +2556,20 @@
               ${
                 possuiChave
                   ? `
-                    <div class="actions-group">
-                      <button type="button" class="btn-icon" data-detalhes="${escaparHtml(chave)}" title="Detalhar NFe">
+                    <div class="actions-group" style="flex-direction:row; gap:0.4rem;">
+                      <button type="button" class="btn-icon" data-detalhes="${chave}" title="Detalhar NFe">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
                         <span class="sr-only">Detalhar NFe</span>
                       </button>
-                      <button type="button" class="btn-icon" data-copy="${escaparHtml(chave)}" title="Copiar chave">
+                      <button type="button" class="btn-icon" data-copy="${chave}" title="Copiar chave">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h11a2 2 0 0 1 2 2v11h-2V5H8V3Zm8 4a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h11Zm0 2H5v11h11V9Z"/></svg>
                         <span class="sr-only">Copiar chave</span>
                       </button>
-                      <button type="button" class="btn-icon" data-danfe="${escaparHtml(chave)}" title="Imprimir DANFE">
+                      <button type="button" class="btn-icon" data-danfe="${chave}" title="Imprimir DANFE">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v4H6V3Zm11 2V5H7v1h10ZM6 9h12a3 3 0 0 1 3 3v5H18v4H6v-4H3v-5a3 3 0 0 1 3-3Zm10 8H8v2h8v-2Zm4-3v-2a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v2h2v-2h12v2h2Z"/></svg>
                         <span class="sr-only">Imprimir DANFE</span>
                       </button>
-                      <button type="button" class="btn-icon" data-xml="${escaparHtml(chave)}" title="Baixar XML">
+                      <button type="button" class="btn-icon" data-xml="${chave}" title="Baixar XML">
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
                         <span class="sr-only">Baixar XML</span>
                       </button>
@@ -3198,7 +3190,7 @@
     }
 
     function resolverDataLinha(row) {
-      return campoRow(row, 'EMISSAO_NORMALIZADA', 'EMISSAO_ORIGINAL', 'EMISSAO') || '';
+      return row?.EMISSAO_NORMALIZADA || row?.EMISSAO_ORIGINAL || row?.EMISSAO || '';
     }
 
     function escaparHtml(texto = '') {
@@ -3255,7 +3247,7 @@
 
     function htmlLinhaObs(row, colunas, alt) {
       if (!state.nfeObs.ativo) return null;
-      const chave = String(campoRow(row, 'CHAVE') || '');
+      const chave = row.CHAVE || '';
       const atual = row.OBSERVACAO || '';
       const opts = ['<option value="">—</option>'].concat(
         state.nfeObs.opcoes.map((opcao) => {
@@ -4007,6 +3999,7 @@
         const user = await resp.json();
         state.usuario = user;
         aplicarEscopoLoja();
+        if (state.filtered.length) atualizarTabela();
         const nome = document.getElementById('auth-nome');
         if (nome) nome.textContent = user.fantasia
           ? `${user.nome} · ${user.fantasia}`

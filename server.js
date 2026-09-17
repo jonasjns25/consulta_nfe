@@ -603,10 +603,10 @@ app.get('/consulta', async (req, res) => {
         SELECT 
             DATE_FORMAT(${DATA_EMISSAO_EXPR}, '%Y-%m-%d') AS EMISSAO_NORMALIZADA,
             n.EMISSAO AS EMISSAO_ORIGINAL, 
-            n.CNPJ_CPF AS CNPJ_CPF, 
-            n.RAZAO AS RAZAO, 
-            n.CHAVE AS CHAVE, 
-            n.VALOR AS VALOR, 
+            n.CNPJ_CPF, 
+            n.RAZAO, 
+            n.CHAVE, 
+            n.VALOR, 
             SUBSTRING(n.CHAVE, 26, 9) AS NUMERO_NF,
             CASE WHEN c.CHAVE_NFE IS NOT NULL THEN 1 ELSE 0 END AS LANCADA,
             c.NUMERO AS COMPRA_NUMERO,
@@ -626,20 +626,6 @@ app.get('/consulta', async (req, res) => {
     `;
 
         const [rows] = await pool.query(sql, valores);
-        for (const r of rows || []) {
-            r.CHAVE = colRow(r, 'CHAVE');
-            r.CNPJ_CPF = colRow(r, 'CNPJ_CPF');
-            r.RAZAO = colRow(r, 'RAZAO');
-            r.VALOR = colRow(r, 'VALOR');
-            r.NUMERO_NF = colRow(r, 'NUMERO_NF');
-            r.ESTAB_FANTASIA = colRow(r, 'ESTAB_FANTASIA');
-            r.USUARIO_CODIGO = colRow(r, 'USUARIO_CODIGO');
-            r.USUARIO_NOME = colRow(r, 'USUARIO_NOME');
-            r.COMPRA_STATUS = colRow(r, 'COMPRA_STATUS');
-            r.LANCADA = colRow(r, 'LANCADA');
-            r.EMISSAO_NORMALIZADA = colRow(r, 'EMISSAO_NORMALIZADA');
-            r.EMISSAO_ORIGINAL = colRow(r, 'EMISSAO_ORIGINAL');
-        }
         await anexarObservacoesNfe(rows);
         await anexarUltimasSefaz(rows);
         const data = (nfeObsAtivo() && observacaoFiltro === '__vazia__')
