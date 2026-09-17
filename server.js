@@ -310,6 +310,15 @@ function montarExpressaoData(campo = 'EMISSAO') {
 
 const DATA_EMISSAO_EXPR = montarExpressaoData('n.EMISSAO');
 
+/**
+ * Registro de nfe_xml sem chave/XML não tem dado nenhum para mostrar e ainda faz o JOIN
+ * com compra casar chave vazia com várias compras, repetindo a mesma linha em branco.
+ */
+const FILTROS_XML_PRESENTE = [
+    "TRIM(COALESCE(n.CHAVE, '')) <> ''",
+    "LENGTH(COALESCE(n.XML, '')) > 0"
+];
+
 registerMixFornecedorRoutes(app, {
     getPool: () => pool,
     xml2js,
@@ -391,7 +400,8 @@ app.get('/status-compra-contagem', async (req, res) => {
 
     const filtros = [
         `DATE(${DATA_EMISSAO_EXPR}) BETWEEN ? AND ?`,
-        'n.SITNFE = 1'
+        'n.SITNFE = 1',
+        ...FILTROS_XML_PRESENTE
     ];
     const valores = [inicio, fim];
 
@@ -531,7 +541,8 @@ app.get('/consulta', async (req, res) => {
     }
     const filtros = [
         `DATE(${DATA_EMISSAO_EXPR}) BETWEEN ? AND ?`,
-        'n.SITNFE = 1'
+        'n.SITNFE = 1',
+        ...FILTROS_XML_PRESENTE
     ];
     const valores = [inicio, fim];
 

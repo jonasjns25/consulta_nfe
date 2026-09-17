@@ -438,16 +438,6 @@
     const modalBuscarPlu = document.getElementById('modal-buscar-plu');
     const modalSalvarVinculo = document.getElementById('modal-salvar-vinculo');
 
-    fetch('/api/auth/me').then((r) => r.json()).then((u) => {
-      if (u && u.podeAlterar === false) {
-        [btnSalvar, modalSalvarVinculo].forEach((el) => {
-          if (!el) return;
-          el.hidden = true;
-          el.style.display = 'none';
-        });
-      }
-    }).catch(() => {});
-
     let modalVinculoIndex = -1;
     let buscaPluTimeout = null;
     const filtrosTags = document.getElementById('filtros-tags');
