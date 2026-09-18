@@ -696,20 +696,17 @@
     }
 
     tbody tr.nfe-main td:first-child,
-    tbody tr.nfe-acoes td,
-    tbody tr.nfe-obs td {
+    tbody tr.nfe-acoes td {
       border-left: 1px solid rgba(200, 16, 46, 0.28);
     }
 
     tbody tr.nfe-main td:last-child,
-    tbody tr.nfe-acoes td,
-    tbody tr.nfe-obs td {
+    tbody tr.nfe-acoes td {
       border-right: 1px solid rgba(200, 16, 46, 0.28);
     }
 
     tbody tr.nfe-main:not(.tem-extra) td,
-    tbody tr.nfe-obs td,
-    tbody tr.nfe-acoes:not(:has(+ tr.nfe-obs)) td {
+    tbody tr.nfe-acoes td {
       border-bottom: 1px solid rgba(200, 16, 46, 0.28);
     }
 
@@ -721,19 +718,13 @@
       border-bottom-right-radius: 0;
     }
 
-    tbody tr.nfe-acoes td,
-    tbody tr.nfe-obs td {
+    tbody tr.nfe-acoes td {
       border-top-left-radius: 0;
       border-top-right-radius: 0;
       border-bottom-left-radius: 16px;
       border-bottom-right-radius: 16px;
-      padding-top: 0.15rem;
-    }
-
-    tbody tr.nfe-acoes:has(+ tr.nfe-obs) td {
-      border-bottom-left-radius: 0;
-      border-bottom-right-radius: 0;
-      padding-bottom: 0.15rem;
+      padding-top: 0.2rem;
+      padding-bottom: 0.35rem;
     }
 
     tbody tr.nfe-main.tem-extra td {
@@ -850,37 +841,14 @@
       align-items: center;
       justify-content: center;
     }
-    .nfe-obs-bar {
-      display: flex;
-      align-items: center;
-      gap: 0.65rem;
-      width: 100%;
-    }
-
-    .nfe-obs-label {
-      flex: 0 0 auto;
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: var(--lumi-muted);
-    }
-
-    .nfe-obs-texto {
-      flex: 1 1 auto;
-      font-size: 0.88rem;
-      font-weight: 600;
-      color: var(--lumi-dark);
-      line-height: 1.35;
-      white-space: normal;
-      word-break: break-word;
-    }
-
     .nfe-obs-select {
-      flex: 0 0 16rem;
-      width: 16rem;
+      flex: 1 1 18rem;
+      min-width: 16rem;
+      width: auto;
       max-width: 100%;
-      font-size: 0.78rem;
-      line-height: 1.2;
-      padding: 0.28rem 0.4rem;
+      font-size: 0.8rem;
+      line-height: 1.25;
+      padding: 0.32rem 0.5rem;
       border: 1px solid #d8cfc8;
       border-radius: 6px;
       background: #fff;
@@ -911,6 +879,7 @@
       flex-wrap: nowrap;
       align-items: center;
       gap: 0.3rem;
+      flex: 0 0 auto;
       margin-left: auto;
     }
 
@@ -1015,17 +984,12 @@
 
     tbody tr.nfe-main:hover,
     tbody tr.nfe-acoes:hover,
-    tbody tr.nfe-obs:hover,
-    tbody tr.nfe-main:hover + tr.nfe-acoes,
-    tbody tr.nfe-main:hover + tr.nfe-obs,
-    tbody tr.nfe-main:hover + tr.nfe-acoes + tr.nfe-obs {
+    tbody tr.nfe-main:hover + tr.nfe-acoes {
       background-color: #fff4f5;
     }
 
     tbody tr.nfe-alt:hover,
-    tbody tr.nfe-main.nfe-alt:hover + tr.nfe-acoes,
-    tbody tr.nfe-main.nfe-alt:hover + tr.nfe-obs,
-    tbody tr.nfe-main.nfe-alt:hover + tr.nfe-acoes + tr.nfe-obs {
+    tbody tr.nfe-main.nfe-alt:hover + tr.nfe-acoes {
       background-color: rgba(200, 16, 46, 0.15);
     }
 
@@ -2873,8 +2837,7 @@
           const item = lista.find((r) => r.CHAVE === chave);
           if (item) item.OBSERVACAO = observacao;
         });
-        const texto = sel.closest('.nfe-obs-bar')?.querySelector('.nfe-obs-texto');
-        if (texto) texto.textContent = observacao || '—';
+        sel.title = observacao || 'Observação';
         mostrarToast(observacao ? 'Observação gravada.' : 'Observação removida.');
       } catch (error) {
         mostrarToast(error.message || 'Falha ao gravar observação.', true);
@@ -2974,10 +2937,8 @@
         tr.className = `nfe-main${temExtra ? ' tem-extra' : ''}${alt ? ' nfe-alt' : ''}`;
         tr.innerHTML = visiveis.map((col) => `<td class="${col.classe}">${col.render(row, ctx)}</td>`).join('');
         tbody.appendChild(tr);
-        const linhaAcoes = mostrarAcoes ? htmlLinhaAcoes(row, colCount, alt, ctx) : null;
+        const linhaAcoes = temExtra ? htmlLinhaAcoes(row, colCount, alt, ctx, mostrarAcoes) : null;
         if (linhaAcoes) tbody.appendChild(linhaAcoes);
-        const linhaObs = htmlLinhaObs(row, colCount, alt);
-        if (linhaObs) tbody.appendChild(linhaObs);
       });
     }
 
@@ -3639,7 +3600,20 @@
       return `<span class="${cls}" title="${escaparHtml(title)}">${escaparHtml(txt)}</span>`;
     }
 
-    function htmlLinhaAcoes(row, colunas, alt, ctx) {
+    function htmlObsSelect(row) {
+      if (!state.nfeObs.ativo) return '';
+      const chave = row.CHAVE || '';
+      const atual = row.OBSERVACAO || '';
+      const opts = ['<option value="">—</option>'].concat(
+        state.nfeObs.opcoes.map((opcao) => {
+          const sel = opcao === atual ? ' selected' : '';
+          return `<option value="${escaparHtml(opcao)}"${sel}>${escaparHtml(opcao)}</option>`;
+        })
+      );
+      return `<select class="nfe-obs-select" data-obs-chave="${escaparHtml(chave)}" title="${escaparHtml(atual || 'Observação')}" ${chave ? '' : 'disabled'}>${opts.join('')}</select>`;
+    }
+
+    function htmlLinhaAcoes(row, colunas, alt, ctx, mostrarAcoes) {
       const chave = row.CHAVE ?? '';
       const possuiChave = Boolean(chave);
       const statusInfo = obterStatusLancamento(row);
@@ -3652,7 +3626,7 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
           <span class="sr-only">Autorizar recepção de XML</span>
         </button>` : '';
-      const botoes = possuiChave ? `
+      const botoes = (mostrarAcoes && possuiChave) ? `
         <button type="button" class="btn-icon" data-detalhes="${chave}" title="Detalhar NFe">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
           <span class="sr-only">Detalhar NFe</span>
@@ -3666,35 +3640,17 @@
           <span class="sr-only">Baixar XML</span>
         </button>
         ${extraAlterar}` : '';
+      const statusHtml = mostrarAcoes
+        ? `<span class="status-pill ${statusInfo.className}" title="Status da compra">${escaparHtml(statusInfo.label)}</span>${htmlChipSefaz(row)}`
+        : '';
+      const botoesHtml = botoes ? `<div class="nfe-acoes-btns">${botoes}</div>` : '';
       const tr = document.createElement('tr');
       tr.className = `nfe-acoes${alt ? ' nfe-alt' : ''}`;
       tr.innerHTML = `<td colspan="${Math.max(colunas, 1)}">
         <div class="nfe-acoes-bar">
-          <span class="status-pill ${statusInfo.className}" title="Status da compra">${escaparHtml(statusInfo.label)}</span>
-          ${htmlChipSefaz(row)}
-          <div class="nfe-acoes-btns">${botoes}</div>
-        </div>
-      </td>`;
-      return tr;
-    }
-
-    function htmlLinhaObs(row, colunas, alt) {
-      if (!state.nfeObs.ativo) return null;
-      const chave = row.CHAVE || '';
-      const atual = row.OBSERVACAO || '';
-      const opts = ['<option value="">—</option>'].concat(
-        state.nfeObs.opcoes.map((opcao) => {
-          const sel = opcao === atual ? ' selected' : '';
-          return `<option value="${escaparHtml(opcao)}"${sel}>${escaparHtml(opcao)}</option>`;
-        })
-      );
-      const tr = document.createElement('tr');
-      tr.className = `nfe-obs${alt ? ' nfe-alt' : ''}`;
-      tr.innerHTML = `<td colspan="${colunas}">
-        <div class="nfe-obs-bar">
-          <span class="nfe-obs-label">Observação</span>
-          <span class="nfe-obs-texto">${escaparHtml(atual || '—')}</span>
-          <select class="nfe-obs-select" data-obs-chave="${escaparHtml(chave)}" ${chave ? '' : 'disabled'}>${opts.join('')}</select>
+          ${statusHtml}
+          ${htmlObsSelect(row)}
+          ${botoesHtml}
         </div>
       </td>`;
       return tr;
