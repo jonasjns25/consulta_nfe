@@ -31,10 +31,14 @@ const parserStatusXml = new XMLParser({
 const https = require('https');
 const zlib = require('zlib');
 const axios = require('axios');
-
-const SVRS_CONSULTA_PROT = 'https://nfe.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx';
-const SVRS_CONSULTA_PROT_HOM = 'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx';
-const SVAN_CONSULTA_PROT = 'https://www.sefazvirtual.fazenda.gov.br/NFeConsultaProtocolo4/NFeConsultaProtocolo4.asmx';
+const {
+    urlConsultaProtocoloNFe,
+    SOAP_ACTION_CONSULTA_PROTOCOLO,
+} = require('./lib/sefaz-nfe-consulta-protocolo-urls');
+const {
+    montarStatusDeRetConsSitNFe,
+    ErroConsultaSefazProtocolo,
+} = require('./lib/sefaz-situacao-protocolo');
 
 const SVRS_CTE_CONSULTA = 'https://cte.svrs.rs.gov.br/ws/CTeConsultaV4/CTeConsultaV4.asmx';
 const SVRS_CTE_CONSULTA_HOM = 'https://cte-homologacao.svrs.rs.gov.br/ws/CTeConsultaV4/CTeConsultaV4.asmx';
@@ -63,28 +67,6 @@ const MAP_CTE_CONSULTA = {
 };
 
 const CSTAT_CONSULTA_CTE_OK = ['100', '101', '110', '150', '151', '155', '301', '302', '303'];
-
-const MAP_CONSULTA_PROTOCOLO = {
-    11: SVRS_CONSULTA_PROT, 12: SVRS_CONSULTA_PROT,
-    13: 'https://nfe.sefaz.am.gov.br/services2/services/NfeConsulta4',
-    14: SVRS_CONSULTA_PROT, 15: SVAN_CONSULTA_PROT, 16: SVRS_CONSULTA_PROT, 17: SVRS_CONSULTA_PROT,
-    21: SVAN_CONSULTA_PROT, 22: SVRS_CONSULTA_PROT,
-    23: 'https://nfe.sefaz.ce.gov.br/nfe4/services/NFeConsultaProtocolo4',
-    24: SVRS_CONSULTA_PROT, 25: SVRS_CONSULTA_PROT,
-    26: 'https://nfe.sefaz.pe.gov.br/nfe-service/services/NFeConsultaProtocolo4',
-    27: SVRS_CONSULTA_PROT, 28: SVRS_CONSULTA_PROT,
-    29: 'https://nfe.sefaz.ba.gov.br/webservices/NFeConsultaProtocolo4/NFeConsultaProtocolo4.asmx',
-    31: 'https://nfe.fazenda.mg.gov.br/nfe2/services/NFeConsultaProtocolo4',
-    32: SVRS_CONSULTA_PROT, 33: SVRS_CONSULTA_PROT,
-    35: 'https://nfe.fazenda.sp.gov.br/ws/nfeconsultaprotocolo4.asmx',
-    41: 'https://nfe.sefa.pr.gov.br/nfe/NFeConsultaProtocolo4',
-    42: SVRS_CONSULTA_PROT,
-    43: 'https://nfe.sefazrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
-    50: 'https://nfe.sefaz.ms.gov.br/ws/NFeConsultaProtocolo4',
-    51: 'https://nfe.sefaz.mt.gov.br/nfews/v2/services/NfeConsulta4',
-    52: 'https://nfe.sefaz.go.gov.br/nfe/services/NFeConsultaProtocolo4',
-    53: SVRS_CONSULTA_PROT,
-};
 
 let winca = null;
 try {
@@ -951,13 +933,20 @@ function extrairEventosSefaz(docs) {
 }
 
 function urlConsultaProtocolo(chave, tpAmb) {
-    const cUF = String(chave || '').replace(/\D/g, '').slice(0, 2);
-    if (String(tpAmb) === '2') {
-        if (['11', '12', '14', '16', '17', '22', '24', '25', '27', '28', '32', '33', '42', '53'].includes(cUF)) {
-            return SVRS_CONSULTA_PROT_HOM;
-        }
+    return urlConsultaProtocoloNFe(chave, tpAmb);
+}
+
+function aguardarMs(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function erroRedeOuTimeout(err) {
+    const code = err && (err.code || err.errno);
+    if (code === 'ECONNRESET' || code === 'ETIMEDOUT' || code === 'ECONNABORTED' || code === 'ENOTFOUND') {
+        return true;
     }
-    return MAP_CONSULTA_PROTOCOLO[cUF] || SVRS_CONSULTA_PROT;
+    const msg = String(err?.message || '').toLowerCase();
+    return msg.includes('timeout') || msg.includes('network');
 }
 
 function urlConsultaCte(chave, tpAmb) {
@@ -1053,7 +1042,7 @@ function envelopesConsultaProtocolo(chave, tpAmb) {
     const cons =
         `<consSitNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">` +
         `<tpAmb>${tpAmb}</tpAmb><xServ>CONSULTAR</xServ><chNFe>${chave}</chNFe></consSitNFe>`;
-    const soapAction = 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4/nfeConsultaNF';
+    const soapAction = SOAP_ACTION_CONSULTA_PROTOCOLO;
     return [
         {
             body:
@@ -1091,14 +1080,12 @@ async function postConsultaProtocolo(url, envelope, headers, agent) {
     return { status: resp.status, xmlResp };
 }
 
-/**
- * Consulta Protocolo (nfeConsultaNF) — é o webservice do portal que devolve todos os eventos.
- */
-async function consultarEventosPorProtocolo(chave, dnCert, opts = {}) {
+async function executarConsultaProtocoloNFe(chave, dnCert, opts = {}) {
+    const chaveLimpa = String(chave || '').replace(/\D/g, '');
     const tpAmb = opts.tpAmb || '1';
     const cnpj = extrairCnpjDoDN(dnCert);
     const cred = await obterCredenciais(cnpj, opts.thumbprint);
-    const url = urlConsultaProtocolo(chave, tpAmb);
+    const url = urlConsultaProtocolo(chaveLimpa, tpAmb);
     const agent = new https.Agent({
         pfx: cred.pfx,
         passphrase: cred.passphrase || '',
@@ -1106,36 +1093,70 @@ async function consultarEventosPorProtocolo(chave, dnCert, opts = {}) {
     });
 
     let ultimoErro = null;
-    for (const env of envelopesConsultaProtocolo(chave, tpAmb)) {
-        try {
-            const { status, xmlResp } = await postConsultaProtocolo(url, env.body, env.headers, agent);
-            if (status >= 400) {
-                ultimoErro = new Error(`Consulta protocolo HTTP ${status}`);
-                continue;
+    for (const env of envelopesConsultaProtocolo(chaveLimpa, tpAmb)) {
+        for (let tentativa = 0; tentativa < 2; tentativa++) {
+            try {
+                if (tentativa > 0) await aguardarMs(2000);
+                const { status: httpStatus, xmlResp } = await postConsultaProtocolo(url, env.body, env.headers, agent);
+                if (httpStatus >= 400) {
+                    ultimoErro = new Error(`Consulta protocolo HTTP ${httpStatus}`);
+                    break;
+                }
+                if (!xmlResp || /<\s*html[\s>]/i.test(xmlResp)) {
+                    ultimoErro = new Error('Consulta protocolo retornou HTML em vez de XML');
+                    break;
+                }
+                const parsed = parserStatusXml.parse(xmlResp);
+                expandirXmlAninhado(parsed);
+                const extra = extrairEventosSefaz([{ json: parsed, xml: xmlResp }]);
+                const rets = coletarPorNomeLocal(parsed, 'retConsSitNFe');
+                const ret = rets[0] || {};
+                const cStatRet = textoCampo(ret.cStat);
+                if (!rets.length && extra.eventos.length === 0) {
+                    ultimoErro = new Error('Consulta protocolo sem retConsSitNFe');
+                    break;
+                }
+                if (cStatRet === '656') {
+                    throw new ErroConsultaSefazProtocolo(
+                        textoCampo(ret.xMotivo) || 'Consumo indevido na SEFAZ (cStat 656).',
+                        { codigo: 'SEFAZ_656', cStat: '656', bloqueio656: true }
+                    );
+                }
+                const infProt = coletarPorNomeLocal(parsed, 'infProt')[0] || {};
+                const situacao = montarStatusDeRetConsSitNFe(ret, infProt, extra, chaveLimpa, cnpj);
+                console.log(
+                    `[SEFAZ consulta protocolo] cStat=${situacao.cStat || '-'} eventos=${situacao.eventos.length} url=${url}`
+                );
+                return situacao;
+            } catch (err) {
+                if (err instanceof ErroConsultaSefazProtocolo) throw err;
+                if (tentativa === 0 && erroRedeOuTimeout(err)) {
+                    ultimoErro = err;
+                    continue;
+                }
+                ultimoErro = err;
+                break;
             }
-            if (!xmlResp || /<\s*html[\s>]/i.test(xmlResp)) {
-                ultimoErro = new Error('Consulta protocolo retornou HTML em vez de XML');
-                continue;
-            }
-            const parsed = parserStatusXml.parse(xmlResp);
-            expandirXmlAninhado(parsed);
-            const extra = extrairEventosSefaz([{ json: parsed, xml: xmlResp }]);
-            const rets = coletarPorNomeLocal(parsed, 'retConsSitNFe');
-            const cStatRet = textoCampo((rets[0] || {}).cStat);
-            if (!rets.length && extra.eventos.length === 0) {
-                ultimoErro = new Error('Consulta protocolo sem retConsSitNFe');
-                continue;
-            }
-            if (cStatRet && !['100', '101', '110', '150', '151', '155'].includes(cStatRet) && extra.eventos.length <= 1) {
-                console.warn(`[SEFAZ consulta protocolo] cStat=${cStatRet} url=${url}`);
-            }
-            console.log(`[SEFAZ consulta protocolo] cStat=${cStatRet || '-'} eventos=${extra.eventos.length} url=${url}`);
-            return extra;
-        } catch (err) {
-            ultimoErro = err;
         }
     }
     throw ultimoErro || new Error('Falha na consulta de protocolo da NF-e');
+}
+
+/** Compatível com fluxo de download XML (mescla eventos após Distribuição DFe). */
+async function consultarEventosPorProtocolo(chave, dnCert, opts = {}) {
+    const status = await executarConsultaProtocoloNFe(chave, dnCert, opts);
+    return {
+        eventos: status.eventos,
+        ambiente: status.ambiente,
+        temCce: status.temCce,
+    };
+}
+
+/**
+ * Situação e eventos via NFeConsultaProtocolo4 (nfeConsultaNF) — não usa Distribuição DFe.
+ */
+async function consultarSituacaoNFePorProtocolo(chave, dnCert, opts = {}) {
+    return executarConsultaProtocoloNFe(chave, dnCert, opts);
 }
 
 function mesclarExtraEventos(base, extra) {
@@ -1308,12 +1329,11 @@ async function consultarXmlPorChave(chave, dnCert, uf, opts = {}) {
 }
 
 /**
- * Consulta a situação da NF-e na SEFAZ (Distribuição DFe por chave).
- * Usa o mesmo certificado/estabelecimento do download de XML.
+ * Consulta a situação da NF-e na SEFAZ (NFeConsultaProtocolo4 — limite por chave, não por CNPJ).
+ * Download de XML continua em consultarXmlPorChave / Distribuição DFe.
  */
-async function consultarStatusPorChave(chave, dnCert, uf, opts = {}) {
-    const dist = await consultarDistribuicaoPorChave(chave, dnCert, uf, { ...opts, tratarCanceladaSemDoc: true });
-    return statusAposDistribuicao(dist, dnCert, opts);
+async function consultarStatusPorChave(chave, dnCert, _uf, opts = {}) {
+    return consultarSituacaoNFePorProtocolo(chave, dnCert, opts);
 }
 
 /** Diagnóstico: lista certificados disponíveis + info de ambiente. */
@@ -1719,6 +1739,8 @@ module.exports = {
     extrairChavesCteDeXmlNfe,
     ehChaveCte,
     consultarStatusPorChave,
+    consultarSituacaoNFePorProtocolo,
+    ErroConsultaSefazProtocolo,
     analisarSituacaoNFeSefaz,
     extrairEventosSefaz,
     nfCanceladaNaRespostaSefaz,

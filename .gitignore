@@ -30,3 +30,4 @@ update_*.zip
 *.user
 *.suo
 .sefaz-consulta-cache.json
+.sefaz-consulta-limiter.json

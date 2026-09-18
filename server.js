@@ -9,10 +9,14 @@ const {
     consultarXmlCtePorChave,
     extrairChavesCteDeXmlNfe,
     consultarStatusPorChave,
+    ErroConsultaSefazProtocolo,
     diagnosticarCertificados,
     listarCertificadosParaUI,
     formatarErroRespostaSefaz,
 } = require('./sefaz-service');
+const { criarLimitador, formatarRetryEm } = require('./lib/sefaz-consulta-limiter');
+
+const limitadorConsultaProtocoloNfe = criarLimitador();
 const { extrairDadosNFe } = require('./nfe-parser');
 const registerConfNfRoutes = require('./confnf-api');
 const registerMixFornecedorRoutes = require('./mix-fornecedor-api');
@@ -1321,10 +1325,30 @@ async function criarTabelaEventoSefaz() {
     }
 }
 
+async function garantirColunasSefazConsultaProtocolo() {
+    try {
+        const [cols] = await getConfNfPool().query(
+            `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'conf_sefaz_consulta'`,
+            [CONFN_DB_NAME]
+        );
+        const nomes = new Set((cols || []).map((c) => String(c.COLUMN_NAME || c.column_name).toLowerCase()));
+        const t = tabelaConfnf('conf_sefaz_consulta');
+        if (!nomes.has('n_prot')) {
+            await getConfNfPool().query(`ALTER TABLE ${t} ADD COLUMN n_prot VARCHAR(30) DEFAULT NULL AFTER c_stat`);
+        }
+        if (!nomes.has('dh_recbto')) {
+            await getConfNfPool().query(`ALTER TABLE ${t} ADD COLUMN dh_recbto VARCHAR(40) DEFAULT NULL AFTER n_prot`);
+        }
+    } catch (err) {
+        console.warn('[SEFAZ colunas protocolo]', err?.message || err);
+    }
+}
+
 async function garantirTabelasSefazConsulta() {
     if (tabelasSefazConsultaOk) return true;
     try {
         await getConfNfPool().query(`SELECT 1 FROM ${tabelaConfnf('conf_sefaz_consulta')} LIMIT 1`);
+        await garantirColunasSefazConsultaProtocolo();
         try {
             await getConfNfPool().query(`SELECT 1 FROM ${tabelaConfnf('conf_sefaz_evento')} LIMIT 1`);
         } catch (_errEvt) {
@@ -1371,6 +1395,7 @@ async function garantirTabelasSefazConsulta() {
                     FOREIGN KEY (id_consulta) REFERENCES ${tabelaConfnf('conf_sefaz_consulta')} (id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         `);
+            await garantirColunasSefazConsultaProtocolo();
             tabelasSefazConsultaOk = true;
             return true;
         } catch (errCreate) {
@@ -1469,6 +1494,8 @@ function montarPainelSefaz(row, eventosRows) {
         situacao: colRow(row, 'situacao'),
         situacaoLabel: colRow(row, 'situacao_label'),
         cStat: colRow(row, 'c_stat'),
+        nProt: colRow(row, 'n_prot'),
+        dhRecbto: colRow(row, 'dh_recbto'),
         xMotivo: colRow(row, 'x_motivo'),
         ambiente: colRow(row, 'ambiente') || '',
         temCce: Number(colRow(row, 'tem_cce')) === 1 || eventos.some((e) => String(e.tpEvento) === '110110'),
@@ -1487,6 +1514,8 @@ function painelSefazMemoria(chave, estab, statusSefaz) {
         situacao: statusSefaz.situacao || null,
         situacaoLabel: statusSefaz.label || null,
         cStat: statusSefaz.cStat != null ? String(statusSefaz.cStat) : null,
+        nProt: statusSefaz.nProt || null,
+        dhRecbto: statusSefaz.dhRecbto || null,
         xMotivo: statusSefaz.xMotivo || null,
         ambiente: statusSefaz.ambiente || '',
         temCce,
@@ -1501,7 +1530,7 @@ async function buscarConsultasSefaz(chave) {
         if (!(await garantirTabelasSefazConsulta())) return fallback;
         const [rows] = await getConfNfPool().query(
             `SELECT id, chave_nfe, estab, DATE_FORMAT(consultado_em, '%Y-%m-%dT%H:%i:%s') AS consultado_em,
-                    situacao, situacao_label, c_stat, x_motivo, ambiente, tem_cce, detalhe
+                    situacao, situacao_label, c_stat, n_prot, dh_recbto, x_motivo, ambiente, tem_cce, detalhe
              FROM ${tabelaConfnf('conf_sefaz_consulta')} WHERE chave_nfe = ? ORDER BY id DESC`,
             [chave]
         );
@@ -1547,14 +1576,16 @@ async function salvarConsultaSefaz(chave, estab, statusSefaz) {
         const eventos = painelMemoria.eventos;
         const [ins] = await getConfNfPool().query(
             `INSERT INTO ${tabelaConfnf('conf_sefaz_consulta')}
-                (chave_nfe, estab, consultado_em, situacao, situacao_label, c_stat, x_motivo, ambiente, tem_cce, detalhe)
-             VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?)`,
+                (chave_nfe, estab, consultado_em, situacao, situacao_label, c_stat, n_prot, dh_recbto, x_motivo, ambiente, tem_cce, detalhe)
+             VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 chave,
                 estab || null,
                 painelMemoria.situacao,
                 painelMemoria.situacaoLabel,
                 painelMemoria.cStat,
+                painelMemoria.nProt ? String(painelMemoria.nProt).slice(0, 30) : null,
+                painelMemoria.dhRecbto ? String(painelMemoria.dhRecbto).slice(0, 40) : null,
                 painelMemoria.xMotivo ? String(painelMemoria.xMotivo).slice(0, 255) : null,
                 painelMemoria.ambiente,
                 painelMemoria.temCce ? 1 : 0,
@@ -1599,7 +1630,15 @@ async function salvarConsultaSefaz(chave, estab, statusSefaz) {
 
 async function persistirStatusSefazConsulta(chave, estab, dnCert, uf, opts, statusJaObtido) {
     try {
-        const statusSefaz = statusJaObtido || await consultarStatusPorChave(chave, dnCert, uf, opts);
+        if (statusJaObtido) {
+            return await salvarConsultaSefaz(chave, estab, statusJaObtido);
+        }
+        const ultima = await buscarUltimaConsultaSefaz(chave);
+        if (ultima && String(ultima.cStat) === '100' && !opts?.forceAtualizacao) {
+            const historico = await buscarConsultasSefaz(chave);
+            return { consulta: ultima, historico, origemCache: true };
+        }
+        const statusSefaz = await consultarStatusPorChave(chave, dnCert, uf, opts);
         return await salvarConsultaSefaz(chave, estab, statusSefaz);
     } catch (error) {
         console.warn('[SEFAZ persistir status XML]', error?.message || error);
@@ -1818,7 +1857,31 @@ app.post('/api/nfe/consultar-status-sefaz', async (req, res) => {
         const sitnfeAnterior = registroBanco ? Number(registroBanco.SITNFE) : null;
 
         const tpAmb = process.env.SEFAZ_TPAMB || '1';
-        const statusSefaz = await consultarStatusPorChave(chave, CERTIFICADO_NFE, UF, { tpAmb, thumbprint });
+        const forceAtualizacao = Boolean(req.body && req.body.force);
+
+        const gate = limitadorConsultaProtocoloNfe.podeConsultar(chave, codEstab);
+        if (!gate.permitido) {
+            const msg =
+                gate.motivo === 'bloqueio_656'
+                    ? 'Consulta bloqueada localmente após rejeição 656 (consumo indevido). Aguarde 60 minutos antes de tentar novamente.'
+                    : `Limite local: no máximo ${limitadorConsultaProtocoloNfe.MAX_POR_CHAVE} consultas da mesma chave por hora. Tente novamente após ${formatarRetryEm(gate.retryAtMs)}.`;
+            return res.status(429).json({ erro: msg, codigo: gate.motivo, retryAt: gate.retryAt });
+        }
+
+        let statusSefaz;
+        try {
+            statusSefaz = await consultarStatusPorChave(chave, CERTIFICADO_NFE, UF, {
+                tpAmb,
+                thumbprint,
+                forceAtualizacao,
+            });
+            limitadorConsultaProtocoloNfe.registrarConsultaRealizada(chave);
+        } catch (error) {
+            if (error instanceof ErroConsultaSefazProtocolo && (error.cStat === '656' || error.bloqueio656)) {
+                limitadorConsultaProtocoloNfe.registrarBloqueio656(chave, codEstab);
+            }
+            throw error;
+        }
 
         let atualizado = false;
         let sitnfeAtual = sitnfeAnterior;

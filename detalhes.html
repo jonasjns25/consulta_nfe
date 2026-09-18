@@ -1053,12 +1053,12 @@
               </div>
               <div class="sefaz-acoes">
                 <button type="button" class="btn-sefaz btn-sefaz-ghost" id="btn-sefaz-cert" title="Escolher certificado A1">Certificado</button>
-                <button type="button" class="btn-sefaz" id="btn-consultar-sefaz">Consultar SEFAZ</button>
+                <button type="button" class="btn-sefaz" id="btn-consultar-sefaz">Atualizar situação</button>
               </div>
             </div>
             <p class="sefaz-meta" id="sefaz-cert-info"></p>
             <div id="sefaz-painel">
-              <p class="sefaz-meta">Ainda não há consulta gravada. Clique em Consultar SEFAZ para buscar a situação e os eventos.</p>
+              <p class="sefaz-meta">Ainda não há consulta gravada. Clique em Atualizar situação para consultar a SEFAZ (NFeConsultaProtocolo).</p>
             </div>
             <p id="sefaz-status-msg" class="sefaz-meta hidden"></p>
             <p id="sefaz-erro" class="sefaz-erro hidden"></p>
@@ -1733,7 +1733,7 @@
         gravarConsultaSefazLocal(window.nfeChave || chave, atual, lista);
       }
       if (!atual) {
-        painel.innerHTML = '<p class="sefaz-meta">Ainda não há consulta gravada. Clique em Consultar SEFAZ para buscar a situação e os eventos.</p>';
+        painel.innerHTML = '<p class="sefaz-meta">Ainda não há consulta gravada. Clique em Atualizar situação para consultar a SEFAZ.</p>';
         return;
       }
       const itens = lista.map((c, i) => {
@@ -1779,7 +1779,7 @@
       msgEl.textContent = 'Consultando SEFAZ, aguarde…';
       msgEl.classList.remove('hidden');
       try {
-        const payload = { chave: chaveNFe, estab };
+        const payload = { chave: chaveNFe, estab, force: true };
         if (cert?.thumbprint) payload.thumbprint = cert.thumbprint;
         const resp = await fetch('/api/nfe/consultar-status-sefaz', {
           method: 'POST',
