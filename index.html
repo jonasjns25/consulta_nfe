@@ -841,9 +841,25 @@
       align-items: center;
       justify-content: center;
     }
-    .nfe-obs-select {
+    .nfe-obs-wrap {
       flex: 1 1 18rem;
       min-width: 16rem;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .nfe-obs-label {
+      flex: 0 0 auto;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--lumi-muted);
+    }
+
+    .nfe-obs-select {
+      flex: 1 1 auto;
+      min-width: 0;
       width: auto;
       max-width: 100%;
       font-size: 0.8rem;
@@ -853,6 +869,10 @@
       border-radius: 6px;
       background: #fff;
       color: #333;
+    }
+
+    .nfe-obs-select:has(option[value=""]:checked) {
+      color: #8a8078;
     }
 
     .nfe-acoes-bar {
@@ -2837,7 +2857,7 @@
           const item = lista.find((r) => r.CHAVE === chave);
           if (item) item.OBSERVACAO = observacao;
         });
-        sel.title = observacao || 'Observação';
+        sel.title = observacao || 'Selecione aqui uma observação para a NF-e';
         mostrarToast(observacao ? 'Observação gravada.' : 'Observação removida.');
       } catch (error) {
         mostrarToast(error.message || 'Falha ao gravar observação.', true);
@@ -3604,13 +3624,17 @@
       if (!state.nfeObs.ativo) return '';
       const chave = row.CHAVE || '';
       const atual = row.OBSERVACAO || '';
-      const opts = ['<option value="">—</option>'].concat(
+      const placeholder = 'Selecione aqui uma observação para a NF-e';
+      const opts = [`<option value="">${placeholder}</option>`].concat(
         state.nfeObs.opcoes.map((opcao) => {
           const sel = opcao === atual ? ' selected' : '';
           return `<option value="${escaparHtml(opcao)}"${sel}>${escaparHtml(opcao)}</option>`;
         })
       );
-      return `<select class="nfe-obs-select" data-obs-chave="${escaparHtml(chave)}" title="${escaparHtml(atual || 'Observação')}" ${chave ? '' : 'disabled'}>${opts.join('')}</select>`;
+      return `<label class="nfe-obs-wrap">
+        <span class="nfe-obs-label">Obs:</span>
+        <select class="nfe-obs-select" data-obs-chave="${escaparHtml(chave)}" title="${escaparHtml(atual || placeholder)}" ${chave ? '' : 'disabled'}>${opts.join('')}</select>
+      </label>`;
     }
 
     function htmlLinhaAcoes(row, colunas, alt, ctx, mostrarAcoes) {
