@@ -287,6 +287,11 @@ function selfCheck() {
 selfCheck();
 
 function registerAuthRoutes(app, { getPool }) {
+    const autorizadas = matriculasAlteracao();
+    console.log(autorizadas.length
+        ? `[INFO] NFE_ALTERAR_MATRICULAS ativo: só ${autorizadas.join(', ')} veem Manutenção XML, Autorizar recepção XML e Aplicar Ações em Massa.`
+        : '[INFO] NFE_ALTERAR_MATRICULAS vazio ou comentado no .env: todos veem Manutenção XML, Autorizar recepção XML e Aplicar Ações em Massa.');
+
     app.get('/login.html', (_req, res) => {
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
         res.sendFile(path.join(__dirname, 'login.html'));
