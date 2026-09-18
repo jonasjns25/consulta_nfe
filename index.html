@@ -677,13 +677,16 @@
       box-shadow: 0 16px 26px rgba(34, 34, 34, 0.12);
     }
 
-    tbody tr.nfe-main.tem-obs,
+    tbody tr.nfe-main.tem-extra,
+    tbody tr.nfe-acoes,
     tbody tr.nfe-obs {
       transform: none;
     }
 
-    tbody tr.nfe-main.tem-obs:hover,
-    tbody tr.nfe-main.tem-obs:hover + tr.nfe-obs {
+    tbody tr.nfe-main.tem-extra:hover,
+    tbody tr.nfe-main.tem-extra:hover + tr.nfe-acoes,
+    tbody tr.nfe-main.tem-extra:hover + tr.nfe-obs,
+    tbody tr.nfe-main.tem-extra:hover + tr.nfe-acoes + tr.nfe-obs {
       box-shadow: 0 16px 26px rgba(34, 34, 34, 0.12);
     }
 
@@ -697,14 +700,15 @@
       border-bottom-right-radius: 18px;
     }
 
-    tbody tr.nfe-main.tem-obs td:first-child {
+    tbody tr.nfe-main.tem-extra td:first-child {
       border-bottom-left-radius: 0;
     }
 
-    tbody tr.nfe-main.tem-obs td:last-child {
+    tbody tr.nfe-main.tem-extra td:last-child {
       border-bottom-right-radius: 0;
     }
 
+    tbody tr.nfe-acoes td,
     tbody tr.nfe-obs td {
       border-top-left-radius: 0;
       border-top-right-radius: 0;
@@ -713,7 +717,13 @@
       padding-top: 0.15rem;
     }
 
-    tbody tr.nfe-main.tem-obs td {
+    tbody tr.nfe-acoes:has(+ tr.nfe-obs) td {
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+      padding-bottom: 0.15rem;
+    }
+
+    tbody tr.nfe-main.tem-extra td {
       border-bottom: none;
       padding-bottom: 0.35rem;
     }
@@ -830,7 +840,7 @@
     }
     .nfe-obs-bar {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       gap: 0.65rem;
       width: 100%;
     }
@@ -840,7 +850,6 @@
       font-size: 0.75rem;
       font-weight: 600;
       color: var(--lumi-muted);
-      padding-top: 0.2rem;
     }
 
     .nfe-obs-texto {
@@ -864,6 +873,37 @@
       border-radius: 6px;
       background: #fff;
       color: #333;
+    }
+
+    .nfe-acoes-bar {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 0.45rem;
+      width: 100%;
+    }
+
+    .nfe-acoes-bar .status-pill,
+    .nfe-acoes-bar .sefaz-chip {
+      flex: 0 0 auto;
+      white-space: nowrap;
+      max-width: none;
+      font-size: 0.78rem;
+      padding: 0.22rem 0.7rem;
+    }
+
+    .nfe-acoes-btns {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 0.3rem;
+      margin-left: auto;
+    }
+
+    .nfe-acoes-btns .btn-icon {
+      flex: 0 0 auto;
     }
 
     .cnpj-cell,
@@ -961,7 +1001,7 @@
       border-bottom: 1px solid rgba(34, 34, 34, 0.06);
     }
 
-    tbody tr.nfe-main.tem-obs td {
+    tbody tr.nfe-main.tem-extra td {
       border-bottom: none;
     }
 
@@ -969,9 +1009,12 @@
       background-color: rgba(200, 16, 46, 0.08);
     }
 
-    tbody tr.nfe-main.tem-obs:hover,
+    tbody tr.nfe-main.tem-extra:hover,
+    tbody tr.nfe-acoes:hover,
     tbody tr.nfe-obs:hover,
-    tbody tr.nfe-main.tem-obs:hover + tr.nfe-obs {
+    tbody tr.nfe-main.tem-extra:hover + tr.nfe-acoes,
+    tbody tr.nfe-main.tem-extra:hover + tr.nfe-obs,
+    tbody tr.nfe-main.tem-extra:hover + tr.nfe-acoes + tr.nfe-obs {
       transform: none;
       background-color: rgba(200, 16, 46, 0.08);
     }
@@ -2087,44 +2130,9 @@
         rotuloExportacao: 'Status',
         pdf: { halign: 'center', fontSize: 8 },
         texto: (row) => obterStatusLancamento(row).label.toUpperCase(),
-        render: (row, ctx) => {
-          const chave = row.CHAVE ?? '';
-          const possuiChave = Boolean(chave);
+        render: (row) => {
           const statusInfo = obterStatusLancamento(row);
-          const extraAlterar = (possuiChave && ctx.podeAlterar) ? `
-                      <button type="button" class="btn-icon" data-manutencao="${chave}" title="Manutenção XML">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.82,11.69,4.82,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
-                        <span class="sr-only">Manutenção XML</span>
-                      </button>
-                      <button type="button" class="btn-icon" data-autorizacao="${chave}" title="Autorizar recepção de XML (incluir no sistema após análise)">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-                        <span class="sr-only">Autorizar recepção de XML</span>
-                      </button>` : '';
-          return `<div style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem;">
-              <span class="status-pill ${statusInfo.className}">${statusInfo.label}</span>
-              ${htmlChipSefaz(row)}
-              ${
-                possuiChave
-                  ? `
-                    <div class="actions-group" style="flex-direction:row; gap:0.4rem;">
-                      <button type="button" class="btn-icon" data-detalhes="${chave}" title="Detalhar NFe">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
-                        <span class="sr-only">Detalhar NFe</span>
-                      </button>
-                      <button type="button" class="btn-icon" data-danfe="${chave}" title="Imprimir DANFE">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v4H6V3Zm11 2V5H7v1h10ZM6 9h12a3 3 0 0 1 3 3v5H18v4H6v-4H3v-5a3 3 0 0 1 3-3Zm10 8H8v2h8v-2Zm4-3v-2a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v2h2v-2h12v2h2Z"/></svg>
-                        <span class="sr-only">Imprimir DANFE</span>
-                      </button>
-                      <button type="button" class="btn-icon" data-xml="${chave}" title="Baixar XML">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
-                        <span class="sr-only">Baixar XML</span>
-                      </button>
-                      ${extraAlterar}
-                    </div>
-                  `
-                  : ''
-              }
-            </div>`;
+          return `<span class="status-pill ${statusInfo.className}">${escaparHtml(statusInfo.label)}</span>`;
         }
       }
     ];
@@ -2181,6 +2189,14 @@
         .filter(Boolean);
     }
 
+    function colunasVisiveisTabela() {
+      return colunasVisiveis().filter((col) => col.id !== 'status');
+    }
+
+    function statusBarVisivel() {
+      return state.colunas.some((item) => item.id === 'status' && item.visivel);
+    }
+
     function colunasExportacao() {
       const colunas = colunasVisiveis().map((col) => ({
         titulo: col.rotuloExportacao || col.label,
@@ -2196,7 +2212,7 @@
     }
 
     function renderCabecalhoTabela() {
-      theadRow.innerHTML = colunasVisiveis()
+      theadRow.innerHTML = colunasVisiveisTabela()
         .map((col) => `<th class="${col.classe}" data-col="${col.id}" draggable="true" title="Arraste para mudar a posição da coluna">${escaparHtml(col.label)}</th>`)
         .join('');
     }
@@ -2922,15 +2938,19 @@
 
     function atualizarTabela() {
       tbody.innerHTML = '';
-      const visiveis = colunasVisiveis();
+      const visiveis = colunasVisiveisTabela();
+      const mostrarAcoes = statusBarVisivel();
       const ctx = { podeAlterar: !(state.usuario && state.usuario.podeAlterar === false) };
       state.filtered.forEach((row, indice) => {
         const tr = document.createElement('tr');
         const alt = indice % 2 === 1;
         const temObs = state.nfeObs.ativo;
-        tr.className = `nfe-main${temObs ? ' tem-obs' : ''}${alt ? ' nfe-alt' : ''}`;
+        const temExtra = temObs || mostrarAcoes;
+        tr.className = `nfe-main${temExtra ? ' tem-extra' : ''}${alt ? ' nfe-alt' : ''}`;
         tr.innerHTML = visiveis.map((col) => `<td class="${col.classe}">${col.render(row, ctx)}</td>`).join('');
         tbody.appendChild(tr);
+        const linhaAcoes = mostrarAcoes ? htmlLinhaAcoes(row, visiveis.length, alt, ctx) : null;
+        if (linhaAcoes) tbody.appendChild(linhaAcoes);
         const linhaObs = htmlLinhaObs(row, visiveis.length, alt);
         if (linhaObs) tbody.appendChild(linhaObs);
       });
@@ -3592,6 +3612,45 @@
       const quando = String(s.consultadoEm || '').replace('T', ' ').slice(0, 16);
       const title = `Última consulta SEFAZ: ${txt}${quando ? ` · ${quando}` : ''}`;
       return `<span class="${cls}" title="${escaparHtml(title)}">${escaparHtml(txt)}</span>`;
+    }
+
+    function htmlLinhaAcoes(row, colunas, alt, ctx) {
+      const chave = row.CHAVE ?? '';
+      const possuiChave = Boolean(chave);
+      const statusInfo = obterStatusLancamento(row);
+      const extraAlterar = (possuiChave && ctx.podeAlterar) ? `
+        <button type="button" class="btn-icon" data-manutencao="${chave}" title="Manutenção XML">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.82,11.69,4.82,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
+          <span class="sr-only">Manutenção XML</span>
+        </button>
+        <button type="button" class="btn-icon" data-autorizacao="${chave}" title="Autorizar recepção de XML (incluir no sistema após análise)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          <span class="sr-only">Autorizar recepção de XML</span>
+        </button>` : '';
+      const botoes = possuiChave ? `
+        <button type="button" class="btn-icon" data-detalhes="${chave}" title="Detalhar NFe">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+          <span class="sr-only">Detalhar NFe</span>
+        </button>
+        <button type="button" class="btn-icon" data-danfe="${chave}" title="Imprimir DANFE">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v4H6V3Zm11 2V5H7v1h10ZM6 9h12a3 3 0 0 1 3 3v5H18v4H6v-4H3v-5a3 3 0 0 1 3-3Zm10 8H8v2h8v-2Zm4-3v-2a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v2h2v-2h12v2h2Z"/></svg>
+          <span class="sr-only">Imprimir DANFE</span>
+        </button>
+        <button type="button" class="btn-icon" data-xml="${chave}" title="Baixar XML">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
+          <span class="sr-only">Baixar XML</span>
+        </button>
+        ${extraAlterar}` : '';
+      const tr = document.createElement('tr');
+      tr.className = `nfe-acoes${alt ? ' nfe-alt' : ''}`;
+      tr.innerHTML = `<td colspan="${Math.max(colunas, 1)}">
+        <div class="nfe-acoes-bar">
+          <span class="status-pill ${statusInfo.className}" title="Status da compra">${escaparHtml(statusInfo.label)}</span>
+          ${htmlChipSefaz(row)}
+          <div class="nfe-acoes-btns">${botoes}</div>
+        </div>
+      </td>`;
+      return tr;
     }
 
     function htmlLinhaObs(row, colunas, alt) {
