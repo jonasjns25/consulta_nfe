@@ -5,6 +5,8 @@ const path = require('path');
 const fs = require('fs');
 const {
     consultarXmlPorChave,
+    consultarXmlCtePorChave,
+    extrairChavesCteDeXmlNfe,
     consultarStatusPorChave,
     diagnosticarCertificados,
     listarCertificadosParaUI,
@@ -388,6 +390,26 @@ async function gerarDanfeViaXml(chave) {
     }
 }
 
+async function gerarDacteViaXml(xml, chaveCte) {
+    if (!DANFE_API_KEY || !xml) return null;
+    try {
+        const response = await danfeClient.post(
+            '/fd/convert/xml-to-da',
+            xml,
+            { headers: { 'Content-Type': 'text/plain' } }
+        );
+        const base64Pdf = response?.data?.data;
+        if (!base64Pdf) return null;
+        return {
+            buffer: Buffer.from(base64Pdf, 'base64'),
+            filename: response?.data?.name || `dacte-${chaveCte}.pdf`
+        };
+    } catch (error) {
+        console.error('Erro ao converter DACTE via XML:', error?.response?.data || error.message);
+        return null;
+    }
+}
+
 // Rota para obter contagem por status da compra
 app.get('/status-compra-contagem', async (req, res) => {
     const { data_inicial, data_final, estabelecimento, tipo_nf } = req.query;
@@ -678,6 +700,18 @@ app.post('/api/nfe/obs', async (req, res) => {
     const opcoes = nfeObsOpcoes();
     if (observacao && !opcoes.includes(observacao)) {
         return res.status(400).json({ error: 'Observação não está na lista configurada.' });
+    }
+    if (observacao && obsEhLancada(observacao)) {
+        try {
+            if (!(await nfeEstaLancadaNoSistema(chave))) {
+                return res.status(400).json({
+                    error: 'Não é possível marcar "Lançada" enquanto o Status da NF estiver pendente.'
+                });
+            }
+        } catch (error) {
+            console.error('[NFE obs status NF]', error?.message || error);
+            return res.status(500).json({ error: 'Falha ao validar o Status da NF.' });
+        }
     }
     if (!(await garantirTabelaNfeObs())) {
         return res.status(500).json({ error: 'Tabela de observações indisponível.' });
@@ -1004,6 +1038,22 @@ function nfeObsOpcoes() {
     const raw = String(process.env.NFE_OBS_LISTA || '');
     const lista = raw.split(/[|;]/).map((s) => s.trim()).filter(Boolean);
     return lista.length ? lista : NFE_OBS_PADRAO;
+}
+
+function obsEhLancada(texto) {
+    return String(texto || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim() === 'lancada';
+}
+
+async function nfeEstaLancadaNoSistema(chave) {
+    const [rows] = await pool.query(
+        'SELECT 1 AS ok FROM compra WHERE CHAVE_NFE = ? LIMIT 1',
+        [chave]
+    );
+    return Array.isArray(rows) && rows.length > 0;
 }
 
 let tabelaNfeObsOk = false;
@@ -1779,6 +1829,274 @@ app.get('/api/nfe/sefaz-consulta/:chave', async (req, res) => {
     } catch (error) {
         console.error('[SEFAZ consulta gravada]', error?.message || error);
         return res.status(500).json({ erro: error?.message || 'Falha ao ler consulta gravada.' });
+    }
+});
+
+let tabelaConfCteOk = false;
+async function garantirTabelaConfCte() {
+    if (tabelaConfCteOk) return true;
+    try {
+        await getConfNfPool().query(`SELECT 1 FROM ${tabelaConfnf('conf_cte')} LIMIT 1`);
+        tabelaConfCteOk = true;
+        return true;
+    } catch (_e) {
+        try {
+            await getConfNfPool().query(`
+                CREATE TABLE IF NOT EXISTS ${tabelaConfnf('conf_cte')} (
+                    id INT NOT NULL AUTO_INCREMENT,
+                    chave_nfe VARCHAR(44) NOT NULL,
+                    chave_cte VARCHAR(44) NOT NULL,
+                    xml MEDIUMTEXT,
+                    nct VARCHAR(20) DEFAULT NULL,
+                    serie VARCHAR(5) DEFAULT NULL,
+                    cnpj_emitente VARCHAR(14) DEFAULT NULL,
+                    nome_emitente VARCHAR(120) DEFAULT NULL,
+                    v_tprest DECIMAL(15,2) DEFAULT NULL,
+                    dh_emi VARCHAR(40) DEFAULT NULL,
+                    situacao VARCHAR(20) DEFAULT NULL,
+                    situacao_label VARCHAR(120) DEFAULT NULL,
+                    c_stat VARCHAR(10) DEFAULT NULL,
+                    x_motivo VARCHAR(255) DEFAULT NULL,
+                    vinculo_nfe TINYINT(1) NOT NULL DEFAULT 1,
+                    consultado_em DATETIME NOT NULL,
+                    PRIMARY KEY (id),
+                    UNIQUE KEY uk_conf_cte_chaves (chave_nfe, chave_cte),
+                    KEY idx_conf_cte_nfe (chave_nfe),
+                    KEY idx_conf_cte_cte (chave_cte)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+            tabelaConfCteOk = true;
+            return true;
+        } catch (error) {
+            console.error('[CT-e tabela]', error?.message || error);
+            return false;
+        }
+    }
+}
+
+function resumoCteRow(row) {
+    if (!row) return null;
+    return {
+        id: row.id,
+        chaveNfe: row.chave_nfe,
+        chaveCte: row.chave_cte,
+        nct: row.nct,
+        serie: row.serie,
+        cnpjEmitente: row.cnpj_emitente,
+        nomeEmitente: row.nome_emitente,
+        vTPrest: row.v_tprest,
+        dhEmi: row.dh_emi,
+        situacao: row.situacao,
+        situacaoLabel: row.situacao_label,
+        cStat: row.c_stat,
+        xMotivo: row.x_motivo,
+        vinculoNfe: Number(row.vinculo_nfe) === 1,
+        consultadoEm: row.consultado_em,
+    };
+}
+
+async function sugerirChavesCteDaNfe(chaveNfe) {
+    try {
+        const [rows] = await pool.query('SELECT XML FROM nfe_xml WHERE CHAVE = ? LIMIT 1', [chaveNfe]);
+        return extrairChavesCteDeXmlNfe(rows?.[0]?.XML || '', chaveNfe);
+    } catch (_e) {
+        return [];
+    }
+}
+
+async function listarCtesDaNfe(chaveNfe) {
+    if (!(await garantirTabelaConfCte())) return [];
+    const [rows] = await getConfNfPool().query(
+        `SELECT id, chave_nfe, chave_cte, nct, serie, cnpj_emitente, nome_emitente, v_tprest, dh_emi,
+                situacao, situacao_label, c_stat, x_motivo, vinculo_nfe,
+                DATE_FORMAT(consultado_em, '%Y-%m-%dT%H:%i:%s') AS consultado_em
+         FROM ${tabelaConfnf('conf_cte')}
+         WHERE chave_nfe = ?
+         ORDER BY consultado_em DESC, id DESC`,
+        [chaveNfe]
+    );
+    return (rows || []).map(resumoCteRow);
+}
+
+async function salvarCteVinculado(chaveNfe, dados) {
+    if (!(await garantirTabelaConfCte())) {
+        throw new Error('Não foi possível criar/acessar a tabela conf_cte no CONFNF.');
+    }
+    const chaveCte = String(dados.chave || '').replace(/\D/g, '');
+    const chavesNfeXml = Array.isArray(dados.chavesNfe) ? dados.chavesNfe : [];
+    const vinculo = chavesNfeXml.includes(chaveNfe) || String(dados.xml || '').includes(chaveNfe) ? 1 : 0;
+    const vPrest = dados.vTPrest != null && dados.vTPrest !== '' ? Number(dados.vTPrest) : null;
+    await getConfNfPool().query(
+        `INSERT INTO ${tabelaConfnf('conf_cte')}
+            (chave_nfe, chave_cte, xml, nct, serie, cnpj_emitente, nome_emitente, v_tprest, dh_emi,
+             situacao, situacao_label, c_stat, x_motivo, vinculo_nfe, consultado_em)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+         ON DUPLICATE KEY UPDATE
+            xml = VALUES(xml),
+            nct = VALUES(nct),
+            serie = VALUES(serie),
+            cnpj_emitente = VALUES(cnpj_emitente),
+            nome_emitente = VALUES(nome_emitente),
+            v_tprest = VALUES(v_tprest),
+            dh_emi = VALUES(dh_emi),
+            situacao = VALUES(situacao),
+            situacao_label = VALUES(situacao_label),
+            c_stat = VALUES(c_stat),
+            x_motivo = VALUES(x_motivo),
+            vinculo_nfe = VALUES(vinculo_nfe),
+            consultado_em = NOW()`,
+        [
+            chaveNfe,
+            chaveCte,
+            dados.xml || null,
+            dados.nct || null,
+            dados.serie || null,
+            dados.cnpjEmitente || null,
+            dados.nomeEmitente ? String(dados.nomeEmitente).slice(0, 120) : null,
+            Number.isFinite(vPrest) ? vPrest : null,
+            dados.dhEmi || null,
+            dados.situacao || null,
+            dados.situacaoLabel ? String(dados.situacaoLabel).slice(0, 120) : null,
+            dados.cStat || null,
+            dados.xMotivo ? String(dados.xMotivo).slice(0, 255) : null,
+            vinculo,
+        ]
+    );
+    const lista = await listarCtesDaNfe(chaveNfe);
+    return {
+        cte: lista.find((c) => c.chaveCte === chaveCte) || null,
+        ctes: lista,
+        vinculoNfe: vinculo === 1,
+    };
+}
+
+/** GET /api/nfe/cte/:chaveNfe → CT-es gravados no CONFNF para esta NF-e */
+app.get('/api/nfe/cte/:chaveNfe', async (req, res) => {
+    const chaveNfe = String(req.params.chaveNfe || '').replace(/\D/g, '');
+    if (chaveNfe.length !== 44) {
+        return res.status(400).json({ erro: 'Chave da NF-e inválida.' });
+    }
+    try {
+        const [ctes, sugestoes] = await Promise.all([
+            listarCtesDaNfe(chaveNfe),
+            sugerirChavesCteDaNfe(chaveNfe),
+        ]);
+        return res.json({ ctes, sugestoes });
+    } catch (error) {
+        console.error('[CT-e listar]', error?.message || error);
+        return res.status(500).json({ erro: error?.message || 'Falha ao listar CT-es.' });
+    }
+});
+
+/** POST /api/nfe/cte/consultar  body: { chaveNfe, chaveCte, estab, thumbprint? } */
+app.post('/api/nfe/cte/consultar', async (req, res) => {
+    const chaveNfe = String((req.body && req.body.chaveNfe) || '').replace(/\D/g, '');
+    const chaveCte = String((req.body && req.body.chaveCte) || '').replace(/\D/g, '');
+    const thumbprint = ((req.body && req.body.thumbprint) || '').replace(/[^0-9A-Fa-f]/g, '') || null;
+    const estab = cnpjEfetivo(req, (req.body && req.body.estab) || '');
+    if (chaveNfe.length !== 44) {
+        return res.status(400).json({ erro: 'Chave da NF-e inválida.' });
+    }
+    if (chaveCte.length !== 44) {
+        return res.status(400).json({ erro: 'Informe a chave do CT-e com 44 dígitos.' });
+    }
+    if (!estab) {
+        return res.status(400).json({ erro: 'Estabelecimento (CNPJ) não identificado para consultar a SEFAZ.' });
+    }
+    try {
+        const [rowsEstab] = await pool.query(
+            'SELECT CNPJ, CERTIFICADO_NFE, UF FROM ESTAB WHERE CNPJ = ? LIMIT 1',
+            [estab]
+        );
+        if (!rowsEstab || rowsEstab.length === 0) {
+            return res.status(400).json({ erro: `Estabelecimento "${estab}" não encontrado em ESTAB.` });
+        }
+        const { CERTIFICADO_NFE, UF } = rowsEstab[0];
+        if (!CERTIFICADO_NFE) {
+            return res.status(400).json({ erro: 'Campo CERTIFICADO_NFE não preenchido para este estabelecimento.' });
+        }
+        const tpAmb = process.env.SEFAZ_TPAMB || '1';
+        const dados = await consultarXmlCtePorChave(chaveCte, CERTIFICADO_NFE, UF, {
+            tpAmb,
+            thumbprint,
+            chaveNfe,
+        });
+        const salvo = await salvarCteVinculado(chaveNfe, dados);
+        let mensagem = `CT-e ${dados.situacaoLabel || 'consultado'} e gravado no CONFNF junto desta NF-e.`;
+        if (!salvo.vinculoNfe) {
+            mensagem += ' Atenção: o XML do CT-e não cita esta chave de NF-e. O vínculo foi gravado mesmo assim pela consulta nesta tela.';
+        }
+        return res.json({
+            mensagem,
+            cte: salvo.cte,
+            ctes: salvo.ctes,
+            vinculoNfe: salvo.vinculoNfe,
+        });
+    } catch (error) {
+        console.error('[CT-e consultar]', error?.message || error);
+        const fmt = formatarErroRespostaSefaz(error);
+        return res.status(fmt.status || 500).json(fmt.body || { erro: error?.message || 'Falha ao consultar CT-e.' });
+    }
+});
+
+app.get('/api/nfe/cte/:chaveNfe/:chaveCte/xml', async (req, res) => {
+    const chaveNfe = String(req.params.chaveNfe || '').replace(/\D/g, '');
+    const chaveCte = String(req.params.chaveCte || '').replace(/\D/g, '');
+    if (chaveNfe.length !== 44 || chaveCte.length !== 44) {
+        return res.status(400).json({ erro: 'Chaves inválidas.' });
+    }
+    try {
+        if (!(await garantirTabelaConfCte())) {
+            return res.status(500).json({ erro: 'Tabela conf_cte indisponível.' });
+        }
+        const [rows] = await getConfNfPool().query(
+            `SELECT xml FROM ${tabelaConfnf('conf_cte')} WHERE chave_nfe = ? AND chave_cte = ? LIMIT 1`,
+            [chaveNfe, chaveCte]
+        );
+        const xml = rows?.[0]?.xml;
+        if (!xml) {
+            return res.status(404).json({ erro: 'XML do CT-e não encontrado. Consulte o CT-e antes de baixar.' });
+        }
+        res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="cte-${chaveCte}.xml"`);
+        return res.send(xml);
+    } catch (error) {
+        console.error('[CT-e XML]', error?.message || error);
+        return res.status(500).json({ erro: error?.message || 'Falha ao baixar XML do CT-e.' });
+    }
+});
+
+app.get('/api/nfe/cte/:chaveNfe/:chaveCte/dacte', async (req, res) => {
+    const chaveNfe = String(req.params.chaveNfe || '').replace(/\D/g, '');
+    const chaveCte = String(req.params.chaveCte || '').replace(/\D/g, '');
+    if (chaveNfe.length !== 44 || chaveCte.length !== 44) {
+        return res.status(400).json({ error: 'Chaves inválidas.' });
+    }
+    if (!DANFE_API_KEY) {
+        return res.status(500).json({ error: 'API key do documento auxiliar não configurada.' });
+    }
+    try {
+        if (!(await garantirTabelaConfCte())) {
+            return res.status(500).json({ error: 'Tabela conf_cte indisponível.' });
+        }
+        const [rows] = await getConfNfPool().query(
+            `SELECT xml FROM ${tabelaConfnf('conf_cte')} WHERE chave_nfe = ? AND chave_cte = ? LIMIT 1`,
+            [chaveNfe, chaveCte]
+        );
+        const xml = rows?.[0]?.xml;
+        if (!xml) {
+            return res.status(404).json({ error: 'XML do CT-e não encontrado. Consulte o CT-e antes de gerar o DACTE.' });
+        }
+        const conversao = await gerarDacteViaXml(xml, chaveCte);
+        if (!conversao?.buffer) {
+            return res.status(502).json({ error: 'Não foi possível gerar o DACTE a partir do XML do CT-e.' });
+        }
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${conversao.filename}"`);
+        return res.send(conversao.buffer);
+    } catch (error) {
+        console.error('[CT-e DACTE]', error?.message || error);
+        return res.status(500).json({ error: error?.message || 'Falha ao gerar DACTE.' });
     }
 });
 

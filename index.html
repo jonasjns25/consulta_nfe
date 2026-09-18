@@ -741,6 +741,7 @@
     .col-valor { width: 8%; text-align: right; }
     .col-numero { width: 7%; text-align: right; }
     .col-usuario { width: 6%; text-align: center; }
+    .col-status-nf { width: 8%; text-align: center; }
     .col-status { width: 1%; text-align: center; }
 
     th[draggable="true"] {
@@ -2116,10 +2117,22 @@
         }
       },
       {
+        id: 'status_nf',
+        label: 'Status da NF',
+        classe: 'col-status-nf',
+        rotuloExportacao: 'Status da NF',
+        pdf: { halign: 'center', fontSize: 8 },
+        texto: (row) => obterStatusNf(row).label,
+        render: (row) => {
+          const info = obterStatusNf(row);
+          return `<span class="status-pill ${info.className}" title="Status da NF">${escaparHtml(info.label)}</span>`;
+        }
+      },
+      {
         id: 'status',
-        label: 'Status',
+        label: 'Status da compra',
         classe: 'col-status',
-        rotuloExportacao: 'Status',
+        rotuloExportacao: 'Status da compra',
         pdf: { halign: 'center', fontSize: 8 },
         texto: (row) => obterStatusLancamento(row).label.toUpperCase(),
         render: (row) => {
@@ -2835,6 +2848,12 @@
       if (!sel) return;
       const chave = sel.getAttribute('data-obs-chave') || '';
       const observacao = sel.value || '';
+      const item = state.rows.find((r) => r.CHAVE === chave);
+      if (obsEhLancada(observacao) && Number(item?.LANCADA) !== 1) {
+        sel.value = item?.OBSERVACAO || '';
+        mostrarToast('Não é possível marcar "Lançada" enquanto o Status da NF estiver pendente.', true);
+        return;
+      }
       sel.disabled = true;
       try {
         const resp = await fetch('/api/nfe/obs', {
@@ -3470,6 +3489,21 @@
       return Number.isNaN(numero) ? 0 : numero;
     }
 
+    function obsEhLancada(texto) {
+      return String(texto || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim() === 'lancada';
+    }
+
+    function obterStatusNf(row = {}) {
+      const pendente = Number(row.LANCADA) !== 1;
+      return pendente
+        ? { pendente: true, label: 'Pendente', className: 'status-pill--warn' }
+        : { pendente: false, label: 'Lançada', className: 'status-pill--ok' };
+    }
+
     function obterStatusLancamento(row = {}) {
       const lancada = Number(row.LANCADA) === 1;
       
@@ -3612,11 +3646,15 @@
       if (!state.nfeObs.ativo) return '';
       const chave = row.CHAVE || '';
       const atual = row.OBSERVACAO || '';
+      const nfPendente = Number(row.LANCADA) !== 1;
       const placeholder = 'Selecione aqui uma observação para a NF-e';
       const opts = [`<option value="">${placeholder}</option>`].concat(
         state.nfeObs.opcoes.map((opcao) => {
           const sel = opcao === atual ? ' selected' : '';
-          return `<option value="${escaparHtml(opcao)}"${sel}>${escaparHtml(opcao)}</option>`;
+          const bloquear = nfPendente && obsEhLancada(opcao);
+          const dis = bloquear ? ' disabled' : '';
+          const title = bloquear ? ' title="Não é possível marcar Lançada enquanto o Status da NF estiver pendente"' : '';
+          return `<option value="${escaparHtml(opcao)}"${sel}${dis}${title}>${escaparHtml(opcao)}</option>`;
         })
       );
       return `<label class="nfe-obs-wrap">
