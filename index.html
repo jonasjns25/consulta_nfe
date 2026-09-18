@@ -40,7 +40,7 @@
     }
 
     header {
-      max-width: 1200px;
+      max-width: 100%;
       margin: 0 auto 1.5rem;
       display: flex;
       flex-direction: column;
@@ -81,7 +81,7 @@
     }
 
     main {
-      max-width: 1200px;
+      max-width: 100%;
       margin: 0 auto;
       display: flex;
       flex-direction: column;
@@ -376,7 +376,7 @@
     }
 
     .update-banner {
-      max-width: 1200px;
+      max-width: 100%;
       margin: 0 auto 1rem;
       padding: 0.85rem 1.1rem;
       border-radius: 14px;
@@ -636,7 +636,9 @@
 
     .table-wrapper {
       position: relative;
-      overflow: auto;
+      overflow-x: hidden;
+      overflow-y: visible;
+      max-width: 100%;
       border-radius: 20px;
       border: 1px solid rgba(200, 16, 46, 0.08);
     }
@@ -645,7 +647,7 @@
       width: 100%;
       border-collapse: separate;
       border-spacing: 0;
-      min-width: 980px;
+      min-width: 0;
       table-layout: fixed;
     }
 
@@ -843,7 +845,7 @@
     }
     .nfe-obs-wrap {
       flex: 1 1 18rem;
-      min-width: 16rem;
+      min-width: 0;
       display: flex;
       flex-direction: row;
       align-items: center;
@@ -1575,7 +1577,7 @@
       }
     }
 
-    .nav-links { max-width: 1200px; margin: 0 auto 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap; }
+    .nav-links { max-width: 100%; margin: 0 auto 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap; }
     .nav-links a { color: var(--lumi-muted); text-decoration: none; font-size: 0.95rem; padding: 0.4rem 0.8rem; border-radius: 10px; transition: background 0.2s, color 0.2s; }
     .nav-links a:hover { color: var(--lumi-primary); background: var(--lumi-secondary-soft); }
     .nav-links a.active { color: var(--lumi-primary); font-weight: 600; }
@@ -1844,7 +1846,7 @@
       </div>
     </section>
 
-    <section class="card">
+    <section class="card card-resultado">
       <div class="card-header">
         <div>
           <h2>Resultado da consulta</h2>
