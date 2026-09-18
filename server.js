@@ -1939,12 +1939,28 @@ async function garantirTabelaConfCte() {
     }
 }
 
+function extrairChaveCteDoXml(xml) {
+    const s = String(xml || '');
+    const m =
+        s.match(/<chCTe>\s*(\d{44})\s*<\/chCTe>/i) ||
+        s.match(/<infCte[^>]+Id="CTe(\d{44})"/i) ||
+        s.match(/Id="CTe(\d{44})"/i);
+    return m ? m[1] : '';
+}
+
+function chaveCteEfetiva(row) {
+    const gravada = String(row.chave_cte || '').replace(/\D/g, '');
+    if (gravada.length === 44) return gravada;
+    const doXml = extrairChaveCteDoXml(row.xml);
+    return doXml.length === 44 ? doXml : gravada;
+}
+
 function resumoCteRow(row) {
     if (!row) return null;
     return {
         id: row.id,
         chaveNfe: row.chave_nfe,
-        chaveCte: row.chave_cte,
+        chaveCte: chaveCteEfetiva(row),
         nct: row.nct,
         serie: row.serie,
         cnpjEmitente: row.cnpj_emitente,
@@ -1972,7 +1988,7 @@ async function sugerirChavesCteDaNfe(chaveNfe) {
 async function listarCtesDaNfe(chaveNfe) {
     if (!(await garantirTabelaConfCte())) return [];
     const [rows] = await getConfNfPool().query(
-        `SELECT id, chave_nfe, chave_cte, nct, serie, cnpj_emitente, nome_emitente, v_tprest, dh_emi,
+        `SELECT id, chave_nfe, chave_cte, xml, nct, serie, cnpj_emitente, nome_emitente, v_tprest, dh_emi,
                 situacao, situacao_label, c_stat, x_motivo, vinculo_nfe,
                 DATE_FORMAT(consultado_em, '%Y-%m-%dT%H:%i:%s') AS consultado_em
          FROM ${tabelaConfnf('conf_cte')}
@@ -1980,6 +1996,19 @@ async function listarCtesDaNfe(chaveNfe) {
          ORDER BY consultado_em DESC, id DESC`,
         [chaveNfe]
     );
+    for (const row of rows || []) {
+        const efetiva = chaveCteEfetiva(row);
+        const gravada = String(row.chave_cte || '').replace(/\D/g, '');
+        if (efetiva.length === 44 && efetiva !== gravada && row.id) {
+            getConfNfPool()
+                .query(
+                    `UPDATE ${tabelaConfnf('conf_cte')} SET chave_cte = ? WHERE id = ? AND chave_nfe = ?`,
+                    [efetiva, row.id, chaveNfe]
+                )
+                .catch((err) => console.warn('[CT-e] correção chave_cte:', err?.message || err));
+            row.chave_cte = efetiva;
+        }
+    }
     return (rows || []).map(resumoCteRow);
 }
 
@@ -1987,7 +2016,10 @@ async function salvarCteVinculado(chaveNfe, dados) {
     if (!(await garantirTabelaConfCte())) {
         throw new Error('Não foi possível criar/acessar a tabela conf_cte no CONFNF.');
     }
-    const chaveCte = String(dados.chave || '').replace(/\D/g, '');
+    const chaveCte = extrairChaveCteDoXml(dados.xml) || String(dados.chave || '').replace(/\D/g, '');
+    if (chaveCte.length !== 44) {
+        throw new Error('Chave do CT-e inválida após consulta. Informe os 44 dígitos e consulte novamente.');
+    }
     const chavesNfeXml = Array.isArray(dados.chavesNfe) ? dados.chavesNfe : [];
     const vinculo = chavesNfeXml.includes(chaveNfe) || String(dados.xml || '').includes(chaveNfe) ? 1 : 0;
     const vPrest = dados.vTPrest != null && dados.vTPrest !== '' ? Number(dados.vTPrest) : null;
@@ -2086,6 +2118,7 @@ app.post('/api/nfe/cte/consultar', async (req, res) => {
             thumbprint,
             chaveNfe,
         });
+        dados.chave = chaveCte;
         const salvo = await salvarCteVinculado(chaveNfe, dados);
         let mensagem = `CT-e ${dados.situacaoLabel || 'consultado'} e gravado no CONFNF junto desta NF-e.`;
         if (!salvo.vinculoNfe) {
@@ -2151,6 +2184,12 @@ app.get('/api/nfe/cte/:chaveNfe/:chaveCte/dacte', async (req, res) => {
         const xml = rows?.[0]?.xml;
         if (!xml) {
             return res.status(404).json({ error: 'XML do CT-e não encontrado. Consulte o CT-e antes de gerar o DACTE.' });
+        }
+        if (!/<infCte\b/i.test(String(xml))) {
+            return res.status(422).json({
+                error:
+                    'O XML gravado é apenas a consulta de situação (sem o CT-e completo). O DACTE exige o procCTe com infCte; quando disponível, importe ou obtenha o XML completo do CT-e.',
+            });
         }
         const conversao = await gerarDacteViaXml(xml, chaveCte);
         if (!conversao?.buffer) {

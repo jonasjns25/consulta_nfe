@@ -1935,8 +1935,13 @@
     }
 
     async function acaoDocumentoCte(acao, chaveCte) {
-      const chaveNFe = window.nfeChave || '';
+      const chaveNFe = soDigitosChave(window.nfeChave || '');
+      chaveCte = soDigitosChave(chaveCte);
       if (!chaveNFe || !chaveCte) return;
+      if (chaveNFe.length !== 44 || chaveCte.length !== 44) {
+        mostrarToast('Chave do CT-e incompleta no cadastro. Consulte o CT-e novamente na SEFAZ.', 'erro');
+        return;
+      }
       try {
         if (acao === 'copiar') {
           await navigator.clipboard.writeText(chaveCte);

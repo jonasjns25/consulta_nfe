@@ -24,6 +24,7 @@ const parserStatusXml = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: '_',
     parseAttributeValue: false,
+    parseTagValue: false,
     removeNSPrefix: true,
 });
 
@@ -701,6 +702,25 @@ function textoCampo(v) {
     return String(v).trim();
 }
 
+/** Chave de acesso (44 dígitos). Evita perda de precisão quando o parser XML converte chCTe/chNFe em number. */
+function normalizarChave44(campo, fallback) {
+    const fb = String(fallback || '').replace(/\D/g, '');
+    if (campo === undefined || campo === null || campo === '') {
+        return fb.length === 44 ? fb : '';
+    }
+    if (typeof campo === 'number') {
+        if (!Number.isSafeInteger(campo)) {
+            return fb.length === 44 ? fb : String(campo).replace(/\D/g, '');
+        }
+        const sNum = String(campo).replace(/\D/g, '');
+        if (sNum.length === 44) return sNum;
+        return fb.length === 44 ? fb : sNum;
+    }
+    const s = String(campo).replace(/\D/g, '');
+    if (s.length === 44) return s;
+    return fb.length === 44 ? fb : s;
+}
+
 function rotuloOrgaoSefaz(cOrgao) {
     const c = textoCampo(cOrgao);
     if (c === '91') return 'AN';
@@ -1000,8 +1020,8 @@ function dadosDeRetConsultaSitCte(xmlResp, parsed, chaveInformada) {
 
     const blocoProc = extrairBlocoXmlPorTag(xmlResp, 'procCTe');
     if (blocoProc && /infCte|infCTe/i.test(blocoProc)) {
-        const dados = parsearXmlCte(blocoProc);
-        if (!dados.chave) dados.chave = chaveInformada;
+        const dados = parsearXmlCte(blocoProc, chaveInformada);
+        dados.chave = normalizarChave44(dados.chave, chaveInformada);
         return dados;
     }
 
@@ -1009,7 +1029,7 @@ function dadosDeRetConsultaSitCte(xmlResp, parsed, chaveInformada) {
     const cStat = textoCampo(infProt.cStat) || cStatRet;
     const xMotivo = textoCampo(infProt.xMotivo) || xMotivoRet;
     const sit = situacaoCtePorCstat(cStat, xMotivo);
-    const chave = textoCampo(infProt.chCTe).replace(/\D/g, '') || chaveInformada;
+    const chave = normalizarChave44(infProt.chCTe, chaveInformada);
     const xmlGravacao = extrairBlocoXmlPorTag(xmlResp, 'retConsSitCTe') || String(xmlResp || '');
     return {
         xml: xmlGravacao,
@@ -1395,7 +1415,7 @@ function chavesNfeNoXmlCte(xml, parsed) {
     return [...chaves];
 }
 
-function parsearXmlCte(xml) {
+function parsearXmlCte(xml, chaveFallback) {
     const parsed = parserStatusXml.parse(String(xml || ''));
     const infs = coletarPorNomeLocal(parsed, 'infCte').concat(coletarPorNomeLocal(parsed, 'infCTe'));
     const inf = infs[0] || {};
@@ -1404,7 +1424,8 @@ function parsearXmlCte(xml) {
     const vPrest = inf.vPrest || {};
     const infProt = coletarPorNomeLocal(parsed, 'infProt')[0] || {};
     const idInf = textoCampo(inf._Id || inf.Id || inf._id).replace(/\D/g, '');
-    const chave = (idInf.length === 44 ? idInf : textoCampo(infProt.chCTe).replace(/\D/g, '')) || '';
+    const chaveBruta = idInf.length === 44 ? idInf : normalizarChave44(infProt.chCTe, '');
+    const chave = normalizarChave44(chaveBruta, chaveFallback);
     const cStat = textoCampo(infProt.cStat);
     const xMotivo = textoCampo(infProt.xMotivo);
     const sit = situacaoCtePorCstat(cStat, xMotivo);
@@ -1469,6 +1490,7 @@ async function consultarXmlCtePorChave(chaveCte, dnCert, uf, opts = {}) {
                 continue;
             }
             const dados = dadosDeRetConsultaSitCte(xmlResp, parsed, chave);
+            dados.chave = normalizarChave44(dados.chave, chave);
             console.log(`[SEFAZ CT-e] cStat=${dados.cStat || '-'} chave=${dados.chave} url=${url}`);
             return dados;
         } catch (err) {
