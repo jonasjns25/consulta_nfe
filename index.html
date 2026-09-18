@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Lumi NF-e</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
   <style>
     :root {
       color-scheme: light;
@@ -59,7 +60,7 @@
     }
 
     .brand { display: flex; align-items: center; gap: 0.85rem; }
-    .brand-logo { height: 52px; width: auto; display: block; }
+    .brand-logo { height: 88px; width: auto; display: block; }
 
     .auth-chip {
       display: inline-flex;
@@ -717,21 +718,116 @@
       padding-bottom: 0.35rem;
     }
 
-    .col-emissao { width: 9%; }
-    .col-cnpj { width: 15%; overflow: hidden; }
-    .col-razao { width: 17%; font-size: 0.9rem; }
-    .col-estab { width: 15%; font-size: 0.9rem; }
-    .col-chave { width: 18%; font-size: 0.85rem; white-space: normal; }
-
-    .cell-key {
-      font-family: "Space Mono", "Fira Code", monospace;
-      letter-spacing: 0.02em;
-      word-break: break-all;
-    }
+    .col-emissao { width: 8%; }
+    .col-cnpj { width: 18%; white-space: nowrap; }
+    .col-razao { width: 13%; font-size: 0.9rem; }
+    .col-estab { width: 11%; font-size: 0.9rem; }
+    .col-chave { width: 20%; font-size: 0.85rem; }
     .col-valor { width: 9%; text-align: right; }
     .col-numero { width: 9%; text-align: right; }
     .col-usuario { width: 8%; text-align: center; }
-    .col-status { width: 14%; text-align: center; }
+    .col-status { width: 13%; text-align: center; }
+
+    th[draggable="true"] {
+      cursor: grab;
+      user-select: none;
+    }
+
+    th.col-arrastando {
+      opacity: 0.4;
+    }
+
+    th.col-alvo {
+      box-shadow: inset 3px 0 0 var(--lumi-primary);
+    }
+
+    .colunas-wrap {
+      position: relative;
+    }
+
+    .colunas-panel {
+      position: absolute;
+      top: calc(100% + 0.4rem);
+      right: 0;
+      z-index: 60;
+      width: 21rem;
+      max-width: 88vw;
+      padding: 0.85rem;
+      text-align: left;
+      background: #fff;
+      border: 1px solid var(--lumi-border);
+      border-radius: 14px;
+      box-shadow: 0 18px 34px rgba(34, 34, 34, 0.18);
+    }
+
+    .colunas-titulo {
+      margin: 0;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--lumi-dark);
+    }
+
+    .colunas-dica {
+      margin: 0.2rem 0 0.7rem;
+      font-size: 0.75rem;
+      color: var(--lumi-muted);
+    }
+
+    .colunas-lista {
+      list-style: none;
+      margin: 0 0 0.6rem;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+    }
+
+    .colunas-lista li {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.2rem 0.3rem;
+      border-radius: 8px;
+    }
+
+    .colunas-lista li:hover {
+      background: rgba(200, 16, 46, 0.06);
+    }
+
+    .colunas-lista label {
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 0.45rem;
+      margin: 0;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--lumi-dark);
+      cursor: pointer;
+    }
+
+    .colunas-lista input[type="checkbox"] {
+      flex: 0 0 auto;
+      width: 1rem;
+      height: 1rem;
+      padding: 0;
+      border-radius: 4px;
+      accent-color: var(--lumi-primary);
+    }
+
+    .colunas-mover {
+      flex: 0 0 auto;
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
     .nfe-obs-bar {
       display: flex;
       align-items: flex-start;
@@ -770,31 +866,34 @@
       color: #333;
     }
 
-    .cnpj-cell {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 0.2rem;
+    .cnpj-cell,
+    .chave-cell {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 0.35rem;
       max-width: 100%;
+    }
+
+    .chave-cell {
+      align-items: start;
     }
 
     .cnpj-cell .badge {
-      font-size: 0.72rem;
-      max-width: 100%;
+      display: block;
+      font-size: 0.78rem;
+      letter-spacing: 0;
+      padding: 0.22rem 0.5rem;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
-    .btn-icon--mini {
-      width: 22px;
-      height: 22px;
-      border-radius: 6px;
-      flex: 0 0 auto;
-      position: relative;
-      z-index: 1;
-    }
-
-    .btn-icon--mini svg {
-      width: 12px;
-      height: 12px;
+    .chave-cell .cell-key {
+      min-width: 0;
+      line-height: 1.35;
+      word-break: break-all;
     }
 
     .cell-text {
@@ -920,6 +1019,18 @@
       width: 16px;
       height: 16px;
       fill: currentColor;
+    }
+
+    .btn-icon.btn-icon--mini {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      flex: 0 0 auto;
+    }
+
+    .btn-icon.btn-icon--mini svg {
+      width: 12px;
+      height: 12px;
     }
 
     .sr-only {
@@ -1431,7 +1542,7 @@
 <body>
   <!-- temporario: atalhos de Autorizacao / ConfNF / Mix ocultos; paginas continuam no ar
   <nav class="nav-links">
-    <a href="index.html" class="active">Lumi NF-e</a>
+    <a href="index.html" class="active"><img src="logo-lumi.png" alt="Lumi NF-e" class="nav-logo"></a>
     <a href="autorizacao-recepcao-xml.html">Autorização de Recepção de XML</a>
     <a href="confnf.html">ConfNF</a>
     <a href="mix-fornecedor.html?v=codfor">Mix Fornecedor</a>
@@ -1439,11 +1550,8 @@
   -->
   <header>
     <div class="brand">
-      <img src="logo-lumi.png" alt="Lumi" class="brand-logo">
-      <div>
-        <h1>Lumi NF-e</h1>
-        <p>Filtre notas por período, fornecedor ou chave e exporte o resultado.</p>
-      </div>
+      <img src="logo-lumi.png" alt="Lumi NF-e" class="brand-logo">
+      <p>Filtre notas por período, fornecedor ou chave e exporte o resultado.</p>
     </div>
     <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
       <button type="button" class="version-chip" id="version-chip" data-estado="verificando"
@@ -1523,9 +1631,9 @@
         <div class="field-grid">
           <!-- Linha 1: Estabelecimento (linha inteira) -->
           <label style="grid-column: span 12;">
-            Estabelecimento
+            Área de Acesso
             <select id="estabelecimento" name="estabelecimento">
-              <option value="">Todos</option>
+              <option value="" selected>Administrativo</option>
             </select>
           </label>
           
@@ -1701,6 +1809,15 @@
           <span id="resultado-descricao">Nenhuma consulta realizada.</span>
         </div>
         <div class="actions-group" style="flex-direction:row;gap:0.6rem;">
+          <div class="colunas-wrap" id="colunas-wrap">
+            <button type="button" class="btn-secondary" id="btn-colunas">Colunas</button>
+            <div class="colunas-panel hidden" id="colunas-panel">
+              <p class="colunas-titulo">Colunas da listagem</p>
+              <p class="colunas-dica">Marque o que aparece. Use as setas ou arraste o cabeçalho da tabela para mudar a ordem. A escolha fica salva neste navegador.</p>
+              <ul class="colunas-lista" id="colunas-lista"></ul>
+              <button type="button" class="btn-ghost btn-small" id="btn-colunas-padrao">Restaurar padrão</button>
+            </div>
+          </div>
           <button type="button" class="btn-secondary" id="btn-export-pdf" disabled>Exportar PDF</button>
           <button type="button" class="btn-secondary" id="btn-export" disabled>Exportar CSV</button>
         </div>
@@ -1727,17 +1844,7 @@
       <div class="table-wrapper" id="tabela-container">
         <table>
     <thead>
-      <tr>
-              <th class="col-emissao">Emissão</th>
-              <th class="col-cnpj">CNPJ/CPF</th>
-              <th class="col-razao">Razão social</th>
-              <th class="col-estab">Estab. destino</th>
-              <th class="col-chave">Chave</th>
-              <th class="col-valor">Valor</th>
-              <th class="col-numero">Número NF</th>
-              <th class="col-usuario">Usuário</th>
-              <th class="col-status">Status</th>
-      </tr>
+      <tr id="thead-row"></tr>
     </thead>
     <tbody id="tbody"></tbody>
   </table>
@@ -1844,6 +1951,186 @@
     const serverStatus = document.getElementById('server-status');
     const serverStatusText = document.getElementById('server-status-text');
 
+    const theadRow = document.getElementById('thead-row');
+    const colunasWrap = document.getElementById('colunas-wrap');
+    const colunasPanel = document.getElementById('colunas-panel');
+    const colunasLista = document.getElementById('colunas-lista');
+    const btnColunas = document.getElementById('btn-colunas');
+    const btnColunasPadrao = document.getElementById('btn-colunas-padrao');
+
+    const COLUNAS_STORAGE_KEY = 'nfe.listagem.colunas.v1';
+
+    const COLUNAS_DISPONIVEIS = [
+      {
+        id: 'emissao',
+        label: 'Emissão',
+        classe: 'col-emissao',
+        pdf: { halign: 'center' },
+        texto: (row) => formatarDataHumana(resolverDataLinha(row)),
+        render: (row) => {
+          const emissao = formatarDataHumana(resolverDataLinha(row));
+          return `<span class="cell-text cell-text--nowrap" title="${escaparHtml(emissao)}">${escaparHtml(emissao)}</span>`;
+        }
+      },
+      {
+        id: 'cnpj',
+        label: 'CNPJ/CPF',
+        classe: 'col-cnpj',
+        texto: (row) => formatarDocumento(row.CNPJ_CPF),
+        render: (row) => {
+          const cnpjDigits = String(row.CNPJ_CPF || '').replace(/\D/g, '');
+          const cnpjMascara = formatarDocumento(row.CNPJ_CPF);
+          return `<div class="cnpj-cell">
+              <span class="badge" title="${escaparHtml(cnpjMascara)}">${escaparHtml(cnpjMascara)}</span>
+              ${
+                cnpjDigits
+                  ? `<button type="button" class="btn-icon btn-icon--mini" data-copy-doc="${escaparHtml(cnpjDigits)}" title="Copiar somente números">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h11a2 2 0 0 1 2 2v11h-2V5H8V3Zm8 4a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h11Zm0 2H5v11h11V9Z"/></svg>
+                      <span class="sr-only">Copiar CNPJ/CPF</span>
+                    </button>`
+                  : ''
+              }
+            </div>`;
+        }
+      },
+      {
+        id: 'razao',
+        label: 'Razão social',
+        classe: 'col-razao',
+        texto: (row) => row.RAZAO || '-',
+        render: (row) => {
+          const razao = row.RAZAO ?? '-';
+          return `<div class="cell-stack">
+              <span class="cell-text cell-text--wrap cell-strong" title="${escaparHtml(razao)}">${escaparHtml(razao)}</span>
+              <span class="cell-subtle">Fornecedor</span>
+            </div>`;
+        }
+      },
+      {
+        id: 'estab',
+        label: 'Estab. destino',
+        classe: 'col-estab',
+        texto: (row) => row.ESTAB_FANTASIA || '-',
+        render: (row) => {
+          const estabFantasia = row.ESTAB_FANTASIA ?? '-';
+          return `<div class="cell-stack">
+              <span class="cell-text cell-text--wrap" title="${escaparHtml(estabFantasia)}">${escaparHtml(estabFantasia)}</span>
+              <span class="cell-subtle">Estabelecimento destino</span>
+            </div>`;
+        }
+      },
+      {
+        id: 'chave',
+        label: 'Chave',
+        classe: 'col-chave',
+        pdf: { fontSize: 7 },
+        texto: (row) => row.CHAVE || '',
+        render: (row) => {
+          const chave = row.CHAVE || '';
+          const chaveTexto = chave || '-';
+          return `<div class="cell-stack">
+              <div class="chave-cell">
+                <span class="cell-text cell-text--wrap cell-key" title="${escaparHtml(chaveTexto)}">${escaparHtml(chaveTexto)}</span>
+                ${
+                  chave
+                    ? `<button type="button" class="btn-icon btn-icon--mini" data-copy="${escaparHtml(chave)}" title="Copiar chave">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h11a2 2 0 0 1 2 2v11h-2V5H8V3Zm8 4a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h11Zm0 2H5v11h11V9Z"/></svg>
+                        <span class="sr-only">Copiar chave</span>
+                      </button>`
+                    : ''
+                }
+              </div>
+              <span class="cell-subtle">Chave completa</span>
+            </div>`;
+        }
+      },
+      {
+        id: 'valor',
+        label: 'Valor',
+        classe: 'col-valor valor',
+        pdf: { halign: 'right' },
+        texto: (row) => formatarMoeda(normalizarValor(row.VALOR)),
+        // CSV sem "R$" e com vírgula decimal: o Excel pt-BR reconhece como número.
+        textoCsv: (row) => normalizarValor(row.VALOR).toFixed(2).replace('.', ','),
+        render: (row) => {
+          const valorFormatado = formatarMoeda(normalizarValor(row.VALOR));
+          return `<span class="value-chip" title="${escaparHtml(valorFormatado)}">${escaparHtml(valorFormatado)}</span>`;
+        }
+      },
+      {
+        id: 'numero',
+        label: 'Número NF',
+        classe: 'col-numero',
+        pdf: { halign: 'right' },
+        texto: (row) => formatarNumeroNf(row.NUMERO_NF),
+        render: (row) => {
+          const numeroNF = formatarNumeroNf(row.NUMERO_NF);
+          return `<span class="numero-pill" title="${escaparHtml(numeroNF)}">${escaparHtml(numeroNF)}</span>`;
+        }
+      },
+      {
+        id: 'usuario',
+        label: 'Usuário',
+        classe: 'col-usuario',
+        pdf: { halign: 'center' },
+        texto: (row) => String(row.USUARIO_CODIGO ?? ''),
+        render: (row) => {
+          const usuarioCodigo = row.USUARIO_CODIGO ?? '-';
+          const usuarioNome = row.USUARIO_NOME ?? '';
+          return `<span class="badge cell-text--nowrap" title="${escaparHtml(usuarioNome)}">${escaparHtml(usuarioCodigo)}</span>`;
+        }
+      },
+      {
+        id: 'status',
+        label: 'Status e ações',
+        classe: 'col-status',
+        rotuloExportacao: 'Status',
+        pdf: { halign: 'center', fontSize: 8 },
+        texto: (row) => obterStatusLancamento(row).label.toUpperCase(),
+        render: (row, ctx) => {
+          const chave = row.CHAVE ?? '';
+          const possuiChave = Boolean(chave);
+          const statusInfo = obterStatusLancamento(row);
+          const extraAlterar = (possuiChave && ctx.podeAlterar) ? `
+                      <button type="button" class="btn-icon" data-manutencao="${chave}" title="Manutenção XML">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.82,11.69,4.82,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
+                        <span class="sr-only">Manutenção XML</span>
+                      </button>
+                      <button type="button" class="btn-icon" data-autorizacao="${chave}" title="Autorizar recepção de XML (incluir no sistema após análise)">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                        <span class="sr-only">Autorizar recepção de XML</span>
+                      </button>` : '';
+          return `<div style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem;">
+              <span class="status-pill ${statusInfo.className}">${statusInfo.label}</span>
+              ${htmlChipSefaz(row)}
+              ${
+                possuiChave
+                  ? `
+                    <div class="actions-group" style="flex-direction:row; gap:0.4rem;">
+                      <button type="button" class="btn-icon" data-detalhes="${chave}" title="Detalhar NFe">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                        <span class="sr-only">Detalhar NFe</span>
+                      </button>
+                      <button type="button" class="btn-icon" data-danfe="${chave}" title="Imprimir DANFE">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v4H6V3Zm11 2V5H7v1h10ZM6 9h12a3 3 0 0 1 3 3v5H18v4H6v-4H3v-5a3 3 0 0 1 3-3Zm10 8H8v2h8v-2Zm4-3v-2a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v2h2v-2h12v2h2Z"/></svg>
+                        <span class="sr-only">Imprimir DANFE</span>
+                      </button>
+                      <button type="button" class="btn-icon" data-xml="${chave}" title="Baixar XML">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
+                        <span class="sr-only">Baixar XML</span>
+                      </button>
+                      ${extraAlterar}
+                    </div>
+                  `
+                  : ''
+              }
+            </div>`;
+        }
+      }
+    ];
+
+    const COLUNAS_POR_ID = new Map(COLUNAS_DISPONIVEIS.map((col) => [col.id, col]));
+
     const state = {
       rows: [],
       filtered: [],
@@ -1853,8 +2140,172 @@
       servidores: [],
       servidorAtual: null,
       usuario: null,
-      nfeObs: { ativo: false, opcoes: [] }
+      nfeObs: { ativo: false, opcoes: [] },
+      colunas: []
     };
+
+    function colunasPadrao() {
+      return COLUNAS_DISPONIVEIS.map((col) => ({ id: col.id, visivel: true }));
+    }
+
+    function carregarColunasSalvas() {
+      let salvo = null;
+      try {
+        salvo = JSON.parse(localStorage.getItem(COLUNAS_STORAGE_KEY) || 'null');
+      } catch (_e) {
+        salvo = null;
+      }
+      if (!Array.isArray(salvo)) return colunasPadrao();
+      const escolhidas = salvo
+        .filter((item) => item && COLUNAS_POR_ID.has(item.id))
+        .map((item) => ({ id: item.id, visivel: item.visivel !== false }));
+      // Coluna nova em versão posterior entra visível no fim, sem descartar a ordem já salva.
+      const jaListadas = new Set(escolhidas.map((item) => item.id));
+      COLUNAS_DISPONIVEIS.forEach((col) => {
+        if (!jaListadas.has(col.id)) escolhidas.push({ id: col.id, visivel: true });
+      });
+      if (!escolhidas.some((item) => item.visivel)) return colunasPadrao();
+      return escolhidas;
+    }
+
+    function salvarColunas() {
+      try {
+        localStorage.setItem(COLUNAS_STORAGE_KEY, JSON.stringify(state.colunas));
+      } catch (_e) { /* navegação privada ou storage cheio: a sessão continua funcionando */ }
+    }
+
+    function colunasVisiveis() {
+      return state.colunas
+        .filter((item) => item.visivel)
+        .map((item) => COLUNAS_POR_ID.get(item.id))
+        .filter(Boolean);
+    }
+
+    function colunasExportacao() {
+      const colunas = colunasVisiveis().map((col) => ({
+        titulo: col.rotuloExportacao || col.label,
+        pdf: col.pdf || {},
+        valor: (row) => String(col.texto(row) ?? ''),
+        valorCsv: (row) => String((col.textoCsv || col.texto)(row) ?? '')
+      }));
+      if (state.nfeObs.ativo) {
+        const obs = (row) => row.OBSERVACAO || '';
+        colunas.push({ titulo: 'Observação', pdf: { fontSize: 7 }, valor: obs, valorCsv: obs });
+      }
+      return colunas;
+    }
+
+    function renderCabecalhoTabela() {
+      theadRow.innerHTML = colunasVisiveis()
+        .map((col) => `<th class="${col.classe}" data-col="${col.id}" draggable="true" title="Arraste para mudar a posição da coluna">${escaparHtml(col.label)}</th>`)
+        .join('');
+    }
+
+    function renderPainelColunas() {
+      const ultimo = state.colunas.length - 1;
+      colunasLista.innerHTML = state.colunas.map((item, indice) => {
+        const col = COLUNAS_POR_ID.get(item.id);
+        return `<li>
+            <label>
+              <input type="checkbox" data-col-visivel="${item.id}"${item.visivel ? ' checked' : ''}>
+              ${escaparHtml(col.label)}
+            </label>
+            <button type="button" class="btn-ghost colunas-mover" data-col-mover="-1" data-col="${item.id}" title="Mover para a esquerda"${indice === 0 ? ' disabled' : ''}>↑</button>
+            <button type="button" class="btn-ghost colunas-mover" data-col-mover="1" data-col="${item.id}" title="Mover para a direita"${indice === ultimo ? ' disabled' : ''}>↓</button>
+          </li>`;
+      }).join('');
+    }
+
+    function aplicarColunas() {
+      salvarColunas();
+      renderCabecalhoTabela();
+      renderPainelColunas();
+      atualizarTabela();
+    }
+
+    function reordenarColunas(id, novoIndice) {
+      const atual = state.colunas.findIndex((item) => item.id === id);
+      if (atual < 0 || novoIndice < 0 || novoIndice >= state.colunas.length) return;
+      const [item] = state.colunas.splice(atual, 1);
+      state.colunas.splice(novoIndice, 0, item);
+      aplicarColunas();
+    }
+
+    btnColunas.addEventListener('click', (event) => {
+      event.stopPropagation();
+      colunasPanel.classList.toggle('hidden');
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!colunasWrap.contains(event.target)) colunasPanel.classList.add('hidden');
+    });
+
+    colunasLista.addEventListener('change', (event) => {
+      const check = event.target.closest('[data-col-visivel]');
+      if (!check) return;
+      const item = state.colunas.find((c) => c.id === check.getAttribute('data-col-visivel'));
+      if (!item) return;
+      if (!check.checked && state.colunas.filter((c) => c.visivel).length === 1) {
+        check.checked = true;
+        mostrarToast('Deixe pelo menos uma coluna visível.', true);
+        return;
+      }
+      item.visivel = check.checked;
+      aplicarColunas();
+    });
+
+    colunasLista.addEventListener('click', (event) => {
+      const botao = event.target.closest('[data-col-mover]');
+      if (!botao) return;
+      const id = botao.getAttribute('data-col');
+      const destino = state.colunas.findIndex((item) => item.id === id) + Number(botao.getAttribute('data-col-mover'));
+      reordenarColunas(id, destino);
+    });
+
+    btnColunasPadrao.addEventListener('click', () => {
+      state.colunas = colunasPadrao();
+      aplicarColunas();
+      mostrarToast('Colunas restauradas para o padrão.');
+    });
+
+    let colunaArrastada = null;
+
+    theadRow.addEventListener('dragstart', (event) => {
+      const th = event.target.closest('th[data-col]');
+      if (!th) return;
+      colunaArrastada = th.getAttribute('data-col');
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', colunaArrastada);
+      th.classList.add('col-arrastando');
+    });
+
+    theadRow.addEventListener('dragover', (event) => {
+      if (!colunaArrastada) return;
+      event.preventDefault();
+      const th = event.target.closest('th[data-col]');
+      theadRow.querySelectorAll('th').forEach((el) => el.classList.remove('col-alvo'));
+      if (th && th.getAttribute('data-col') !== colunaArrastada) th.classList.add('col-alvo');
+    });
+
+    theadRow.addEventListener('drop', (event) => {
+      const th = event.target.closest('th[data-col]');
+      if (!th || !colunaArrastada) return;
+      event.preventDefault();
+      const origem = colunaArrastada;
+      const destino = th.getAttribute('data-col');
+      colunaArrastada = null;
+      if (origem === destino) return;
+      reordenarColunas(origem, state.colunas.findIndex((item) => item.id === destino));
+    });
+
+    theadRow.addEventListener('dragend', () => {
+      colunaArrastada = null;
+      theadRow.querySelectorAll('th').forEach((el) => el.classList.remove('col-arrastando', 'col-alvo'));
+    });
+
+    state.colunas = carregarColunasSalvas();
+    renderCabecalhoTabela();
+    renderPainelColunas();
 
     function cnpjSessaoAtual() {
       if (!state.usuario || state.usuario.todasLojas) return '';
@@ -2286,26 +2737,15 @@
     tipoNfSelect.addEventListener('change', () => carregarContagemStatusCompra());
     btnExport.addEventListener('click', () => {
       if (!state.filtered.length) return;
-        const linhas = [
-        ['Emissao', 'CNPJ_CPF', 'Razao', 'Chave', 'Valor', 'NumeroNF', 'Status']
-          .concat(state.nfeObs.ativo ? ['Observacao'] : [])
-          .join(';'),
-        ...state.filtered.map((row) => {
-          const statusInfo = obterStatusLancamento(row);
-          const campos = [
-            resolverDataLinha(row),
-            formatarDocumento(row.CNPJ_CPF),
-            row.RAZAO,
-            row.CHAVE,
-            normalizarValor(row.VALOR).toFixed(2).replace('.', ','),
-            formatarNumeroNf(row.NUMERO_NF),
-            statusInfo.label.toUpperCase()
-          ];
-          if (state.nfeObs.ativo) campos.push(row.OBSERVACAO || '');
-          return campos.map((campo) => `"${(campo ?? '').toString().replace(/"/g, '""')}"`).join(';');
-        })
+      const colunas = colunasExportacao();
+      const linhas = [
+        colunas.map((col) => col.titulo).join(';'),
+        ...state.filtered.map((row) => colunas
+          .map((col) => `"${col.valorCsv(row).replace(/"/g, '""')}"`)
+          .join(';'))
       ];
-      const blob = new Blob([linhas.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      // BOM para o Excel abrir os acentos corretamente.
+      const blob = new Blob(['\ufeff' + linhas.join('\n')], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -2482,107 +2922,16 @@
 
     function atualizarTabela() {
       tbody.innerHTML = '';
-      const colunas = 9;
-      const podeAlterar = !(state.usuario && state.usuario.podeAlterar === false);
+      const visiveis = colunasVisiveis();
+      const ctx = { podeAlterar: !(state.usuario && state.usuario.podeAlterar === false) };
       state.filtered.forEach((row, indice) => {
         const tr = document.createElement('tr');
         const alt = indice % 2 === 1;
         const temObs = state.nfeObs.ativo;
         tr.className = `nfe-main${temObs ? ' tem-obs' : ''}${alt ? ' nfe-alt' : ''}`;
-        const emissao = resolverDataLinha(row);
-        const chave = row.CHAVE ?? '';
-        const possuiChave = Boolean(chave);
-        const statusInfo = obterStatusLancamento(row);
-        const razao = row.RAZAO ?? '-';
-        const estabFantasia = row.ESTAB_FANTASIA ?? '-';
-        const numeroNF = formatarNumeroNf(row.NUMERO_NF);
-        const valorFormatado = formatarMoeda(normalizarValor(row.VALOR));
-        const chaveTexto = chave || '-';
-        const usuarioCodigo = row.USUARIO_CODIGO ?? '-';
-        const usuarioNome = row.USUARIO_NOME ?? '';
-        const cnpjDigits = String(row.CNPJ_CPF || '').replace(/\D/g, '');
-        const cnpjMascara = formatarDocumento(row.CNPJ_CPF);
-        const extraAlterar = (possuiChave && podeAlterar) ? `
-                      <button type="button" class="btn-icon" data-manutencao="${chave}" title="Manutenção XML">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.82,11.69,4.82,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
-                        <span class="sr-only">Manutenção XML</span>
-                      </button>
-                      <button type="button" class="btn-icon" data-autorizacao="${chave}" title="Autorizar recepção de XML (incluir no sistema após análise)">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-                        <span class="sr-only">Autorizar recepção de XML</span>
-                      </button>` : '';
-        tr.innerHTML = `
-          <td class="col-emissao"><span class="cell-text cell-text--nowrap" title="${escaparHtml(formatarDataHumana(emissao))}">${formatarDataHumana(emissao)}</span></td>
-          <td class="col-cnpj">
-            <div class="cnpj-cell">
-              <span class="badge" title="${escaparHtml(cnpjMascara)}">${cnpjMascara}</span>
-              ${
-                cnpjDigits
-                  ? `<button type="button" class="btn-icon btn-icon--mini" data-copy-doc="${escaparHtml(cnpjDigits)}" title="Copiar somente números">
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h11a2 2 0 0 1 2 2v11h-2V5H8V3Zm8 4a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h11Zm0 2H5v11h11V9Z"/></svg>
-                      <span class="sr-only">Copiar CNPJ/CPF</span>
-                    </button>`
-                  : ''
-              }
-            </div>
-          </td>
-          <td class="col-razao">
-            <div class="cell-stack">
-              <span class="cell-text cell-text--wrap cell-strong" title="${escaparHtml(razao)}">${razao}</span>
-              <span class="cell-subtle">Fornecedor</span>
-            </div>
-          </td>
-          <td class="col-estab">
-            <div class="cell-stack">
-              <span class="cell-text cell-text--wrap" title="${escaparHtml(estabFantasia)}">${escaparHtml(estabFantasia)}</span>
-              <span class="cell-subtle">Estabelecimento destino</span>
-            </div>
-          </td>
-          <td class="col-chave">
-            <div class="cell-stack">
-              <span class="cell-text cell-text--wrap cell-key" title="${escaparHtml(chaveTexto)}">${chaveTexto}</span>
-              <span class="cell-subtle">Chave completa</span>
-            </div>
-          </td>
-          <td class="col-valor valor"><span class="value-chip" title="${escaparHtml(valorFormatado)}">${valorFormatado}</span></td>
-          <td class="col-numero"><span class="numero-pill" title="${escaparHtml(numeroNF)}">${numeroNF}</span></td>
-          <td class="col-usuario">
-            <span class="badge cell-text--nowrap" title="${escaparHtml(usuarioNome)}">${escaparHtml(usuarioCodigo)}</span>
-          </td>
-          <td class="col-status">
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem;">
-              <span class="status-pill ${statusInfo.className}">${statusInfo.label}</span>
-              ${htmlChipSefaz(row)}
-              ${
-                possuiChave
-                  ? `
-                    <div class="actions-group" style="flex-direction:row; gap:0.4rem;">
-                      <button type="button" class="btn-icon" data-detalhes="${chave}" title="Detalhar NFe">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
-                        <span class="sr-only">Detalhar NFe</span>
-                      </button>
-                      <button type="button" class="btn-icon" data-copy="${chave}" title="Copiar chave">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h11a2 2 0 0 1 2 2v11h-2V5H8V3Zm8 4a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h11Zm0 2H5v11h11V9Z"/></svg>
-                        <span class="sr-only">Copiar chave</span>
-                      </button>
-                      <button type="button" class="btn-icon" data-danfe="${chave}" title="Imprimir DANFE">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v4H6V3Zm11 2V5H7v1h10ZM6 9h12a3 3 0 0 1 3 3v5H18v4H6v-4H3v-5a3 3 0 0 1 3-3Zm10 8H8v2h8v-2Zm4-3v-2a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v2h2v-2h12v2h2Z"/></svg>
-                        <span class="sr-only">Imprimir DANFE</span>
-                      </button>
-                      <button type="button" class="btn-icon" data-xml="${chave}" title="Baixar XML">
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
-                        <span class="sr-only">Baixar XML</span>
-                      </button>
-                      ${extraAlterar}
-                    </div>
-                  `
-                  : ''
-              }
-            </div>
-          </td>
-        `;
+        tr.innerHTML = visiveis.map((col) => `<td class="${col.classe}">${col.render(row, ctx)}</td>`).join('');
         tbody.appendChild(tr);
-        const linhaObs = htmlLinhaObs(row, colunas, alt);
+        const linhaObs = htmlLinhaObs(row, visiveis.length, alt);
         if (linhaObs) tbody.appendChild(linhaObs);
       });
     }
@@ -3299,7 +3648,7 @@
         const lista = await resp.json();
         state.estabelecimentos = Array.isArray(lista) ? lista : [];
         console.log('Estabelecimentos carregados:', state.estabelecimentos.length);
-        estabelecimentoSelect.innerHTML = '<option value="">Todos</option>';
+        estabelecimentoSelect.innerHTML = '<option value="">Administrativo</option>';
         state.estabelecimentos.forEach((e) => {
           const opt = document.createElement('option');
           opt.value = e.cnpj ?? '';
@@ -3393,34 +3742,14 @@
       doc.text(periodoTexto, margemInicial, 26);
       doc.text(`Gerado em: ${formatarDataHumana(formatarDataInput(new Date()))}`, margemInicial, 33);
 
-      const tabela = state.filtered.map((row) => {
-        const status = obterStatusLancamento(row);
-        const linha = [
-          formatarDataHumana(resolverDataLinha(row)),
-          formatarDocumento(row.CNPJ_CPF),
-          (row.RAZAO || '-').toUpperCase(),
-          row.CHAVE || '',
-          formatarMoeda(normalizarValor(row.VALOR)),
-          formatarNumeroNf(row.NUMERO_NF),
-          status.label.toUpperCase()
-        ];
-        if (state.nfeObs.ativo) linha.push(row.OBSERVACAO || '');
-        return linha;
+      const colunasExport = colunasExportacao();
+      const tabela = state.filtered.map((row) => colunasExport.map((col) => col.valor(row)));
+      const cabecalho = colunasExport.map((col) => col.titulo);
+      // Sem cellWidth fixo: o autoTable distribui a largura conforme as colunas escolhidas.
+      const colunas = {};
+      colunasExport.forEach((col, indice) => {
+        if (Object.keys(col.pdf).length) colunas[indice] = { ...col.pdf };
       });
-
-      const cabecalho = ['Emissão', 'CNPJ/CPF', 'Razão social', 'Chave', 'Valor', 'Número NF', 'Status'];
-      if (state.nfeObs.ativo) cabecalho.push('Observação');
-
-      const colunas = {
-          0: { cellWidth: 22, halign: 'center' },
-          1: { cellWidth: 32 },
-          2: { cellWidth: state.nfeObs.ativo ? 42 : 55 },
-          3: { cellWidth: state.nfeObs.ativo ? 52 : 85 },
-          4: { cellWidth: 26, halign: 'right' },
-          5: { cellWidth: 22, halign: 'right' },
-          6: { cellWidth: 20, halign: 'center', fontSize: 8 }
-      };
-      if (state.nfeObs.ativo) colunas[7] = { cellWidth: 42, fontSize: 7 };
 
       doc.autoTable({
         startY: 40,

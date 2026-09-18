@@ -184,6 +184,32 @@ function podeAlterarNfe(usuario) {
     });
 }
 
+async function buscarFuncionario(pool, matriculaRaw) {
+    const { digits, withDvInput } = normalizeMatriculaInput(matriculaRaw);
+    if (!digits) return null;
+    const [rows] = await pool.query(
+        `SELECT
+            TRIM(f.MATRICULA) AS MATRICULA_BASE,
+            CONCAT(TRIM(f.MATRICULA), calculo_digito(f.MATRICULA)) AS MATRICULA_DV,
+            f.NOME, f.APELIDO, f.CNPJ, f.DESLIGADO, f.ACESSO
+         FROM funciona f
+         WHERE (
+             CAST(CONCAT(TRIM(f.MATRICULA), calculo_digito(f.MATRICULA)) AS UNSIGNED) = CAST(? AS UNSIGNED)
+             OR CONCAT(TRIM(f.MATRICULA), calculo_digito(f.MATRICULA)) = ?
+             OR CAST(TRIM(f.MATRICULA) AS UNSIGNED) = CAST(? AS UNSIGNED)
+             OR LPAD(TRIM(f.MATRICULA), 6, '0') = ?
+           )
+           AND NOT (TRIM(IFNULL(f.DESLIGADO, '')) REGEXP '^[0-9]{8}$')
+         ORDER BY
+           CASE WHEN CONCAT(TRIM(f.MATRICULA), calculo_digito(f.MATRICULA)) = ? THEN 0 ELSE 1 END
+         LIMIT 1`,
+        [digits, withDvInput, digits, withDvInput.slice(0, 6), withDvInput]
+    );
+    const func = rows && rows[0];
+    if (!func || estaDesligado(func.DESLIGADO)) return null;
+    return func;
+}
+
 async function listarEstabelecimentos(pool) {
     const [rows] = await pool.query(
         `SELECT CNPJ AS cnpj, COALESCE(NULLIF(TRIM(FANTASIA), ''), NULLIF(TRIM(RAZAO), ''), CNPJ) AS nome
@@ -199,8 +225,9 @@ async function listarEstabelecimentos(pool) {
 
 function caminhoPublico(req) {
     const p = String(req.path || '').split('?')[0];
-    if (p === '/login.html' || p === '/logo-lumi.png' || p === '/favicon.ico') return true;
+    if (p === '/login.html' || p === '/logo-lumi.png' || p === '/favicon.ico' || p === '/favicon.png') return true;
     if (req.method === 'GET' && p === '/api/auth/estabelecimentos') return true;
+    if (req.method === 'GET' && p === '/api/auth/usuario') return true;
     if (req.method === 'POST' && p === '/api/auth/login') return true;
     if (req.method === 'POST' && p === '/api/auth/logout') return true;
     return false;
@@ -307,42 +334,32 @@ function registerAuthRoutes(app, { getPool }) {
         }
     });
 
+    app.get('/api/auth/usuario', async (req, res) => {
+        try {
+            const func = await buscarFuncionario(getPool(), req.query?.matricula || '');
+            if (!func) return res.json({ nome: '' });
+            return res.json({ nome: func.NOME || func.APELIDO || '' });
+        } catch (error) {
+            console.error('[AUTH usuario]', error?.message || error);
+            return res.json({ nome: '' });
+        }
+    });
+
     app.post('/api/auth/login', async (req, res) => {
         const cnpjInformado = onlyDigits(req.body?.cnpj || req.body?.cnpj_loja || '');
         const senha = String(req.body?.senha || '');
-        const { digits, withDvInput } = normalizeMatriculaInput(req.body?.matricula || '');
+        const { digits } = normalizeMatriculaInput(req.body?.matricula || '');
         if (!digits) {
-            return res.status(400).json({ erro: 'Informe a matrícula com dígito verificador.' });
+            return res.status(400).json({ erro: 'Informe o usuário com dígito verificador.' });
         }
         if (!senha || senha.length > 10) {
             return res.status(400).json({ erro: 'Informe a senha (máximo 10 caracteres).' });
         }
         try {
             const pool = getPool();
-            const [funcs] = await pool.query(
-                `SELECT
-                    TRIM(f.MATRICULA) AS MATRICULA_BASE,
-                    CONCAT(TRIM(f.MATRICULA), calculo_digito(f.MATRICULA)) AS MATRICULA_DV,
-                    f.NOME, f.APELIDO, f.CNPJ, f.DESLIGADO, f.ACESSO
-                 FROM funciona f
-                 WHERE (
-                     CAST(CONCAT(TRIM(f.MATRICULA), calculo_digito(f.MATRICULA)) AS UNSIGNED) = CAST(? AS UNSIGNED)
-                     OR CONCAT(TRIM(f.MATRICULA), calculo_digito(f.MATRICULA)) = ?
-                     OR CAST(TRIM(f.MATRICULA) AS UNSIGNED) = CAST(? AS UNSIGNED)
-                     OR LPAD(TRIM(f.MATRICULA), 6, '0') = ?
-                   )
-                   AND NOT (TRIM(IFNULL(f.DESLIGADO, '')) REGEXP '^[0-9]{8}$')
-                 ORDER BY
-                   CASE WHEN CONCAT(TRIM(f.MATRICULA), calculo_digito(f.MATRICULA)) = ? THEN 0 ELSE 1 END
-                 LIMIT 1`,
-                [digits, withDvInput, digits, withDvInput.slice(0, 6), withDvInput]
-            );
-            const func = funcs && funcs[0];
+            const func = await buscarFuncionario(pool, req.body?.matricula || '');
             if (!func) {
-                return res.status(401).json({ erro: 'Matrícula ou senha inválida.' });
-            }
-            if (estaDesligado(func.DESLIGADO)) {
-                return res.status(401).json({ erro: 'Matrícula ou senha inválida.' });
+                return res.status(401).json({ erro: 'Usuário ou senha inválida.' });
             }
             const cnpjVinculo = onlyDigits(func.CNPJ);
             const ok = await verifyFuncionaPassword(pool, {
@@ -352,7 +369,7 @@ function registerAuthRoutes(app, { getPool }) {
                 plain: senha,
             });
             if (!ok) {
-                return res.status(401).json({ erro: 'Matrícula ou senha inválida.' });
+                return res.status(401).json({ erro: 'Usuário ou senha inválida.' });
             }
 
             const admin = isAdminAcesso(func.ACESSO);

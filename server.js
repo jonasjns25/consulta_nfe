@@ -3305,7 +3305,8 @@ app.get('/mix-fornecedor.html', (req, res) => {
     res.setHeader('Expires', '0');
     res.sendFile(path.join(__dirname, 'mix-fornecedor.html'));
 });
-app.get('/favicon.ico', (req, res) => res.status(204).end());
+app.get('/favicon.ico', (_req, res) => res.sendFile(path.join(__dirname, 'favicon.png')));
+app.get('/favicon.png', (_req, res) => res.sendFile(path.join(__dirname, 'favicon.png')));
 
 app.get('/admin/versao', (req, res) => {
     const versao = updater ? updater.lerVersaoLocal() : 'desconhecida';

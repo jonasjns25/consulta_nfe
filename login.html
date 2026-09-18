@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Entrar — Lumi NF-e</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
   <style>
     :root {
       font-family: "Inter", "Segoe UI", "Roboto", sans-serif;
@@ -27,17 +28,15 @@
     }
     .card {
       width: 100%;
-      max-width: 420px;
+      max-width: 460px;
       background: #fff;
       border-radius: 24px;
       padding: 2rem 1.75rem 1.75rem;
       box-shadow: var(--shadow);
       border: 1px solid var(--lumi-border);
     }
-    .brand { display: flex; align-items: center; gap: 0.85rem; margin-bottom: 0.35rem; }
-    .brand img { height: 48px; width: auto; }
-    h1 { margin: 0; font-size: 1.55rem; }
-    p.sub { margin: 0.35rem 0 1.4rem; color: var(--lumi-muted); font-size: 0.92rem; }
+    .brand { display: flex; flex-direction: column; align-items: center; margin-bottom: 1.1rem; }
+    .brand img { height: 128px; width: auto; display: block; }
     label { display: block; font-size: 0.82rem; font-weight: 600; margin: 0.85rem 0 0.3rem; }
     input, select {
       width: 100%;
@@ -48,7 +47,25 @@
       background: #fff;
     }
     input:focus, select:focus { outline: 2px solid rgba(200, 16, 46, 0.35); }
-    .oculto { display: none; }
+    .linha-acesso {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      gap: 0.55rem 0.7rem;
+      align-items: end;
+      margin-top: 0.35rem;
+    }
+    .nome-usuario {
+      min-width: 5.5rem;
+      max-width: 9rem;
+      padding: 0 0.15rem 0.75rem;
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: var(--lumi-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .nome-usuario:empty { visibility: hidden; }
     button {
       width: 100%;
       margin-top: 1.25rem;
@@ -73,34 +90,67 @@
       font-size: 0.88rem;
     }
     .erro.visivel { display: block; }
+    @media (max-width: 520px) {
+      .linha-acesso { grid-template-columns: 1fr; }
+      .nome-usuario { padding-bottom: 0; max-width: none; }
+      .nome-usuario:empty { display: none; }
+    }
   </style>
 </head>
 <body>
   <form class="card" id="form-login" autocomplete="on">
     <div class="brand">
-      <img src="logo-lumi.png" alt="Lumi">
-      <h1>Lumi NF-e</h1>
+      <img src="logo-lumi.png" alt="Lumi NF-e">
     </div>
-    <p class="sub">Selecione Administrativo (todas as lojas) ou uma loja, depois entre com a matrícula (com dígito) e a senha do ERP.</p>
-    <label for="estab">Estabelecimento</label>
+    <label for="estab">Área de Acesso</label>
     <select id="estab">
-      <option value="">Carregando lojas…</option>
+      <option value="ALL" selected>Administrativo</option>
     </select>
-    <label for="matricula">Matrícula</label>
-    <input id="matricula" name="matricula" inputmode="numeric" maxlength="10" required placeholder="0000132">
-    <label for="senha">Senha</label>
-    <input id="senha" name="senha" type="password" maxlength="10" autocomplete="current-password" required>
+    <div class="linha-acesso">
+      <div>
+        <label for="matricula">Usuário</label>
+        <input id="matricula" name="matricula" inputmode="numeric" maxlength="10" required placeholder="0000132" autocomplete="username">
+      </div>
+      <div class="nome-usuario" id="nome-usuario" aria-live="polite"></div>
+      <div>
+        <label for="senha">Senha</label>
+        <input id="senha" name="senha" type="password" maxlength="10" autocomplete="current-password" required>
+      </div>
+    </div>
     <button type="submit" id="btn">Entrar</button>
     <div class="erro" id="erro" role="alert"></div>
   </form>
   <script>
     function soDigitos(v) { return String(v || '').replace(/\D/g, ''); }
     const selEstab = document.getElementById('estab');
+    const campoUsuario = document.getElementById('matricula');
+    const campoSenha = document.getElementById('senha');
+    const nomeUsuario = document.getElementById('nome-usuario');
+    let buscaNomeTimer = null;
+
     function montarOpcoes(lista) {
-      selEstab.innerHTML = '<option value="">Selecione a loja</option>'
-        + '<option value="ALL">Administrativo</option>'
+      const atual = selEstab.value || 'ALL';
+      selEstab.innerHTML = '<option value="ALL">Administrativo</option>'
         + (lista || []).map((e) => `<option value="${e.cnpj}">${e.nome}</option>`).join('');
+      selEstab.value = [...selEstab.options].some((o) => o.value === atual) ? atual : 'ALL';
     }
+
+    async function mostrarNomeUsuario() {
+      const matricula = soDigitos(campoUsuario.value);
+      if (matricula.length < 4) {
+        nomeUsuario.textContent = '';
+        return;
+      }
+      try {
+        const resp = await fetch('/api/auth/usuario?matricula=' + encodeURIComponent(matricula));
+        const data = await resp.json().catch(() => ({}));
+        nomeUsuario.textContent = data.nome || '';
+        nomeUsuario.title = data.nome || '';
+      } catch (_e) {
+        nomeUsuario.textContent = '';
+      }
+    }
+
     (async function carregarEstabs() {
       try {
         const resp = await fetch('/api/auth/estabelecimentos');
@@ -110,6 +160,19 @@
         montarOpcoes([]);
       }
     })();
+
+    campoUsuario.addEventListener('keydown', async (ev) => {
+      if (ev.key !== 'Enter') return;
+      ev.preventDefault();
+      await mostrarNomeUsuario();
+      campoSenha.focus();
+    });
+    campoUsuario.addEventListener('blur', () => { mostrarNomeUsuario(); });
+    campoUsuario.addEventListener('input', () => {
+      clearTimeout(buscaNomeTimer);
+      buscaNomeTimer = setTimeout(mostrarNomeUsuario, 350);
+    });
+
     document.getElementById('form-login').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const erro = document.getElementById('erro');
@@ -117,10 +180,10 @@
       erro.classList.remove('visivel');
       btn.disabled = true;
       try {
-        if (!selEstab.value) throw new Error('Selecione o estabelecimento.');
+        if (!selEstab.value) throw new Error('Selecione a área de acesso.');
         const payload = {
-          matricula: soDigitos(document.getElementById('matricula').value),
-          senha: document.getElementById('senha').value,
+          matricula: soDigitos(campoUsuario.value),
+          senha: campoSenha.value,
           cnpj: selEstab.value || ''
         };
         const resp = await fetch('/api/auth/login', {
@@ -134,7 +197,7 @@
           if (data.estabelecimentos && data.estabelecimentos.length) {
             montarOpcoes(data.estabelecimentos);
           }
-          erro.textContent = 'Selecione o estabelecimento para continuar.';
+          erro.textContent = 'Selecione a área de acesso para continuar.';
           erro.classList.add('visivel');
           selEstab.focus();
           return;
