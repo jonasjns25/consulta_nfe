@@ -1,6 +1,6 @@
 {
   "name": "consulta_nfe",
-  "version": "1.0.49",
+  "version": "1.0.50",
   "description": "",
   "main": "server.js",
   "scripts": {
