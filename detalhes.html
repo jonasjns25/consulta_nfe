@@ -424,6 +424,16 @@
       font-weight: 600;
     }
 
+    #info-nfe .card-header .btn-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      padding: 0.45rem 0.75rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
     .cte-aviso {
       margin: 0.45rem 0 0;
       font-size: 0.82rem;
@@ -1022,6 +1032,15 @@
               </svg>
               <span style="margin-left: 0.5rem; font-size: 0.9rem;">Copiar</span>
             </button>
+            <button type="button" class="btn-icon" id="btn-incluir-cte" title="Incluir CT-e (Frete)" style="background: var(--lumi-primary-strong); color: white; border: none;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="1" y="3" width="15" height="13" rx="2" ry="2"></rect>
+                <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+                <circle cx="5.5" cy="18.5" r="2.5"></circle>
+                <circle cx="18.5" cy="18.5" r="2.5"></circle>
+              </svg>
+              <span style="margin-left: 0.5rem; font-size: 0.9rem;">Incluir CT-e (Frete)</span>
+            </button>
           </div>
         </div>
         <div class="section-content" id="info-nfe-content">
@@ -1047,17 +1066,17 @@
         </div>
       </section>
 
-      <section class="card" id="cte-section">
+      <section class="card hidden" id="cte-section">
         <div class="card-header">
           <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-            <button type="button" class="btn-toggle-section" id="btn-toggle-cte" onclick="toggleSection('cte-section-content')" title="Expandir/Ocultar CT-e">
+            <button type="button" class="btn-toggle-section collapsed" id="btn-toggle-cte" onclick="toggleSection('cte-section-content')" title="Expandir/Ocultar CT-e">
               <span class="icon">▼</span>
             </button>
             <h2 style="margin: 0;">CT-e vinculado (frete)</h2>
             <span id="cte-badge-qtd" class="sefaz-badge sefaz-badge--pendente">Nenhum gravado</span>
           </div>
         </div>
-        <div class="section-content visible" id="cte-section-content">
+        <div class="section-content" id="cte-section-content">
           <p class="sefaz-meta">O CT-e é o documento de frete. A SEFAZ não localiza o CT-e pela chave da NF-e — informe a chave de 44 dígitos do CT-e (modelo 57). A consulta grava o XML no CONFNF vinculado a esta nota.</p>
           <div class="cte-consulta-linha">
             <input type="text" id="cte-chave-input" maxlength="54" placeholder="Chave do CT-e (44 dígitos)" autocomplete="off" inputmode="numeric">
@@ -1967,6 +1986,30 @@
       }
     }
 
+    function mostrarSecaoCte({ expandir } = {}) {
+      const section = document.getElementById('cte-section');
+      const content = document.getElementById('cte-section-content');
+      const btn = document.getElementById('btn-toggle-cte');
+      if (!section) return;
+      section.classList.remove('hidden');
+      if (expandir) {
+        if (content) content.classList.add('visible');
+        if (btn) btn.classList.remove('collapsed');
+      } else {
+        if (content) content.classList.remove('visible');
+        if (btn) btn.classList.add('collapsed');
+      }
+    }
+
+    function incluirCteFrete() {
+      mostrarSecaoCte({ expandir: true });
+      const input = document.getElementById('cte-chave-input');
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }
+
     async function carregarCtesVinculados() {
       const chaveNFe = window.nfeChave || '';
       if (!chaveNFe || chaveNFe.length !== 44) return;
@@ -1974,8 +2017,14 @@
         const resp = await fetch(`/api/nfe/cte/${chaveNFe}`);
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok) throw new Error(data?.erro || 'Falha ao carregar CT-es.');
-        renderizarListaCte(data.ctes || []);
-        renderizarSugestoesCte(data.sugestoes || [], data.ctes || []);
+        const ctes = data.ctes || [];
+        renderizarListaCte(ctes);
+        renderizarSugestoesCte(data.sugestoes || [], ctes);
+        if (ctes.length) {
+          const content = document.getElementById('cte-section-content');
+          const jaExpandida = !!(content && content.classList.contains('visible'));
+          mostrarSecaoCte({ expandir: jaExpandida });
+        }
       } catch (error) {
         console.warn(error);
         renderizarListaCte([]);
@@ -1985,6 +2034,7 @@
     function ligarConsultaCte() {
       const input = document.getElementById('cte-chave-input');
       const btn = document.getElementById('btn-consultar-cte');
+      const btnIncluir = document.getElementById('btn-incluir-cte');
       if (input && !input.dataset.ligado) {
         input.dataset.ligado = '1';
         input.addEventListener('input', () => {
@@ -2007,6 +2057,7 @@
         });
       }
       if (btn) btn.onclick = consultarCteVinculado;
+      if (btnIncluir) btnIncluir.onclick = incluirCteFrete;
     }
 
     async function consultarCteVinculado() {
