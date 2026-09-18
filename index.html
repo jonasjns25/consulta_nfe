@@ -2364,7 +2364,7 @@
       return String(state.usuario.cnpj || '').replace(/\D/g, '');
     }
 
-    /** CNPJ enviado na consulta: administrativo usa o select; demais usuários usam a loja da sessão. */
+    /** CNPJ enviado na consulta: usuário com todasLojas usa o select; demais usam a loja fixa da sessão. */
     function cnpjEstabelecimentoFiltro() {
       const raw = estabelecimentoSelect
         ? String(estabelecimentoSelect.value ?? '').trim()

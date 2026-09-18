@@ -516,52 +516,31 @@ function registerAuthRoutes(app, opts) {
             }
 
             const admin = isAdminAcesso(func.ACESSO);
-            let cnpjSessao = cnpjVinculo;
-            let todasLojas = false;
-            if (admin) {
-                if (escolheuTodasLojas(req.body?.cnpj)) {
-                    todasLojas = true;
-                    cnpjSessao = '';
-                } else if (!cnpjInformado) {
-                    const estabelecimentos = await listarEstabelecimentos(pool);
-                    return res.json({
-                        ok: false,
-                        precisaEstab: true,
-                        estabelecimentos,
-                        serverId: servidor.id,
-                    });
-                } else {
-                    const [lojasAdmin] = await pool.query(
-                        `SELECT CNPJ, FANTASIA, RAZAO FROM ESTAB
-                         WHERE REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(CNPJ,''), '.', ''), '/', ''), '-', ''), ' ', '') = ?
-                         LIMIT 1`,
-                        [cnpjInformado]
-                    );
-                    if (!lojasAdmin || !lojasAdmin.length) {
-                        return res.status(400).json({ erro: 'Selecione um estabelecimento válido.' });
-                    }
-                    cnpjSessao = onlyDigits(lojasAdmin[0].CNPJ);
-                }
-            } else if (escolheuTodasLojas(req.body?.cnpj)) {
-                return res.status(403).json({
-                    erro: 'Seu usuário não tem acesso administrativo. Selecione a loja do cadastro.',
-                });
-            } else if (cnpjInformado && cnpjInformado !== cnpjVinculo) {
-                return res.status(403).json({ erro: 'Sem permissão para este estabelecimento.' });
-            }
+            /** Qualquer usuário autenticado pode consultar todas as lojas (filtro livre na tela). */
+            const todasLojas = true;
+            let cnpjSessao = '';
+            let fantasia = 'Todas as lojas';
 
-            let fantasia = cnpjSessao;
-            if (todasLojas) {
-                fantasia = 'Administrativo';
-            } else {
+            if (!escolheuTodasLojas(req.body?.cnpj) && cnpjInformado) {
                 const [lojas] = await pool.query(
                     `SELECT CNPJ, FANTASIA, RAZAO FROM ESTAB
                      WHERE REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(CNPJ,''), '.', ''), '/', ''), '-', ''), ' ', '') = ?
                      LIMIT 1`,
-                    [cnpjSessao]
+                    [cnpjInformado]
                 );
-                const loja = (lojas && lojas[0]) || { CNPJ: cnpjSessao };
-                fantasia = loja.FANTASIA || loja.RAZAO || cnpjSessao;
+                if (!lojas || !lojas.length) {
+                    return res.status(400).json({ erro: 'Selecione um estabelecimento válido.' });
+                }
+                cnpjSessao = onlyDigits(lojas[0].CNPJ);
+                fantasia = lojas[0].FANTASIA || lojas[0].RAZAO || cnpjSessao;
+            } else if (!cnpjInformado && !escolheuTodasLojas(req.body?.cnpj)) {
+                const estabelecimentos = await listarEstabelecimentos(pool);
+                return res.json({
+                    ok: false,
+                    precisaEstab: true,
+                    estabelecimentos,
+                    serverId: servidor.id,
+                });
             }
             const user = {
                 matricula: func.MATRICULA_DV,

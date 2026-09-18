@@ -147,7 +147,7 @@
 
     function montarOpcoes(lista) {
       const atual = selEstab.value || 'ALL';
-      selEstab.innerHTML = '<option value="ALL">Administrativo</option>'
+      selEstab.innerHTML = '<option value="ALL">Todas as lojas</option>'
         + (lista || []).map((e) => `<option value="${e.cnpj}">${e.nome}</option>`).join('');
       selEstab.value = [...selEstab.options].some((o) => o.value === atual) ? atual : 'ALL';
     }
