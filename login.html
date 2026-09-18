@@ -102,6 +102,10 @@
     <div class="brand">
       <img src="logo-lumi.png" alt="Lumi NF-e">
     </div>
+    <div id="bloco-servidor" hidden>
+      <label for="servidor">Servidor</label>
+      <select id="servidor"></select>
+    </div>
     <label for="estab">Área de Acesso</label>
     <select id="estab">
       <option value="ALL" selected>Administrativo</option>
@@ -122,17 +126,49 @@
   </form>
   <script>
     function soDigitos(v) { return String(v || '').replace(/\D/g, ''); }
+    const STORAGE_SRV = 'lumi_nfe_serverId';
+    const selServidor = document.getElementById('servidor');
+    const blocoServidor = document.getElementById('bloco-servidor');
     const selEstab = document.getElementById('estab');
     const campoUsuario = document.getElementById('matricula');
     const campoSenha = document.getElementById('senha');
     const nomeUsuario = document.getElementById('nome-usuario');
     let buscaNomeTimer = null;
 
+    function serverIdAtual() { return selServidor.value || ''; }
+
+    function qsAuth(extra) {
+      const p = new URLSearchParams(extra || {});
+      const id = serverIdAtual();
+      if (id) p.set('serverId', id);
+      const s = p.toString();
+      return s ? ('?' + s) : '';
+    }
+
     function montarOpcoes(lista) {
       const atual = selEstab.value || 'ALL';
       selEstab.innerHTML = '<option value="ALL">Administrativo</option>'
         + (lista || []).map((e) => `<option value="${e.cnpj}">${e.nome}</option>`).join('');
       selEstab.value = [...selEstab.options].some((o) => o.value === atual) ? atual : 'ALL';
+    }
+
+    async function carregarServidores() {
+      try {
+        const resp = await fetch('/api/auth/servidores');
+        const data = await resp.json().catch(() => ({}));
+        const lista = data.servidores || [];
+        const salvo = localStorage.getItem(STORAGE_SRV) || '';
+        selServidor.innerHTML = lista.map((s) =>
+          `<option value="${s.id}">${s.name}</option>`
+        ).join('');
+        const preferido = lista.some((s) => s.id === salvo)
+          ? salvo
+          : (data.atual || (lista[0] && lista[0].id) || '');
+        if (preferido) selServidor.value = preferido;
+        blocoServidor.hidden = lista.length <= 1;
+      } catch (_e) {
+        blocoServidor.hidden = true;
+      }
     }
 
     async function mostrarNomeUsuario() {
@@ -142,7 +178,7 @@
         return;
       }
       try {
-        const resp = await fetch('/api/auth/usuario?matricula=' + encodeURIComponent(matricula));
+        const resp = await fetch('/api/auth/usuario' + qsAuth({ matricula }));
         const data = await resp.json().catch(() => ({}));
         nomeUsuario.textContent = data.nome || '';
         nomeUsuario.title = data.nome || '';
@@ -151,14 +187,26 @@
       }
     }
 
-    (async function carregarEstabs() {
+    async function carregarEstabs() {
       try {
-        const resp = await fetch('/api/auth/estabelecimentos');
+        const resp = await fetch('/api/auth/estabelecimentos' + qsAuth());
         const data = await resp.json().catch(() => ({}));
         montarOpcoes(data.estabelecimentos || []);
       } catch (_e) {
         montarOpcoes([]);
       }
+    }
+
+    selServidor.addEventListener('change', () => {
+      localStorage.setItem(STORAGE_SRV, selServidor.value);
+      nomeUsuario.textContent = '';
+      carregarEstabs();
+      mostrarNomeUsuario();
+    });
+
+    (async function init() {
+      await carregarServidores();
+      await carregarEstabs();
     })();
 
     campoUsuario.addEventListener('keydown', async (ev) => {
@@ -184,7 +232,8 @@
         const payload = {
           matricula: soDigitos(campoUsuario.value),
           senha: campoSenha.value,
-          cnpj: selEstab.value || ''
+          cnpj: selEstab.value || '',
+          serverId: serverIdAtual()
         };
         const resp = await fetch('/api/auth/login', {
           method: 'POST',
@@ -202,6 +251,7 @@
           selEstab.focus();
           return;
         }
+        if (payload.serverId) localStorage.setItem(STORAGE_SRV, payload.serverId);
         const next = new URLSearchParams(location.search).get('next') || '/';
         location.href = next.startsWith('/') ? next : '/';
       } catch (e) {

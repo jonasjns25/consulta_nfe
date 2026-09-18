@@ -228,6 +228,7 @@ function caminhoPublico(req) {
     if (p === '/login.html' || p === '/logo-lumi.png' || p === '/favicon.ico' || p === '/favicon.png') return true;
     if (req.method === 'GET' && p === '/api/auth/estabelecimentos') return true;
     if (req.method === 'GET' && p === '/api/auth/usuario') return true;
+    if (req.method === 'GET' && p === '/api/auth/servidores') return true;
     if (req.method === 'POST' && p === '/api/auth/login') return true;
     if (req.method === 'POST' && p === '/api/auth/logout') return true;
     return false;
@@ -313,7 +314,49 @@ function selfCheck() {
 }
 selfCheck();
 
-function registerAuthRoutes(app, { getPool }) {
+function payloadSessao(user) {
+    return {
+        matricula: user.matricula,
+        nome: user.nome,
+        cnpj: user.cnpj,
+        fantasia: user.fantasia,
+        admin: Boolean(user.admin),
+        todasLojas: Boolean(user.todasLojas),
+        serverId: user.serverId || '',
+    };
+}
+
+function gravarSessao(res, user) {
+    const hours = sessionHours();
+    const token = jwt.sign(payloadSessao(user), jwtSecret(), { expiresIn: `${hours}h` });
+    setSessionCookie(res, token, hours);
+    return hours;
+}
+
+function atualizarServidorSessao(req, res, serverId) {
+    const user = lerUsuario(req);
+    if (!user) return false;
+    gravarSessao(res, { ...user, serverId });
+    return true;
+}
+
+function registerAuthRoutes(app, opts) {
+    const getPool = opts.getPool;
+    const obterServidor = opts.obterServidor;
+    const bindServer = opts.bindServer;
+    const listarServidores = opts.listarServidores;
+    const onServidorEscolhido = opts.onServidorEscolhido;
+
+    function servidorDoPedido(req) {
+        const sid = String((req.body && req.body.serverId) || (req.query && req.query.serverId) || '').trim();
+        if (typeof obterServidor === 'function') return obterServidor(sid || null);
+        try {
+            return { id: sid, name: sid, pool: sid ? getPool(sid) : getPool() };
+        } catch (_e) {
+            return null;
+        }
+    }
+
     const autorizadas = matriculasAlteracao();
     console.log(autorizadas.length
         ? `[INFO] NFE_ALTERAR_MATRICULAS ativo: só ${autorizadas.join(', ')} veem Manutenção XML, Autorizar recepção XML e Aplicar Ações em Massa.`
@@ -323,11 +366,24 @@ function registerAuthRoutes(app, { getPool }) {
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
         res.sendFile(path.join(__dirname, 'login.html'));
     });
+    app.get('/favicon.png', (_req, res) => res.sendFile(path.join(__dirname, 'favicon.png')));
+    app.get('/logo-lumi.png', (_req, res) => res.sendFile(path.join(__dirname, 'logo-lumi.png')));
 
-    app.get('/api/auth/estabelecimentos', async (_req, res) => {
+    app.get('/api/auth/servidores', (_req, res) => {
+        const lista = typeof listarServidores === 'function' ? listarServidores() : [];
+        const padrao = typeof obterServidor === 'function' ? obterServidor(null) : null;
+        return res.json({
+            servidores: lista,
+            atual: padrao ? padrao.id : ''
+        });
+    });
+
+    app.get('/api/auth/estabelecimentos', async (req, res) => {
         try {
-            const lista = await listarEstabelecimentos(getPool());
-            return res.json({ estabelecimentos: lista });
+            const servidor = servidorDoPedido(req);
+            if (!servidor) return res.status(400).json({ erro: 'Servidor inválido.', estabelecimentos: [] });
+            const lista = await listarEstabelecimentos(servidor.pool);
+            return res.json({ estabelecimentos: lista, serverId: servidor.id });
         } catch (error) {
             console.error('[AUTH estab]', error?.message || error);
             return res.status(503).json({ erro: 'Não foi possível listar os estabelecimentos.', estabelecimentos: [] });
@@ -336,7 +392,9 @@ function registerAuthRoutes(app, { getPool }) {
 
     app.get('/api/auth/usuario', async (req, res) => {
         try {
-            const func = await buscarFuncionario(getPool(), req.query?.matricula || '');
+            const servidor = servidorDoPedido(req);
+            if (!servidor) return res.json({ nome: '' });
+            const func = await buscarFuncionario(servidor.pool, req.query?.matricula || '');
             if (!func) return res.json({ nome: '' });
             return res.json({ nome: func.NOME || func.APELIDO || '' });
         } catch (error) {
@@ -355,11 +413,17 @@ function registerAuthRoutes(app, { getPool }) {
         if (!senha || senha.length > 10) {
             return res.status(400).json({ erro: 'Informe a senha (máximo 10 caracteres).' });
         }
+        const servidor = servidorDoPedido(req);
+        if (!servidor) {
+            return res.status(400).json({ erro: 'Selecione um servidor válido.' });
+        }
         try {
-            const pool = getPool();
+            const pool = servidor.pool;
             const func = await buscarFuncionario(pool, req.body?.matricula || '');
             if (!func) {
-                return res.status(401).json({ erro: 'Usuário ou senha inválida.' });
+                return res.status(401).json({
+                    erro: `Usuário não encontrado no servidor "${servidor.name}". Confira o servidor selecionado.`,
+                });
             }
             const cnpjVinculo = onlyDigits(func.CNPJ);
             const ok = await verifyFuncionaPassword(pool, {
@@ -385,6 +449,7 @@ function registerAuthRoutes(app, { getPool }) {
                         ok: false,
                         precisaEstab: true,
                         estabelecimentos,
+                        serverId: servidor.id,
                     });
                 } else {
                     const [lojasAdmin] = await pool.query(
@@ -419,7 +484,6 @@ function registerAuthRoutes(app, { getPool }) {
                 const loja = (lojas && lojas[0]) || { CNPJ: cnpjSessao };
                 fantasia = loja.FANTASIA || loja.RAZAO || cnpjSessao;
             }
-            const hours = sessionHours();
             const user = {
                 matricula: func.MATRICULA_DV,
                 nome: func.NOME || func.APELIDO || func.MATRICULA_DV,
@@ -427,9 +491,10 @@ function registerAuthRoutes(app, { getPool }) {
                 fantasia,
                 admin,
                 todasLojas,
+                serverId: servidor.id,
             };
-            const token = jwt.sign(user, jwtSecret(), { expiresIn: `${hours}h` });
-            setSessionCookie(res, token, hours);
+            if (typeof onServidorEscolhido === 'function') onServidorEscolhido(servidor.id);
+            gravarSessao(res, user);
             return res.json({ ok: true, user });
         } catch (error) {
             console.error('[AUTH login]', error?.message || error);
@@ -452,6 +517,7 @@ function registerAuthRoutes(app, { getPool }) {
             fantasia: user.fantasia,
             admin: Boolean(user.admin),
             todasLojas: Boolean(user.todasLojas),
+            serverId: user.serverId || '',
             podeAlterar: podeAlterarNfe(user),
         });
     });
@@ -461,6 +527,7 @@ function registerAuthRoutes(app, { getPool }) {
         const user = lerUsuario(req);
         if (user) {
             req.usuario = user;
+            if (typeof bindServer === 'function') return bindServer(user.serverId, next);
             return next();
         }
         if (querHtml(req)) return res.redirect('/login.html');
@@ -483,4 +550,5 @@ module.exports = {
     normalizeMatriculaInput,
     cnpjEfetivo,
     cnpjDaSessao,
+    atualizarServidorSessao,
 };

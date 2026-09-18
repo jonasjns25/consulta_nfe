@@ -3,6 +3,7 @@ const mysql = require('mysql2/promise');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
+const { AsyncLocalStorage } = require('node:async_hooks');
 const {
     consultarXmlPorChave,
     consultarXmlCtePorChave,
@@ -15,7 +16,7 @@ const {
 const { extrairDadosNFe } = require('./nfe-parser');
 const registerConfNfRoutes = require('./confnf-api');
 const registerMixFornecedorRoutes = require('./mix-fornecedor-api');
-const { registerAuthRoutes, cnpjEfetivo, cnpjDaSessao } = require('./auth-erp');
+const { registerAuthRoutes, cnpjEfetivo, cnpjDaSessao, atualizarServidorSessao } = require('./auth-erp');
 let xml2js;
 try {
     xml2js = require('xml2js');
@@ -48,6 +49,7 @@ const UPDATE_TOKEN_ADMIN = process.env.UPDATE_ADMIN_TOKEN || '';
 const serverPools = {};
 const serverConfigs = {};
 let currentServer = null;
+const sacAls = new AsyncLocalStorage();
 
 // Função para carregar configurações dos servidores do .env
 function carregarServidores() {
@@ -191,21 +193,49 @@ function normalizarCamposItemcompParaFront(row) {
     }
 }
 
-// Função para obter o pool atual ou um pool específico
-function getPool(serverId = null) {
-    const id = serverId || currentServer;
-    if (!serverPools[id]) {
-        throw new Error(`Servidor não encontrado: ${id}`);
+function obterServidor(serverId) {
+    if (serverId != null && String(serverId).trim() !== '') {
+        const id = String(serverId).trim();
+        if (!serverPools[id]) return null;
+        return { id, name: serverConfigs[id].name, pool: serverPools[id] };
     }
-    return serverPools[id];
+    const store = sacAls.getStore();
+    const id = (store && store.serverId) || currentServer;
+    if (!id || !serverPools[id]) return null;
+    return { id, name: serverConfigs[id].name, pool: serverPools[id] };
 }
 
-// Variável de compatibilidade (para código existente que usa 'pool' diretamente)
-let pool;
+function getPool(serverId = null) {
+    const s = obterServidor(serverId);
+    if (!s) throw new Error(`Servidor não encontrado: ${serverId || currentServer}`);
+    return s.pool;
+}
+
+function listarServidoresPublico() {
+    return Object.keys(serverConfigs).map((id) => ({
+        id,
+        name: serverConfigs[id].name
+    }));
+}
+
+function bindServer(serverId, next) {
+    if (serverId && serverPools[serverId]) {
+        return sacAls.run({ serverId }, next);
+    }
+    return next();
+}
 
 // Carregar servidores ao iniciar
 carregarServidores();
-pool = getPool();
+
+// Pool segue o servidor da sessão (JWT) nesta requisição; senão o DEFAULT_SERVER.
+const pool = new Proxy({}, {
+    get(_t, prop) {
+        const p = getPool();
+        const val = p[prop];
+        return typeof val === 'function' ? val.bind(p) : val;
+    }
+});
 
 const CONFN_DB_NAME = process.env.CONFNF_DB_NAME || 'confnf';
 let confnfPool = null;
@@ -232,13 +262,21 @@ let confnfPool = null;
 }
 
 function getConfNfPool() {
-    return confnfPool || pool;
+    return confnfPool || getPool();
 }
 
-registerAuthRoutes(app, { getPool: () => pool });
+registerAuthRoutes(app, {
+    getPool,
+    obterServidor,
+    bindServer,
+    listarServidores: listarServidoresPublico,
+    onServidorEscolhido: (id) => {
+        if (id && serverPools[id]) currentServer = id;
+    }
+});
 
 registerConfNfRoutes(app, {
-    getPool: () => pool,
+    getPool,
     getConfNfPool,
     xml2js
 });
@@ -322,7 +360,7 @@ const FILTROS_XML_PRESENTE = [
 ];
 
 registerMixFornecedorRoutes(app, {
-    getPool: () => pool,
+    getPool,
     xml2js,
     dataEmissaoExpr: DATA_EMISSAO_EXPR
 });
@@ -775,20 +813,26 @@ app.get('/usuarios', async (req, res) => {
 // ENDPOINTS DE GERENCIAMENTO DE SERVIDORES
 // ============================================
 
+function servidorDaSessao(req) {
+    const sid = (req.usuario && req.usuario.serverId) || currentServer;
+    return sid && serverConfigs[sid] ? sid : currentServer;
+}
+
 // Listar servidores disponíveis
 app.get('/servidores', async (req, res) => {
     try {
+        const atual = servidorDaSessao(req);
         const servidores = Object.keys(serverConfigs).map(id => ({
             id,
             name: serverConfigs[id].name,
             host: serverConfigs[id].host,
             database: serverConfigs[id].database,
-            atual: id === currentServer
+            atual: id === atual
         }));
         
         res.json({
             servidores,
-            atual: currentServer
+            atual
         });
     } catch (error) {
         console.error('Erro ao listar servidores:', error);
@@ -799,9 +843,10 @@ app.get('/servidores', async (req, res) => {
 // Obter servidor atual
 app.get('/servidor-atual', async (req, res) => {
     try {
-        const config = serverConfigs[currentServer];
+        const atual = servidorDaSessao(req);
+        const config = serverConfigs[atual];
         res.json({
-            id: currentServer,
+            id: atual,
             name: config.name,
             host: config.host,
             database: config.database
@@ -835,9 +880,8 @@ app.post('/trocar-servidor', async (req, res) => {
             });
         }
         
-        // Trocar o servidor atual
         currentServer = serverId;
-        pool = getPool(serverId);
+        atualizarServidorSessao(req, res, serverId);
         
         const config = serverConfigs[serverId];
         console.log(`[INFO] Servidor alterado para: ${config.name} (${serverId})`);
