@@ -156,6 +156,13 @@
       try {
         const resp = await fetch('/api/auth/servidores');
         const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          throw new Error(data.erro || ('HTTP ' + resp.status));
+        }
+        if (data.pularLogin) {
+          location.replace('/');
+          return;
+        }
         const lista = data.servidores || [];
         const salvo = localStorage.getItem(STORAGE_SRV) || '';
         selServidor.innerHTML = lista.map((s) =>

@@ -82,6 +82,25 @@ function softlumiPasswordMatches(plain, stored) {
     return true;
 }
 
+function pularLogin() {
+    const v = String(process.env.NFE_PULAR_LOGIN || '').trim().toLowerCase();
+    return v === '1' || v === 'true' || v === 'sim' || v === 'yes';
+}
+
+function usuarioPularLogin(obterServidor) {
+    const padrao = typeof obterServidor === 'function' ? obterServidor(null) : null;
+    return {
+        matricula: '',
+        nome: 'Acesso local',
+        cnpj: '',
+        fantasia: '',
+        admin: true,
+        todasLojas: true,
+        serverId: padrao ? padrao.id : '',
+        pularLogin: true,
+    };
+}
+
 function jwtSecret() {
     return process.env.AUTH_JWT_SECRET || process.env.CONFNF_JWT_SECRET || 'lumi-nfe-auth';
 }
@@ -223,37 +242,48 @@ async function listarEstabelecimentos(pool) {
     })).filter((r) => r.cnpj.length === 14);
 }
 
+function pathRequisicao(req) {
+    let bruto = String(req.originalUrl || req.url || req.path || '').split('?')[0];
+    if (!bruto) return '/';
+    if (!bruto.startsWith('/')) bruto = `/${bruto}`;
+    if (bruto.length > 1 && bruto.endsWith('/')) bruto = bruto.slice(0, -1);
+    return bruto;
+}
+
 function caminhoPublico(req) {
-    const p = String(req.path || '').split('?')[0];
+    const p = pathRequisicao(req);
     if (p === '/login.html' || p === '/logo-lumi.png' || p === '/favicon.ico' || p === '/favicon.png') return true;
     if (req.method === 'GET' && p === '/api/auth/estabelecimentos') return true;
     if (req.method === 'GET' && p === '/api/auth/usuario') return true;
     if (req.method === 'GET' && p === '/api/auth/servidores') return true;
+    if (req.method === 'GET' && p === '/api/auth/me') return true;
     if (req.method === 'POST' && p === '/api/auth/login') return true;
     if (req.method === 'POST' && p === '/api/auth/logout') return true;
+    if (req.method === 'GET' && p === '/admin/verificar-atualizacao') return true;
+    if (req.method === 'POST' && p === '/admin/atualizar') return true;
     return false;
 }
 
 function querHtml(req) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return false;
-    const p = String(req.path || '');
+    const p = pathRequisicao(req);
     if (p === '/' || p.endsWith('.html')) return true;
     return String(req.headers.accept || '').includes('text/html');
 }
 
-async function verifyFuncionaPassword(pool, opts) {
+async function senhaConfereNaLinhaFunciona(pool, row, opts) {
     const { matriculaBase, matriculaComDv, cnpj, plain } = opts;
-    if (!plain) return false;
-    const [rows] = await pool.query(
-        'SELECT SENHA, MD5_PANAMAH FROM funciona WHERE MATRICULA = ? AND CNPJ = ? LIMIT 1',
-        [matriculaBase, cnpj]
-    );
-    const row = rows && rows[0];
-    if (!row) return false;
+    if (!row || !plain) return false;
+    const cnpjLinha = onlyDigits(row.CNPJ || cnpj);
 
-    const senhaBuf = senhaToBuffer(row.SENHA);
+    const senhaRaw = row.SENHA;
+    const senhaBuf = senhaToBuffer(senhaRaw);
     if (senhaBuf && senhaBuf.length === 10) {
-        return softlumiPasswordMatches(plain, senhaBuf);
+        if (softlumiPasswordMatches(plain, senhaBuf)) return true;
+    }
+    const senhaTxt = senhaRaw != null ? String(senhaRaw).trim() : '';
+    if (/^[0-9A-Fa-f]{20}$/.test(senhaTxt)) {
+        if (softlumiPasswordMatches(plain, Buffer.from(senhaTxt, 'hex'))) return true;
     }
 
     const md5 = String(row.MD5_PANAMAH || '').trim().toUpperCase();
@@ -262,32 +292,64 @@ async function verifyFuncionaPassword(pool, opts) {
         if (dig === md5) return true;
     }
 
-    const senhaLatin = senhaBuf ? senhaBuf.toString('latin1') : '';
+    const senhaLatin = senhaBuf ? senhaBuf.toString('latin1') : senhaTxt;
     if (senhaLatin === plain || senhaLatin.trim() === plain) return true;
 
     const encodeKey = process.env.AUTH_ENCODE_KEY || 'papafila';
     const padded = plain.padEnd(10, ' ').slice(0, 10);
-    const keys = [...new Set([encodeKey, matriculaBase, matriculaComDv, cnpj, 'lumi', 'LUMI', 'sac', 'SAC', 'softlumi', 'SoftLumi'].filter(Boolean))];
+    const keys = [...new Set([
+        encodeKey, matriculaBase, matriculaComDv, cnpjLinha, cnpj,
+        'lumi', 'LUMI', 'sac', 'SAC', 'softlumi', 'SoftLumi', 'papafila',
+    ].filter(Boolean))];
     for (const key of keys) {
-        const [enc] = await pool.query(
-            `SELECT 1 AS ok FROM funciona
-             WHERE MATRICULA = ? AND CNPJ = ?
-               AND (SENHA = ENCODE(?, ?) OR SENHA = ENCODE(?, ?))
-             LIMIT 1`,
-            [matriculaBase, cnpj, plain, key, padded, key]
-        );
-        if (enc && enc.length) return true;
-        const [dec] = await pool.query(
-            `SELECT 1 AS ok FROM funciona
-             WHERE MATRICULA = ? AND CNPJ = ?
-               AND (
-                 TRIM(CAST(DECODE(SENHA, ?) AS CHAR CHARACTER SET latin1)) = ?
-                 OR CAST(DECODE(SENHA, ?) AS CHAR CHARACTER SET latin1) = ?
-               )
-             LIMIT 1`,
-            [matriculaBase, cnpj, key, plain, key, plain]
-        );
-        if (dec && dec.length) return true;
+        try {
+            const [enc] = await pool.query(
+                `SELECT 1 AS ok FROM funciona
+                 WHERE MATRICULA = ? AND CNPJ = ?
+                   AND (SENHA = ENCODE(?, ?) OR SENHA = ENCODE(?, ?))
+                 LIMIT 1`,
+                [matriculaBase, cnpjLinha, plain, key, padded, key]
+            );
+            if (enc && enc.length) return true;
+            const [dec] = await pool.query(
+                `SELECT 1 AS ok FROM funciona
+                 WHERE MATRICULA = ? AND CNPJ = ?
+                   AND (
+                     TRIM(CAST(DECODE(SENHA, ?) AS CHAR CHARACTER SET latin1)) = ?
+                     OR CAST(DECODE(SENHA, ?) AS CHAR CHARACTER SET latin1) = ?
+                   )
+                 LIMIT 1`,
+                [matriculaBase, cnpjLinha, key, plain, key, plain]
+            );
+            if (dec && dec.length) return true;
+        } catch (_e) { /* ENCODE/DECODE indisponível */ }
+    }
+    return false;
+}
+
+async function verifyFuncionaPassword(pool, opts) {
+    const { matriculaBase, matriculaComDv, cnpj, plain } = opts;
+    if (!plain || !matriculaBase) return false;
+
+    const [rows] = await pool.query(
+        `SELECT TRIM(MATRICULA) AS MATRICULA, CNPJ, SENHA, MD5_PANAMAH
+         FROM funciona
+         WHERE TRIM(MATRICULA) = ?
+            OR LPAD(TRIM(MATRICULA), 6, '0') = ?
+            OR CAST(TRIM(MATRICULA) AS UNSIGNED) = CAST(? AS UNSIGNED)
+         ORDER BY CASE WHEN CNPJ = ? THEN 0 WHEN ? <> '' AND CNPJ = ? THEN 1 ELSE 2 END
+         LIMIT 12`,
+        [matriculaBase, matriculaBase, matriculaBase, cnpj || '', cnpj || '', cnpj || '']
+    );
+    for (const row of rows || []) {
+        if (await senhaConfereNaLinhaFunciona(pool, row, {
+            matriculaBase: String(row.MATRICULA || matriculaBase).trim(),
+            matriculaComDv,
+            cnpj: onlyDigits(row.CNPJ) || cnpj,
+            plain,
+        })) {
+            return true;
+        }
     }
     return false;
 }
@@ -307,6 +369,16 @@ function selfCheck() {
         process.env.NFE_ALTERAR_MATRICULAS = '558';
         if (!podeAlterarNfe({ matricula: '0000558' })) throw new Error('alterar: 558 vs 0000558.');
         if (podeAlterarNfe({ matricula: '0000999' })) throw new Error('alterar: 999 deve bloquear.');
+        const prevSkip = process.env.NFE_PULAR_LOGIN;
+        try {
+            process.env.NFE_PULAR_LOGIN = '';
+            if (pularLogin()) throw new Error('pular login: vazio deve desligar.');
+            process.env.NFE_PULAR_LOGIN = '1';
+            if (!pularLogin()) throw new Error('pular login: 1 deve ligar.');
+        } finally {
+            if (prevSkip == null) delete process.env.NFE_PULAR_LOGIN;
+            else process.env.NFE_PULAR_LOGIN = prevSkip;
+        }
     } finally {
         if (prev == null) delete process.env.NFE_ALTERAR_MATRICULAS;
         else process.env.NFE_ALTERAR_MATRICULAS = prev;
@@ -361,8 +433,12 @@ function registerAuthRoutes(app, opts) {
     console.log(autorizadas.length
         ? `[INFO] NFE_ALTERAR_MATRICULAS ativo: só ${autorizadas.join(', ')} veem Manutenção XML, Autorizar recepção XML e Aplicar Ações em Massa.`
         : '[INFO] NFE_ALTERAR_MATRICULAS vazio ou comentado no .env: todos veem Manutenção XML, Autorizar recepção XML e Aplicar Ações em Massa.');
+    console.log(pularLogin()
+        ? '[INFO] NFE_PULAR_LOGIN ativo: sistema sem senha (usa DEFAULT_SERVER).'
+        : '[INFO] NFE_PULAR_LOGIN desligado: login obrigatório.');
 
     app.get('/login.html', (_req, res) => {
+        if (pularLogin()) return res.redirect('/');
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
         res.sendFile(path.join(__dirname, 'login.html'));
     });
@@ -374,7 +450,8 @@ function registerAuthRoutes(app, opts) {
         const padrao = typeof obterServidor === 'function' ? obterServidor(null) : null;
         return res.json({
             servidores: lista,
-            atual: padrao ? padrao.id : ''
+            atual: padrao ? padrao.id : '',
+            pularLogin: pularLogin(),
         });
     });
 
@@ -508,7 +585,8 @@ function registerAuthRoutes(app, opts) {
     });
 
     app.get('/api/auth/me', (req, res) => {
-        const user = lerUsuario(req);
+        const logado = lerUsuario(req);
+        const user = logado || (pularLogin() ? usuarioPularLogin(obterServidor) : null);
         if (!user) return res.status(401).json({ erro: 'Não autenticado.' });
         return res.json({
             matricula: user.matricula,
@@ -519,12 +597,19 @@ function registerAuthRoutes(app, opts) {
             todasLojas: Boolean(user.todasLojas),
             serverId: user.serverId || '',
             podeAlterar: podeAlterarNfe(user),
+            pularLogin: Boolean(user.pularLogin),
         });
     });
+}
+
+function installAuthGate(app, opts) {
+    const obterServidor = opts.obterServidor;
+    const bindServer = opts.bindServer;
 
     app.use((req, res, next) => {
+        if (res.headersSent) return next();
         if (caminhoPublico(req)) return next();
-        const user = lerUsuario(req);
+        const user = lerUsuario(req) || (pularLogin() ? usuarioPularLogin(obterServidor) : null);
         if (user) {
             req.usuario = user;
             if (typeof bindServer === 'function') return bindServer(user.serverId, next);
@@ -536,7 +621,7 @@ function registerAuthRoutes(app, opts) {
 
     app.use((req, res, next) => {
         if (req.method !== 'POST') return next();
-        const p = String(req.path || '');
+        const p = pathRequisicao(req);
         if (!(p.startsWith('/xml-salvar/') || p.startsWith('/itemcomp/'))) return next();
         if (podeAlterarNfe(req.usuario)) return next();
         return res.status(403).json({ erro: 'Sem permissão para alterar.' });
@@ -545,6 +630,7 @@ function registerAuthRoutes(app, opts) {
 
 module.exports = {
     registerAuthRoutes,
+    installAuthGate,
     encodeSoftlumiPassword,
     softlumiPasswordMatches,
     normalizeMatriculaInput,

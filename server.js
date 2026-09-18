@@ -16,7 +16,13 @@ const {
 const { extrairDadosNFe } = require('./nfe-parser');
 const registerConfNfRoutes = require('./confnf-api');
 const registerMixFornecedorRoutes = require('./mix-fornecedor-api');
-const { registerAuthRoutes, cnpjEfetivo, cnpjDaSessao, atualizarServidorSessao } = require('./auth-erp');
+const {
+    registerAuthRoutes,
+    installAuthGate,
+    cnpjEfetivo,
+    cnpjDaSessao,
+    atualizarServidorSessao,
+} = require('./auth-erp');
 let xml2js;
 try {
     xml2js = require('xml2js');
@@ -228,6 +234,32 @@ function bindServer(serverId, next) {
 // Carregar servidores ao iniciar
 carregarServidores();
 
+/** Login/favicon/servidores respondem antes do gate de sessão (primeira camada da pilha). */
+app.use((req, res, next) => {
+    let p = String(req.originalUrl || req.url || req.path || '').split('?')[0];
+    if (!p.startsWith('/')) p = `/${p}`;
+    if (p.length > 1 && p.endsWith('/')) p = p.slice(0, -1);
+    if (req.method === 'GET' && (p === '/favicon.png' || p === '/favicon.ico')) {
+        return res.sendFile(path.join(__dirname, 'favicon.png'));
+    }
+    if (req.method === 'GET' && p === '/logo-lumi.png') {
+        return res.sendFile(path.join(__dirname, 'logo-lumi.png'));
+    }
+    if (req.method === 'GET' && p === '/api/auth/servidores') {
+        const lista = Object.keys(serverConfigs).map((id) => ({
+            id,
+            name: serverConfigs[id].name,
+        }));
+        const v = String(process.env.NFE_PULAR_LOGIN || '').trim().toLowerCase();
+        return res.json({
+            servidores: lista,
+            atual: currentServer || '',
+            pularLogin: v === '1' || v === 'true' || v === 'sim' || v === 'yes',
+        });
+    }
+    return next();
+});
+
 // Pool segue o servidor da sessão (JWT) nesta requisição; senão o DEFAULT_SERVER.
 const pool = new Proxy({}, {
     get(_t, prop) {
@@ -265,15 +297,16 @@ function getConfNfPool() {
     return confnfPool || getPool();
 }
 
-registerAuthRoutes(app, {
+const authOpts = {
     getPool,
     obterServidor,
     bindServer,
     listarServidores: listarServidoresPublico,
     onServidorEscolhido: (id) => {
         if (id && serverPools[id]) currentServer = id;
-    }
-});
+    },
+};
+registerAuthRoutes(app, authOpts);
 
 registerConfNfRoutes(app, {
     getPool,
@@ -378,6 +411,16 @@ function exprXmlDestDocumento(campoXml = 'n.XML') {
 
 const XML_DEST_DOCUMENTO_EXPR = exprXmlDestDocumento('n.XML');
 
+/** CNPJ/CPF só dígitos em expressão SQL. */
+function sqlSoDigitos(expr) {
+    return `REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(${expr}, ''), '.', ''), '/', ''), '-', ''), ' ', '')`;
+}
+
+/** Estabelecimento da NF: compra.ESTAB ou destinatário no XML. */
+const ESTAB_NF_DOC_SQL = `COALESCE(NULLIF(TRIM(COALESCE(c.ESTAB, '')), ''), ${XML_DEST_DOCUMENTO_EXPR})`;
+const ESTAB_NF_DIGITS_SQL = sqlSoDigitos(ESTAB_NF_DOC_SQL);
+const ESTAB_JOIN_E_ON = `${sqlSoDigitos('e.CNPJ')} = ${ESTAB_NF_DIGITS_SQL}`;
+
 function normalizarData(data) {
     if (!data) return null;
     if (/\d{4}-\d{2}-\d{2}/.test(data)) {
@@ -474,7 +517,7 @@ app.get('/status-compra-contagem', async (req, res) => {
     // Filtro por estabelecimento (igual à rota /consulta, usando CNPJ da tabela ESTAB associado)
     const estabelecimentoFiltrar = cnpjEfetivo(req, estabelecimento);
     if (estabelecimentoFiltrar) {
-        filtros.push("REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(e.CNPJ,''), '.', ''), '/', ''), '-', ''), ' ', '') = ?");
+        filtros.push(`${ESTAB_NF_DIGITS_SQL} = ?`);
         valores.push(estabelecimentoFiltrar);
     }
 
@@ -487,10 +530,7 @@ app.get('/status-compra-contagem', async (req, res) => {
             SELECT COUNT(*) AS quantidade
             FROM nfe_xml n
             LEFT JOIN compra c ON c.CHAVE_NFE = n.CHAVE
-            LEFT JOIN ESTAB e ON e.CNPJ = COALESCE(
-                NULLIF(COALESCE(c.ESTAB, ''), ''),
-                ${XML_DEST_DOCUMENTO_EXPR}
-            )
+            LEFT JOIN ESTAB e ON ${ESTAB_JOIN_E_ON}
             WHERE ${baseWhere}
         `, valores);
         
@@ -499,10 +539,7 @@ app.get('/status-compra-contagem', async (req, res) => {
             SELECT COUNT(*) AS quantidade
             FROM nfe_xml n
             LEFT JOIN compra c ON c.CHAVE_NFE = n.CHAVE
-            LEFT JOIN ESTAB e ON e.CNPJ = COALESCE(
-                NULLIF(COALESCE(c.ESTAB, ''), ''),
-                ${XML_DEST_DOCUMENTO_EXPR}
-            )
+            LEFT JOIN ESTAB e ON ${ESTAB_JOIN_E_ON}
             WHERE ${baseWhere} AND c.CHAVE_NFE IS NULL
         `, valores);
         
@@ -511,10 +548,7 @@ app.get('/status-compra-contagem', async (req, res) => {
             SELECT COUNT(*) AS quantidade
             FROM nfe_xml n
             INNER JOIN compra c ON c.CHAVE_NFE = n.CHAVE AND CAST(c.STATUS AS UNSIGNED) = 0
-            LEFT JOIN ESTAB e ON e.CNPJ = COALESCE(
-                NULLIF(COALESCE(c.ESTAB, ''), ''),
-                ${XML_DEST_DOCUMENTO_EXPR}
-            )
+            LEFT JOIN ESTAB e ON ${ESTAB_JOIN_E_ON}
             WHERE ${baseWhere}
         `, valores);
         
@@ -523,10 +557,7 @@ app.get('/status-compra-contagem', async (req, res) => {
             SELECT COUNT(*) AS quantidade
             FROM nfe_xml n
             INNER JOIN compra c ON c.CHAVE_NFE = n.CHAVE AND CAST(c.STATUS AS UNSIGNED) = 1
-            LEFT JOIN ESTAB e ON e.CNPJ = COALESCE(
-                NULLIF(COALESCE(c.ESTAB, ''), ''),
-                ${XML_DEST_DOCUMENTO_EXPR}
-            )
+            LEFT JOIN ESTAB e ON ${ESTAB_JOIN_E_ON}
             WHERE ${baseWhere}
         `, valores);
         
@@ -535,10 +566,7 @@ app.get('/status-compra-contagem', async (req, res) => {
             SELECT COUNT(*) AS quantidade
             FROM nfe_xml n
             INNER JOIN compra c ON c.CHAVE_NFE = n.CHAVE AND CAST(c.STATUS AS UNSIGNED) = 2
-            LEFT JOIN ESTAB e ON e.CNPJ = COALESCE(
-                NULLIF(COALESCE(c.ESTAB, ''), ''),
-                ${XML_DEST_DOCUMENTO_EXPR}
-            )
+            LEFT JOIN ESTAB e ON ${ESTAB_JOIN_E_ON}
             WHERE ${baseWhere}
         `, valores);
         
@@ -547,10 +575,7 @@ app.get('/status-compra-contagem', async (req, res) => {
             SELECT COUNT(*) AS quantidade
             FROM nfe_xml n
             INNER JOIN compra c ON c.CHAVE_NFE = n.CHAVE AND CAST(c.STATUS AS UNSIGNED) = 3
-            LEFT JOIN ESTAB e ON e.CNPJ = COALESCE(
-                NULLIF(COALESCE(c.ESTAB, ''), ''),
-                ${XML_DEST_DOCUMENTO_EXPR}
-            )
+            LEFT JOIN ESTAB e ON ${ESTAB_JOIN_E_ON}
             WHERE ${baseWhere}
         `, valores);
         
@@ -559,10 +584,7 @@ app.get('/status-compra-contagem', async (req, res) => {
             SELECT COUNT(*) AS quantidade
             FROM nfe_xml n
             INNER JOIN compra c ON c.CHAVE_NFE = n.CHAVE AND CAST(c.STATUS AS UNSIGNED) = 4
-            LEFT JOIN ESTAB e ON e.CNPJ = COALESCE(
-                NULLIF(COALESCE(c.ESTAB, ''), ''),
-                ${XML_DEST_DOCUMENTO_EXPR}
-            )
+            LEFT JOIN ESTAB e ON ${ESTAB_JOIN_E_ON}
             WHERE ${baseWhere}
         `, valores);
         
@@ -640,7 +662,7 @@ app.get('/consulta', async (req, res) => {
     // Filtro por estabelecimento (usando sempre o CNPJ da tabela ESTAB associado à NF)
     const estabelecimentoNorm = cnpjEfetivo(req, estabelecimento);
     if (estabelecimentoNorm) {
-        filtros.push("REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(e.CNPJ,''), '.', ''), '/', ''), '-', ''), ' ', '') = ?");
+        filtros.push(`${ESTAB_NF_DIGITS_SQL} = ?`);
         valores.push(estabelecimentoNorm);
     }
 
@@ -688,10 +710,7 @@ app.get('/consulta', async (req, res) => {
         FROM nfe_xml n
         LEFT JOIN compra c ON c.CHAVE_NFE = n.CHAVE
         LEFT JOIN funciona f ON f.MATRICULA = c.USUARIO
-        LEFT JOIN ESTAB e ON e.CNPJ = COALESCE(
-            NULLIF(COALESCE(c.ESTAB, ''), ''),
-            ${XML_DEST_DOCUMENTO_EXPR}
-        )
+        LEFT JOIN ESTAB e ON ${ESTAB_JOIN_E_ON}
         WHERE ${filtros.join(' AND ')}
         ORDER BY ${DATA_EMISSAO_EXPR} DESC, n.IDNFE_XML DESC
     `;
@@ -773,11 +792,6 @@ app.post('/api/nfe/obs', async (req, res) => {
         console.error('[NFE obs gravar]', error?.message || error);
         res.status(500).json({ error: 'Falha ao gravar observação.' });
     }
-});
-
-app.get('/login.html', (req, res) => {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-    res.sendFile(path.join(__dirname, 'login.html'));
 });
 
 app.get('/', (req, res) => {
@@ -3750,7 +3764,9 @@ app.post('/admin/atualizar', async (req, res) => {
     }
 });
 
-// Middleware estático deve vir depois das rotas de API
+installAuthGate(app, authOpts);
+
+// Middleware estático deve vir depois das rotas de API e do gate de sessão
 app.use(express.static(__dirname, {
     setHeaders: (res, filePath) => {
         if (String(filePath).toLowerCase().endsWith('.html')) {

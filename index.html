@@ -2364,6 +2364,18 @@
       return String(state.usuario.cnpj || '').replace(/\D/g, '');
     }
 
+    /** CNPJ enviado na consulta: administrativo usa o select; demais usuários usam a loja da sessão. */
+    function cnpjEstabelecimentoFiltro() {
+      const raw = estabelecimentoSelect
+        ? String(estabelecimentoSelect.value ?? '').trim()
+        : '';
+      const doSelect = raw.replace(/\D/g, '');
+      if (state.usuario?.todasLojas) return doSelect;
+      const sess = cnpjSessaoAtual();
+      if (sess) return sess;
+      return doSelect;
+    }
+
     function aplicarEscopoLoja() {
       const cnpj = cnpjSessaoAtual();
       if (!estabelecimentoSelect) return;
@@ -2949,7 +2961,6 @@
 
     function obterParametrosConsulta() {
       const formData = new FormData(form);
-      const rawEstab = formData.get('estabelecimento');
       return {
         data_inicial: formData.get('data_inicial'),
         data_final: formData.get('data_final'),
@@ -2959,8 +2970,7 @@
         status: formData.get('status'),
         status_compra: formData.get('status_compra'),
         usuario: (formData.get('usuario') || '').trim(),
-        estabelecimento: cnpjSessaoAtual()
-          || ((rawEstab != null && String(rawEstab).trim() !== '') ? String(rawEstab).trim() : ''),
+        estabelecimento: cnpjEstabelecimentoFiltro(),
         tipo_nf: formData.get('tipo_nf'),
         observacao: (formData.get('observacao') || '').trim()
       };
@@ -3759,7 +3769,7 @@
         estabelecimentoSelect.innerHTML = '<option value="">Administrativo</option>';
         state.estabelecimentos.forEach((e) => {
           const opt = document.createElement('option');
-          opt.value = e.cnpj ?? '';
+          opt.value = String(e.cnpj ?? '').replace(/\D/g, '');
           const cnpjFormatado = formatarDocumento(e.cnpj ?? '');
           const nome = e.nome ?? '';
           if (nome && cnpjFormatado !== '-') {
@@ -4435,6 +4445,9 @@
         }
         const user = await resp.json();
         state.usuario = user;
+        if (user.pularLogin) {
+          document.getElementById('btn-sair')?.setAttribute('hidden', '');
+        }
         aplicarEscopoLoja();
         if (state.filtered.length) atualizarTabela();
         const nome = document.getElementById('auth-nome');
