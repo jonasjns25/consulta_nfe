@@ -644,8 +644,8 @@
     table {
       width: 100%;
       border-collapse: separate;
-      border-spacing: 0 12px;
-      min-width: 720px;
+      border-spacing: 0;
+      min-width: 980px;
       table-layout: fixed;
     }
 
@@ -664,40 +664,53 @@
 
     tbody tr {
       background-color: #fff;
-      box-shadow: 0 10px 20px rgba(34, 34, 34, 0.05);
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      transition: background-color 0.15s ease;
     }
 
     tbody tr.nfe-alt {
-      background: rgba(200, 16, 46, 0.05);
+      background: rgba(200, 16, 46, 0.1);
     }
 
-    tbody tr:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 16px 26px rgba(34, 34, 34, 0.12);
-    }
-
-    tbody tr.nfe-main.tem-extra,
-    tbody tr.nfe-acoes,
-    tbody tr.nfe-obs {
-      transform: none;
-    }
-
-    tbody tr.nfe-main.tem-extra:hover,
-    tbody tr.nfe-main.tem-extra:hover + tr.nfe-acoes,
-    tbody tr.nfe-main.tem-extra:hover + tr.nfe-obs,
-    tbody tr.nfe-main.tem-extra:hover + tr.nfe-acoes + tr.nfe-obs {
-      box-shadow: 0 16px 26px rgba(34, 34, 34, 0.12);
+    tbody tr.nfe-gap,
+    tbody tr.nfe-gap td {
+      background: transparent;
+      height: 10px;
+      padding: 0;
+      border: none;
+      border-radius: 0;
+      line-height: 0;
     }
 
     tbody td:first-child {
-      border-top-left-radius: 18px;
-      border-bottom-left-radius: 18px;
+      border-top-left-radius: 16px;
+      border-bottom-left-radius: 16px;
     }
 
     tbody td:last-child {
-      border-top-right-radius: 18px;
-      border-bottom-right-radius: 18px;
+      border-top-right-radius: 16px;
+      border-bottom-right-radius: 16px;
+    }
+
+    tbody tr.nfe-main td {
+      border-top: 1px solid rgba(200, 16, 46, 0.28);
+    }
+
+    tbody tr.nfe-main td:first-child,
+    tbody tr.nfe-acoes td,
+    tbody tr.nfe-obs td {
+      border-left: 1px solid rgba(200, 16, 46, 0.28);
+    }
+
+    tbody tr.nfe-main td:last-child,
+    tbody tr.nfe-acoes td,
+    tbody tr.nfe-obs td {
+      border-right: 1px solid rgba(200, 16, 46, 0.28);
+    }
+
+    tbody tr.nfe-main:not(.tem-extra) td,
+    tbody tr.nfe-obs td,
+    tbody tr.nfe-acoes:not(:has(+ tr.nfe-obs)) td {
+      border-bottom: 1px solid rgba(200, 16, 46, 0.28);
     }
 
     tbody tr.nfe-main.tem-extra td:first-child {
@@ -712,8 +725,8 @@
     tbody tr.nfe-obs td {
       border-top-left-radius: 0;
       border-top-right-radius: 0;
-      border-bottom-left-radius: 18px;
-      border-bottom-right-radius: 18px;
+      border-bottom-left-radius: 16px;
+      border-bottom-right-radius: 16px;
       padding-top: 0.15rem;
     }
 
@@ -724,19 +737,18 @@
     }
 
     tbody tr.nfe-main.tem-extra td {
-      border-bottom: none;
+      border-bottom: 1px solid rgba(200, 16, 46, 0.1);
       padding-bottom: 0.35rem;
     }
 
-    .col-emissao { width: 8%; }
-    .col-cnpj { width: 18%; white-space: nowrap; }
-    .col-razao { width: 13%; font-size: 0.9rem; }
-    .col-estab { width: 11%; font-size: 0.9rem; }
-    .col-chave { width: 20%; font-size: 0.85rem; }
-    .col-valor { width: 9%; text-align: right; }
-    .col-numero { width: 9%; text-align: right; }
-    .col-usuario { width: 8%; text-align: center; }
-    .col-status { width: 13%; text-align: center; }
+    .col-emissao { width: 7%; }
+    .col-razao { width: 18%; font-size: 0.9rem; }
+    .col-estab { width: 12%; font-size: 0.9rem; }
+    .col-chave { width: 42%; font-size: 0.78rem; }
+    .col-valor { width: 8%; text-align: right; }
+    .col-numero { width: 7%; text-align: right; }
+    .col-usuario { width: 6%; text-align: center; }
+    .col-status { width: 1%; text-align: center; }
 
     th[draggable="true"] {
       cursor: grab;
@@ -908,15 +920,12 @@
 
     .cnpj-cell,
     .chave-cell {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
+      display: flex;
+      flex-direction: row;
       align-items: center;
       gap: 0.35rem;
+      width: max-content;
       max-width: 100%;
-    }
-
-    .chave-cell {
-      align-items: start;
     }
 
     .cnpj-cell .badge {
@@ -924,16 +933,23 @@
       font-size: 0.78rem;
       letter-spacing: 0;
       padding: 0.22rem 0.5rem;
-      min-width: 0;
       white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      overflow: visible;
+    }
+
+    .chave-cell {
+      width: 100%;
     }
 
     .chave-cell .cell-key {
       min-width: 0;
+      flex: 1 1 auto;
       line-height: 1.35;
-      word-break: break-all;
+      white-space: nowrap;
+      word-break: keep-all;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      letter-spacing: 0;
     }
 
     .cell-text {
@@ -997,26 +1013,25 @@
       color: var(--lumi-dark);
     }
 
-    tbody tr:not(:last-child) td {
-      border-bottom: 1px solid rgba(34, 34, 34, 0.06);
-    }
-
-    tbody tr.nfe-main.tem-extra td {
-      border-bottom: none;
-    }
-
-    tbody tr:hover {
-      background-color: rgba(200, 16, 46, 0.08);
-    }
-
-    tbody tr.nfe-main.tem-extra:hover,
+    tbody tr.nfe-main:hover,
     tbody tr.nfe-acoes:hover,
     tbody tr.nfe-obs:hover,
-    tbody tr.nfe-main.tem-extra:hover + tr.nfe-acoes,
-    tbody tr.nfe-main.tem-extra:hover + tr.nfe-obs,
-    tbody tr.nfe-main.tem-extra:hover + tr.nfe-acoes + tr.nfe-obs {
-      transform: none;
-      background-color: rgba(200, 16, 46, 0.08);
+    tbody tr.nfe-main:hover + tr.nfe-acoes,
+    tbody tr.nfe-main:hover + tr.nfe-obs,
+    tbody tr.nfe-main:hover + tr.nfe-acoes + tr.nfe-obs {
+      background-color: #fff4f5;
+    }
+
+    tbody tr.nfe-alt:hover,
+    tbody tr.nfe-main.nfe-alt:hover + tr.nfe-acoes,
+    tbody tr.nfe-main.nfe-alt:hover + tr.nfe-obs,
+    tbody tr.nfe-main.nfe-alt:hover + tr.nfe-acoes + tr.nfe-obs {
+      background-color: rgba(200, 16, 46, 0.15);
+    }
+
+    tbody tr.nfe-gap:hover,
+    tbody tr.nfe-gap td {
+      background: transparent;
     }
 
     .badge {
@@ -2016,36 +2031,27 @@
         }
       },
       {
-        id: 'cnpj',
-        label: 'CNPJ/CPF',
-        classe: 'col-cnpj',
-        texto: (row) => formatarDocumento(row.CNPJ_CPF),
-        render: (row) => {
-          const cnpjDigits = String(row.CNPJ_CPF || '').replace(/\D/g, '');
-          const cnpjMascara = formatarDocumento(row.CNPJ_CPF);
-          return `<div class="cnpj-cell">
-              <span class="badge" title="${escaparHtml(cnpjMascara)}">${escaparHtml(cnpjMascara)}</span>
-              ${
-                cnpjDigits
-                  ? `<button type="button" class="btn-icon btn-icon--mini" data-copy-doc="${escaparHtml(cnpjDigits)}" title="Copiar somente números">
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h11a2 2 0 0 1 2 2v11h-2V5H8V3Zm8 4a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h11Zm0 2H5v11h11V9Z"/></svg>
-                      <span class="sr-only">Copiar CNPJ/CPF</span>
-                    </button>`
-                  : ''
-              }
-            </div>`;
-        }
-      },
-      {
         id: 'razao',
-        label: 'Razão social',
+        label: 'Fornecedor',
         classe: 'col-razao',
         texto: (row) => row.RAZAO || '-',
         render: (row) => {
           const razao = row.RAZAO ?? '-';
+          const cnpjDigits = String(row.CNPJ_CPF || '').replace(/\D/g, '');
+          const cnpjMascara = formatarDocumento(row.CNPJ_CPF);
           return `<div class="cell-stack">
               <span class="cell-text cell-text--wrap cell-strong" title="${escaparHtml(razao)}">${escaparHtml(razao)}</span>
-              <span class="cell-subtle">Fornecedor</span>
+              <div class="cnpj-cell">
+                <span class="badge" title="${escaparHtml(cnpjMascara)}">${escaparHtml(cnpjMascara)}</span>
+                ${
+                  cnpjDigits
+                    ? `<button type="button" class="btn-icon btn-icon--mini" data-copy-doc="${escaparHtml(cnpjDigits)}" title="Copiar somente números">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h11a2 2 0 0 1 2 2v11h-2V5H8V3Zm8 4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h11Zm0 2H5v11h11V9Z"/></svg>
+                        <span class="sr-only">Copiar CNPJ/CPF</span>
+                      </button>`
+                    : ''
+                }
+              </div>
             </div>`;
         }
       },
@@ -2073,7 +2079,7 @@
           const chaveTexto = chave || '-';
           return `<div class="cell-stack">
               <div class="chave-cell">
-                <span class="cell-text cell-text--wrap cell-key" title="${escaparHtml(chaveTexto)}">${escaparHtml(chaveTexto)}</span>
+                <span class="cell-text cell-text--nowrap cell-key" title="${escaparHtml(chaveTexto)}">${escaparHtml(chaveTexto)}</span>
                 ${
                   chave
                     ? `<button type="button" class="btn-icon btn-icon--mini" data-copy="${escaparHtml(chave)}" title="Copiar chave">
@@ -2198,12 +2204,24 @@
     }
 
     function colunasExportacao() {
-      const colunas = colunasVisiveis().map((col) => ({
-        titulo: col.rotuloExportacao || col.label,
-        pdf: col.pdf || {},
-        valor: (row) => String(col.texto(row) ?? ''),
-        valorCsv: (row) => String((col.textoCsv || col.texto)(row) ?? '')
-      }));
+      const colunas = [];
+      colunasVisiveis().forEach((col) => {
+        if (col.id === 'cnpj') return;
+        colunas.push({
+          titulo: col.rotuloExportacao || col.label,
+          pdf: col.pdf || {},
+          valor: (row) => String(col.texto(row) ?? ''),
+          valorCsv: (row) => String((col.textoCsv || col.texto)(row) ?? '')
+        });
+        if (col.id === 'razao') {
+          colunas.push({
+            titulo: 'CNPJ/CPF',
+            pdf: { fontSize: 8 },
+            valor: (row) => formatarDocumento(row.CNPJ_CPF),
+            valorCsv: (row) => formatarDocumento(row.CNPJ_CPF)
+          });
+        }
+      });
       if (state.nfeObs.ativo) {
         const obs = (row) => row.OBSERVACAO || '';
         colunas.push({ titulo: 'Observação', pdf: { fontSize: 7 }, valor: obs, valorCsv: obs });
@@ -2940,8 +2958,15 @@
       tbody.innerHTML = '';
       const visiveis = colunasVisiveisTabela();
       const mostrarAcoes = statusBarVisivel();
+      const colCount = Math.max(visiveis.length, 1);
       const ctx = { podeAlterar: !(state.usuario && state.usuario.podeAlterar === false) };
       state.filtered.forEach((row, indice) => {
+        if (indice > 0) {
+          const gap = document.createElement('tr');
+          gap.className = 'nfe-gap';
+          gap.innerHTML = `<td colspan="${colCount}"></td>`;
+          tbody.appendChild(gap);
+        }
         const tr = document.createElement('tr');
         const alt = indice % 2 === 1;
         const temObs = state.nfeObs.ativo;
@@ -2949,9 +2974,9 @@
         tr.className = `nfe-main${temExtra ? ' tem-extra' : ''}${alt ? ' nfe-alt' : ''}`;
         tr.innerHTML = visiveis.map((col) => `<td class="${col.classe}">${col.render(row, ctx)}</td>`).join('');
         tbody.appendChild(tr);
-        const linhaAcoes = mostrarAcoes ? htmlLinhaAcoes(row, visiveis.length, alt, ctx) : null;
+        const linhaAcoes = mostrarAcoes ? htmlLinhaAcoes(row, colCount, alt, ctx) : null;
         if (linhaAcoes) tbody.appendChild(linhaAcoes);
-        const linhaObs = htmlLinhaObs(row, visiveis.length, alt);
+        const linhaObs = htmlLinhaObs(row, colCount, alt);
         if (linhaObs) tbody.appendChild(linhaObs);
       });
     }
