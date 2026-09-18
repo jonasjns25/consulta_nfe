@@ -1377,6 +1377,163 @@ function codigoUfAutor(uf, chaveRef) {
     return /^\d{2}$/.test(cUF) ? cUF : '35';
 }
 
+const CTE_DIST_URL = {
+    1: 'https://www1.cte.fazenda.gov.br/CTeDistribuicaoDFe/CTeDistribuicaoDFe.asmx',
+    2: 'https://hom1.cte.fazenda.gov.br/CTeDistribuicaoDFe/CTeDistribuicaoDFe.asmx',
+};
+
+function padNsu15(val) {
+    return String(val || '0').replace(/\D/g, '').padStart(15, '0').slice(-15);
+}
+
+function envelopesDistCteDistNsu(cnpj, cUFAutor, ultNSU, tpAmb) {
+    const nsu = padNsu15(ultNSU);
+    const dist =
+        `<distDFeInt xmlns="http://www.portalfiscal.inf.br/cte" versao="1.00">` +
+        `<tpAmb>${tpAmb}</tpAmb><cUFAutor>${cUFAutor}</cUFAutor>` +
+        `<CNPJ>${cnpj}</CNPJ><distNSU><ultNSU>${nsu}</ultNSU></distNSU></distDFeInt>`;
+    const soapAction = 'http://www.portalfiscal.inf.br/cte/wsdl/CTeDistribuicaoDFe/cteDistDFeInteresse';
+    return [
+        {
+            body:
+                `<?xml version="1.0" encoding="utf-8"?>` +
+                `<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">` +
+                `<soap12:Body><cteDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/cte/wsdl/CTeDistribuicaoDFe">` +
+                `<cteDadosMsg>${dist}</cteDadosMsg></cteDistDFeInteresse></soap12:Body></soap12:Envelope>`,
+            headers: {
+                'Content-Type': `application/soap+xml; charset=utf-8; action="${soapAction}"`,
+                SOAPAction: `"${soapAction}"`,
+            },
+        },
+        {
+            body:
+                `<?xml version="1.0" encoding="utf-8"?>` +
+                `<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">` +
+                `<soap:Body><cteDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/cte/wsdl/CTeDistribuicaoDFe">` +
+                `<cteDadosMsg>${dist}</cteDadosMsg></cteDistDFeInteresse></soap:Body></soap:Envelope>`,
+            headers: {
+                'Content-Type': 'text/xml; charset=utf-8',
+                SOAPAction: `"${soapAction}"`,
+            },
+        },
+    ];
+}
+
+function docZipsDaRespostaDistCte(parsed) {
+    const docs = coletarPorNomeLocal(parsed, 'docZip');
+    return docs.map((doc) => {
+        if (typeof doc === 'string') {
+            return { schema: '', xml: xmlDocParaTexto(doc) };
+        }
+        const schema = textoCampo(doc && (doc._schema || doc.schema));
+        const payload = doc && (doc['#text'] ?? doc._text ?? doc);
+        return { schema, xml: xmlDocParaTexto(payload) };
+    });
+}
+
+function procCteComChaveNosDocs(docs, chaveAlvo) {
+    const alvo = normalizarChave44(chaveAlvo, chaveAlvo);
+    for (const doc of docs || []) {
+        const xml = String(doc.xml || '');
+        if (!/infCte|infCTe/i.test(xml)) continue;
+        if (xml.includes(alvo)) return xml;
+        const dados = parsearXmlCte(xml, alvo);
+        if (normalizarChave44(dados.chave, alvo) === alvo) return xml;
+    }
+    return '';
+}
+
+async function executarDistCteDistNsu(cnpj, cUFAutor, ultNSU, tpAmb, agent) {
+    const url = CTE_DIST_URL[tpAmb] || CTE_DIST_URL[1];
+    let ultimoErro = null;
+    for (const env of envelopesDistCteDistNsu(cnpj, cUFAutor, ultNSU, tpAmb)) {
+        try {
+            const { status, xmlResp } = await postConsultaProtocolo(url, env.body, env.headers, agent);
+            if (status >= 400) {
+                ultimoErro = new Error(`Distribuição CT-e HTTP ${status}`);
+                continue;
+            }
+            if (!xmlResp || /<\s*html[\s>]/i.test(xmlResp)) {
+                ultimoErro = new Error('Distribuição CT-e retornou HTML em vez de XML.');
+                continue;
+            }
+            const parsed = parserStatusXml.parse(xmlResp);
+            expandirXmlAninhado(parsed);
+            const ret = coletarPorNomeLocal(parsed, 'retDistDFeInt')[0] || {};
+            return {
+                cStat: textoCampo(ret.cStat),
+                xMotivo: textoCampo(ret.xMotivo),
+                ultNSU: padNsu15(ret.ultNSU || ultNSU),
+                maxNSU: padNsu15(ret.maxNSU || ret.ultNSU || ultNSU),
+                docs: docZipsDaRespostaDistCte(parsed),
+                url,
+            };
+        } catch (err) {
+            ultimoErro = err;
+        }
+    }
+    throw ultimoErro || new Error('Falha na Distribuição DFe do CT-e.');
+}
+
+/**
+ * Busca procCTe na Distribuição DFe nacional (distNSU) para CNPJ interessado (tomador/destinatário etc.).
+ * opts.lerUltNsu(cnpj) / opts.gravarUltNsu(cnpj, ultNsu) persistem o NSU entre consultas.
+ */
+async function baixarProcCteDistribuicao(chaveCte, dnCert, uf, opts = {}) {
+    const chave = normalizarChave44(chaveCte, chaveCte);
+    if (chave.length !== 44) return null;
+    const tpAmb = String(opts.tpAmb || process.env.SEFAZ_TPAMB || '1');
+    const cnpj = extrairCnpjDoDN(dnCert);
+    const cUFAutor = codigoUfAutor(uf, chave);
+    const cred = await obterCredenciais(cnpj, opts.thumbprint);
+    const agent = new https.Agent({
+        pfx: cred.pfx,
+        passphrase: cred.passphrase || '',
+        rejectUnauthorized: false,
+    });
+    let ultNSU = padNsu15(
+        opts.lerUltNsu ? await opts.lerUltNsu(cnpj) : '000000000000000'
+    );
+    const maxLoops = Math.min(Math.max(Number(process.env.CTe_DIST_MAX_LOOPS || 30), 1), 100);
+
+    for (let i = 0; i < maxLoops; i++) {
+        let resp;
+        try {
+            resp = await executarDistCteDistNsu(cnpj, cUFAutor, ultNSU, tpAmb, agent);
+        } catch (err) {
+            console.warn('[SEFAZ CT-e dist]', err?.message || err);
+            break;
+        }
+        const { cStat, xMotivo, docs, ultNSU: ultRet, maxNSU } = resp;
+        if (cStat && !['137', '138'].includes(cStat)) {
+            throw new Error(xMotivo ? `SEFAZ CT-e Dist (${cStat}): ${xMotivo}` : `SEFAZ CT-e Dist cStat ${cStat}.`);
+        }
+        const proc = procCteComChaveNosDocs(docs, chave);
+        if (proc) {
+            if (opts.gravarUltNsu && ultRet) {
+                try {
+                    await opts.gravarUltNsu(cnpj, ultRet);
+                } catch (_e) { /* ignora falha ao gravar NSU */ }
+            }
+            console.log(`[SEFAZ CT-e dist] procCTe localizado chave=${chave} loop=${i + 1}`);
+            return proc;
+        }
+        if (opts.gravarUltNsu && ultRet) {
+            try {
+                await opts.gravarUltNsu(cnpj, ultRet);
+            } catch (_e) { /* ignora */ }
+        }
+        const parou =
+            cStat === '137' ||
+            !ultRet ||
+            ultRet === ultNSU ||
+            (maxNSU && padNsu15(ultRet) >= padNsu15(maxNSU));
+        if (parou) break;
+        ultNSU = ultRet;
+    }
+    return null;
+}
+
 function situacaoCtePorCstat(cStat, xMotivo) {
     const c = String(cStat || '');
     if (['100', '150'].includes(c)) return { situacao: 'autorizado', situacaoLabel: 'Autorizado' };
@@ -1489,10 +1646,38 @@ async function consultarXmlCtePorChave(chaveCte, dnCert, uf, opts = {}) {
                 ultimoErro = new Error('Consulta CT-e sem retConsSitCTe na resposta.');
                 continue;
             }
-            const dados = dadosDeRetConsultaSitCte(xmlResp, parsed, chave);
-            dados.chave = normalizarChave44(dados.chave, chave);
-            console.log(`[SEFAZ CT-e] cStat=${dados.cStat || '-'} chave=${dados.chave} url=${url}`);
-            return dados;
+            const dadosSit = dadosDeRetConsultaSitCte(xmlResp, parsed, chave);
+            dadosSit.chave = normalizarChave44(dadosSit.chave, chave);
+
+            let xmlProc = null;
+            try {
+                xmlProc = await baixarProcCteDistribuicao(chave, dnCert, uf, {
+                    tpAmb,
+                    thumbprint: opts.thumbprint,
+                    lerUltNsu: opts.lerUltNsu,
+                    gravarUltNsu: opts.gravarUltNsu,
+                });
+            } catch (errDist) {
+                console.warn('[SEFAZ CT-e dist]', errDist?.message || errDist);
+            }
+
+            if (xmlProc && /infCte|infCTe/i.test(xmlProc)) {
+                const dadosFull = parsearXmlCte(xmlProc, chave);
+                dadosFull.chave = normalizarChave44(dadosFull.chave, chave);
+                if (!dadosFull.cStat && dadosSit.cStat) dadosFull.cStat = dadosSit.cStat;
+                if (!dadosFull.xMotivo && dadosSit.xMotivo) dadosFull.xMotivo = dadosSit.xMotivo;
+                if (!dadosFull.situacao && dadosSit.situacao) {
+                    dadosFull.situacao = dadosSit.situacao;
+                    dadosFull.situacaoLabel = dadosSit.situacaoLabel;
+                }
+                console.log(
+                    `[SEFAZ CT-e] cStat=${dadosFull.cStat || dadosSit.cStat || '-'} chave=${dadosFull.chave} (procCTe via Dist)`
+                );
+                return dadosFull;
+            }
+
+            console.log(`[SEFAZ CT-e] cStat=${dadosSit.cStat || '-'} chave=${dadosSit.chave} url=${url} (sem procCTe na Dist)`);
+            return dadosSit;
         } catch (err) {
             if (err && /SEFAZ CT-e/.test(err.message)) throw err;
             ultimoErro = err;
@@ -1529,6 +1714,7 @@ module.exports = {
     extrairCnpjsDoTexto,
     consultarXmlPorChave,
     consultarXmlCtePorChave,
+    baixarProcCteDistribuicao,
     parsearXmlCte,
     extrairChavesCteDeXmlNfe,
     ehChaveCte,

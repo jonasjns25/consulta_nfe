@@ -1903,6 +1903,7 @@ async function garantirTabelaConfCte() {
     try {
         await getConfNfPool().query(`SELECT 1 FROM ${tabelaConfnf('conf_cte')} LIMIT 1`);
         tabelaConfCteOk = true;
+        await garantirTabelaConfCteDistNsu();
         return true;
     } catch (_e) {
         try {
@@ -1931,11 +1932,149 @@ async function garantirTabelaConfCte() {
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             `);
             tabelaConfCteOk = true;
+            await garantirTabelaConfCteDistNsu();
             return true;
         } catch (error) {
             console.error('[CT-e tabela]', error?.message || error);
             return false;
         }
+    }
+}
+
+let tabelaConfCteDistNsuOk = false;
+async function garantirTabelaConfCteDistNsu() {
+    if (tabelaConfCteDistNsuOk) return true;
+    try {
+        await getConfNfPool().query(`
+            CREATE TABLE IF NOT EXISTS ${tabelaConfnf('conf_cte_dist_nsu')} (
+                cnpj VARCHAR(14) NOT NULL,
+                ult_nsu VARCHAR(15) NOT NULL DEFAULT '000000000000000',
+                atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (cnpj)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+        tabelaConfCteDistNsuOk = true;
+        return true;
+    } catch (error) {
+        console.warn('[CT-e dist NSU tabela]', error?.message || error);
+        return false;
+    }
+}
+
+async function lerUltNsuDistCte(cnpj) {
+    const cnpj14 = String(cnpj || '').replace(/\D/g, '').slice(0, 14);
+    if (cnpj14.length !== 14) return '000000000000000';
+    if (!(await garantirTabelaConfCteDistNsu())) return '000000000000000';
+    const [rows] = await getConfNfPool().query(
+        `SELECT ult_nsu FROM ${tabelaConfnf('conf_cte_dist_nsu')} WHERE cnpj = ? LIMIT 1`,
+        [cnpj14]
+    );
+    return rows?.[0]?.ult_nsu || '000000000000000';
+}
+
+async function gravarUltNsuDistCte(cnpj, ultNsu) {
+    const cnpj14 = String(cnpj || '').replace(/\D/g, '').slice(0, 14);
+    const nsu = String(ultNsu || '0').replace(/\D/g, '').padStart(15, '0').slice(-15);
+    if (cnpj14.length !== 14) return;
+    if (!(await garantirTabelaConfCteDistNsu())) return;
+    await getConfNfPool().query(
+        `INSERT INTO ${tabelaConfnf('conf_cte_dist_nsu')} (cnpj, ult_nsu) VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE ult_nsu = VALUES(ult_nsu), atualizado_em = NOW()`,
+        [cnpj14, nsu]
+    );
+}
+
+function optsDistCteSefaz() {
+    return {
+        lerUltNsu: lerUltNsuDistCte,
+        gravarUltNsu: gravarUltNsuDistCte,
+    };
+}
+
+function xmlCteTemInfCte(xml) {
+    return /<infCte\b/i.test(String(xml || ''));
+}
+
+async function obterEstabCertificadoParaNfe(chaveNfe, estabPreferido) {
+    const chave = String(chaveNfe || '').replace(/\D/g, '');
+    const estab = String(estabPreferido || '').replace(/\D/g, '');
+    if (estab) {
+        const [rowsEstab] = await pool.query(
+            'SELECT CNPJ, CERTIFICADO_NFE, UF FROM ESTAB WHERE CNPJ = ? LIMIT 1',
+            [estab]
+        );
+        if (rowsEstab?.[0]?.CERTIFICADO_NFE) return rowsEstab[0];
+    }
+    const [rowsNfe] = await pool.query(
+        'SELECT ESTAB FROM nfe_xml WHERE CHAVE = ? ORDER BY IDNFE_XML DESC LIMIT 1',
+        [chave]
+    );
+    const estabNfe = String(rowsNfe?.[0]?.ESTAB || '').replace(/\D/g, '');
+    if (!estabNfe) return null;
+    const [rowsEstab] = await pool.query(
+        'SELECT CNPJ, CERTIFICADO_NFE, UF FROM ESTAB WHERE CNPJ = ? LIMIT 1',
+        [estabNfe]
+    );
+    return rowsEstab?.[0] || null;
+}
+
+/** Garante procCTe (infCte) no CONFNF — reconsulta SEFAZ/Dist se necessário. */
+async function obterXmlCteCompleto(chaveNfe, chaveCte, opts = {}) {
+    if (!(await garantirTabelaConfCte())) {
+        throw new Error('Tabela conf_cte indisponível.');
+    }
+    const [rows] = await getConfNfPool().query(
+        `SELECT xml FROM ${tabelaConfnf('conf_cte')} WHERE chave_nfe = ? AND chave_cte = ? LIMIT 1`,
+        [chaveNfe, chaveCte]
+    );
+    const xmlAtual = rows?.[0]?.xml;
+    if (xmlCteTemInfCte(xmlAtual)) return String(xmlAtual);
+
+    const estabRow = await obterEstabCertificadoParaNfe(chaveNfe, opts.estab);
+    if (!estabRow?.CERTIFICADO_NFE) {
+        throw new Error('Certificado do estabelecimento não encontrado para baixar o XML completo do CT-e.');
+    }
+    const tpAmb = process.env.SEFAZ_TPAMB || '1';
+    const dados = await consultarXmlCtePorChave(chaveCte, estabRow.CERTIFICADO_NFE, estabRow.UF, {
+        tpAmb,
+        thumbprint: opts.thumbprint || null,
+        chaveNfe,
+        ...optsDistCteSefaz(),
+    });
+    dados.chave = chaveCte;
+    await salvarCteVinculado(chaveNfe, dados);
+    if (!xmlCteTemInfCte(dados.xml)) {
+        throw new Error(
+            'A SEFAZ não disponibilizou o XML completo do CT-e para este CNPJ (Distribuição DFe). ' +
+                'Verifique se o estabelecimento consta como tomador/destinatário/remetente no CT-e.'
+        );
+    }
+    return String(dados.xml);
+}
+
+async function gerarDacteViaMeuDanfe(chaveCte) {
+    if (!DANFE_API_KEY) return null;
+    try {
+        await danfeClient.put(`/fd/add/${chaveCte}`);
+    } catch (error) {
+        const status = error?.response?.status;
+        if (status !== 409 && status !== 422) {
+            console.warn('[CT-e DACTE MeuDanfe add]', error?.response?.data || error.message);
+            return null;
+        }
+    }
+    try {
+        const pdfResponse = await danfeClient.get(`/fd/get/da/${chaveCte}`, {
+            responseType: 'arraybuffer',
+            headers: { Accept: 'application/pdf' },
+        });
+        return {
+            buffer: Buffer.from(pdfResponse.data),
+            filename: `dacte-${chaveCte}.pdf`,
+        };
+    } catch (error) {
+        console.warn('[CT-e DACTE MeuDanfe get]', error?.response?.data || error.message);
+        return null;
     }
 }
 
@@ -2117,6 +2256,7 @@ app.post('/api/nfe/cte/consultar', async (req, res) => {
             tpAmb,
             thumbprint,
             chaveNfe,
+            ...optsDistCteSefaz(),
         });
         dados.chave = chaveCte;
         const salvo = await salvarCteVinculado(chaveNfe, dados);
@@ -2147,11 +2287,19 @@ app.get('/api/nfe/cte/:chaveNfe/:chaveCte/xml', async (req, res) => {
         if (!(await garantirTabelaConfCte())) {
             return res.status(500).json({ erro: 'Tabela conf_cte indisponível.' });
         }
-        const [rows] = await getConfNfPool().query(
-            `SELECT xml FROM ${tabelaConfnf('conf_cte')} WHERE chave_nfe = ? AND chave_cte = ? LIMIT 1`,
-            [chaveNfe, chaveCte]
-        );
-        const xml = rows?.[0]?.xml;
+        let xml;
+        try {
+            xml = await obterXmlCteCompleto(chaveNfe, chaveCte, {
+                estab: cnpjEfetivo(req, req.query?.estab || ''),
+                thumbprint: (req.query?.thumbprint || '').replace(/[^0-9A-Fa-f]/g, '') || null,
+            });
+        } catch (error) {
+            const msg = error?.message || 'Falha ao obter XML do CT-e.';
+            if (/não disponibilizou|Certificado/.test(msg)) {
+                return res.status(422).json({ erro: msg });
+            }
+            throw error;
+        }
         if (!xml) {
             return res.status(404).json({ erro: 'XML do CT-e não encontrado. Consulte o CT-e antes de baixar.' });
         }
@@ -2177,23 +2325,30 @@ app.get('/api/nfe/cte/:chaveNfe/:chaveCte/dacte', async (req, res) => {
         if (!(await garantirTabelaConfCte())) {
             return res.status(500).json({ error: 'Tabela conf_cte indisponível.' });
         }
-        const [rows] = await getConfNfPool().query(
-            `SELECT xml FROM ${tabelaConfnf('conf_cte')} WHERE chave_nfe = ? AND chave_cte = ? LIMIT 1`,
-            [chaveNfe, chaveCte]
-        );
-        const xml = rows?.[0]?.xml;
+        let xml;
+        try {
+            xml = await obterXmlCteCompleto(chaveNfe, chaveCte, {
+                estab: cnpjEfetivo(req, req.query?.estab || ''),
+                thumbprint: (req.query?.thumbprint || '').replace(/[^0-9A-Fa-f]/g, '') || null,
+            });
+        } catch (error) {
+            const msg = error?.message || 'Falha ao obter XML do CT-e.';
+            if (/não disponibilizou|Certificado/.test(msg)) {
+                return res.status(422).json({ error: msg });
+            }
+            throw error;
+        }
         if (!xml) {
             return res.status(404).json({ error: 'XML do CT-e não encontrado. Consulte o CT-e antes de gerar o DACTE.' });
         }
-        if (!/<infCte\b/i.test(String(xml))) {
-            return res.status(422).json({
-                error:
-                    'O XML gravado é apenas a consulta de situação (sem o CT-e completo). O DACTE exige o procCTe com infCte; quando disponível, importe ou obtenha o XML completo do CT-e.',
-            });
-        }
-        const conversao = await gerarDacteViaXml(xml, chaveCte);
+        let conversao = await gerarDacteViaXml(xml, chaveCte);
         if (!conversao?.buffer) {
-            return res.status(502).json({ error: 'Não foi possível gerar o DACTE a partir do XML do CT-e.' });
+            conversao = await gerarDacteViaMeuDanfe(chaveCte);
+        }
+        if (!conversao?.buffer) {
+            return res.status(502).json({
+                error: 'Não foi possível gerar o DACTE. Confirme se o XML completo do CT-e está disponível na Distribuição DFe.',
+            });
         }
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `inline; filename="${conversao.filename}"`);
