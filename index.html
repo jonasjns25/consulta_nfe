@@ -2139,6 +2139,21 @@
           const statusInfo = obterStatusLancamento(row);
           return `<span class="status-pill ${statusInfo.className}">${escaparHtml(statusInfo.label)}</span>`;
         }
+      },
+      {
+        id: 'ultima_consulta_sefaz',
+        label: 'Última consulta SEFAZ',
+        classe: 'col-sefaz',
+        rotuloExportacao: 'Última consulta SEFAZ',
+        pdf: { halign: 'center', fontSize: 8 },
+        texto: (row) => {
+          const s = row.SEFAZ;
+          if (!s || !(s.situacaoLabel || s.situacao)) return '';
+          const txt = s.situacaoLabel || s.situacao;
+          const quando = String(s.consultadoEm || '').replace('T', ' ').slice(0, 16);
+          return quando ? `${txt} · ${quando}` : txt;
+        },
+        render: (row) => htmlChipSefaz(row) || '-'
       }
     ];
 
@@ -2195,11 +2210,15 @@
     }
 
     function colunasVisiveisTabela() {
-      return colunasVisiveis().filter((col) => col.id !== 'status');
+      return colunasVisiveis().filter((col) => col.id !== 'status' && col.id !== 'ultima_consulta_sefaz');
     }
 
     function statusCompraVisivel() {
       return state.colunas.some((item) => item.id === 'status' && item.visivel);
+    }
+
+    function ultimaConsultaSefazVisivel() {
+      return state.colunas.some((item) => item.id === 'ultima_consulta_sefaz' && item.visivel);
     }
 
     function colunasExportacao() {
@@ -2951,6 +2970,7 @@
       tbody.innerHTML = '';
       const visiveis = colunasVisiveisTabela();
       const mostrarStatus = statusCompraVisivel();
+      const mostrarSefaz = ultimaConsultaSefazVisivel();
       const colCount = Math.max(visiveis.length, 1);
       const ctx = { podeAlterar: !(state.usuario && state.usuario.podeAlterar === false) };
       state.filtered.forEach((row, indice) => {
@@ -2965,7 +2985,7 @@
         tr.className = `nfe-main tem-extra${alt ? ' nfe-alt' : ''}`;
         tr.innerHTML = visiveis.map((col) => `<td class="${col.classe}">${col.render(row, ctx)}</td>`).join('');
         tbody.appendChild(tr);
-        tbody.appendChild(htmlLinhaAcoes(row, colCount, alt, ctx, mostrarStatus));
+        tbody.appendChild(htmlLinhaAcoes(row, colCount, alt, ctx, mostrarStatus, mostrarSefaz));
       });
     }
 
@@ -3663,7 +3683,7 @@
       </label>`;
     }
 
-    function htmlLinhaAcoes(row, colunas, alt, ctx, mostrarStatus) {
+    function htmlLinhaAcoes(row, colunas, alt, ctx, mostrarStatus, mostrarSefaz) {
       const chave = row.CHAVE ?? '';
       const possuiChave = Boolean(chave);
       const statusInfo = obterStatusLancamento(row);
@@ -3686,9 +3706,11 @@
           <span class="sr-only">Baixar XML</span>
         </button>
         ${extraAlterar}` : '';
-      const statusHtml = mostrarStatus
-        ? `<span class="status-pill ${statusInfo.className}" title="Status da compra">${escaparHtml(statusInfo.label)}</span>${htmlChipSefaz(row)}`
+      const compraHtml = mostrarStatus
+        ? `<span class="status-pill ${statusInfo.className}" title="Status da compra">${escaparHtml(statusInfo.label)}</span>`
         : '';
+      const sefazHtml = mostrarSefaz ? htmlChipSefaz(row) : '';
+      const statusHtml = `${compraHtml}${sefazHtml}`;
       const botoesHtml = botoes ? `<div class="nfe-acoes-btns">${botoes}</div>` : '';
       const tr = document.createElement('tr');
       tr.className = `nfe-acoes${alt ? ' nfe-alt' : ''}`;
