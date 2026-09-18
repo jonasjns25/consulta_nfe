@@ -1857,7 +1857,7 @@
             <button type="button" class="btn-secondary" id="btn-colunas">Colunas</button>
             <div class="colunas-panel hidden" id="colunas-panel">
               <p class="colunas-titulo">Colunas da listagem</p>
-              <p class="colunas-dica">Marque o que aparece. Use as setas ou arraste o cabeçalho da tabela para mudar a ordem. A escolha fica salva neste navegador.</p>
+              <p class="colunas-dica">Marque o que aparece. Os botões de ação ficam sempre visíveis. Use as setas ou arraste o cabeçalho da tabela para mudar a ordem. A escolha fica salva neste navegador.</p>
               <ul class="colunas-lista" id="colunas-lista"></ul>
               <button type="button" class="btn-ghost btn-small" id="btn-colunas-padrao">Restaurar padrão</button>
             </div>
@@ -2117,7 +2117,7 @@
       },
       {
         id: 'status',
-        label: 'Status e ações',
+        label: 'Status',
         classe: 'col-status',
         rotuloExportacao: 'Status',
         pdf: { halign: 'center', fontSize: 8 },
@@ -2185,7 +2185,7 @@
       return colunasVisiveis().filter((col) => col.id !== 'status');
     }
 
-    function statusBarVisivel() {
+    function statusCompraVisivel() {
       return state.colunas.some((item) => item.id === 'status' && item.visivel);
     }
 
@@ -2942,7 +2942,7 @@
     function atualizarTabela() {
       tbody.innerHTML = '';
       const visiveis = colunasVisiveisTabela();
-      const mostrarAcoes = statusBarVisivel();
+      const mostrarStatus = statusCompraVisivel();
       const colCount = Math.max(visiveis.length, 1);
       const ctx = { podeAlterar: !(state.usuario && state.usuario.podeAlterar === false) };
       state.filtered.forEach((row, indice) => {
@@ -2954,13 +2954,10 @@
         }
         const tr = document.createElement('tr');
         const alt = indice % 2 === 1;
-        const temObs = state.nfeObs.ativo;
-        const temExtra = temObs || mostrarAcoes;
-        tr.className = `nfe-main${temExtra ? ' tem-extra' : ''}${alt ? ' nfe-alt' : ''}`;
+        tr.className = `nfe-main tem-extra${alt ? ' nfe-alt' : ''}`;
         tr.innerHTML = visiveis.map((col) => `<td class="${col.classe}">${col.render(row, ctx)}</td>`).join('');
         tbody.appendChild(tr);
-        const linhaAcoes = temExtra ? htmlLinhaAcoes(row, colCount, alt, ctx, mostrarAcoes) : null;
-        if (linhaAcoes) tbody.appendChild(linhaAcoes);
+        tbody.appendChild(htmlLinhaAcoes(row, colCount, alt, ctx, mostrarStatus));
       });
     }
 
@@ -3639,7 +3636,7 @@
       </label>`;
     }
 
-    function htmlLinhaAcoes(row, colunas, alt, ctx, mostrarAcoes) {
+    function htmlLinhaAcoes(row, colunas, alt, ctx, mostrarStatus) {
       const chave = row.CHAVE ?? '';
       const possuiChave = Boolean(chave);
       const statusInfo = obterStatusLancamento(row);
@@ -3652,7 +3649,7 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
           <span class="sr-only">Autorizar recepção de XML</span>
         </button>` : '';
-      const botoes = (mostrarAcoes && possuiChave) ? `
+      const botoes = possuiChave ? `
         <button type="button" class="btn-icon" data-detalhes="${chave}" title="Detalhar NFe">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
           <span class="sr-only">Detalhar NFe</span>
@@ -3666,7 +3663,7 @@
           <span class="sr-only">Baixar XML</span>
         </button>
         ${extraAlterar}` : '';
-      const statusHtml = mostrarAcoes
+      const statusHtml = mostrarStatus
         ? `<span class="status-pill ${statusInfo.className}" title="Status da compra">${escaparHtml(statusInfo.label)}</span>${htmlChipSefaz(row)}`
         : '';
       const botoesHtml = botoes ? `<div class="nfe-acoes-btns">${botoes}</div>` : '';
