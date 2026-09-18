@@ -165,8 +165,10 @@ function cnpjDaSessao(req) {
 
 function cnpjEfetivo(req, pedido) {
     const escopo = cnpjDaSessao(req);
-    if (escopo.todasLojas) return onlyDigits(pedido);
-    return escopo.cnpj;
+    const pedidoNorm = onlyDigits(pedido);
+    if (escopo.todasLojas) return pedidoNorm;
+    if (escopo.cnpj) return escopo.cnpj;
+    return pedidoNorm;
 }
 
 function matriculasAlteracao() {

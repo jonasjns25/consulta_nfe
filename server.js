@@ -416,8 +416,15 @@ function sqlSoDigitos(expr) {
     return `REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(${expr}, ''), '.', ''), '/', ''), '-', ''), ' ', '')`;
 }
 
-/** Estabelecimento da NF: compra.ESTAB ou destinatário no XML. */
-const ESTAB_NF_DOC_SQL = `COALESCE(NULLIF(TRIM(COALESCE(c.ESTAB, '')), ''), ${XML_DEST_DOCUMENTO_EXPR})`;
+/**
+ * Estabelecimento da NF no SAC: nfe_xml.ESTAB (mesma regra de /api/nfe/buscar).
+ * Fallback: compra.ESTAB ou destinatário no XML quando ESTAB estiver vazio.
+ */
+const ESTAB_NF_DOC_SQL = `COALESCE(
+    NULLIF(TRIM(COALESCE(n.ESTAB, '')), ''),
+    NULLIF(TRIM(COALESCE(c.ESTAB, '')), ''),
+    ${XML_DEST_DOCUMENTO_EXPR}
+)`;
 const ESTAB_NF_DIGITS_SQL = sqlSoDigitos(ESTAB_NF_DOC_SQL);
 const ESTAB_JOIN_E_ON = `${sqlSoDigitos('e.CNPJ')} = ${ESTAB_NF_DIGITS_SQL}`;
 
@@ -1640,9 +1647,9 @@ app.get('/api/nfe/buscar', async (req, res) => {
     try {
         const params = [chave];
         let sql = `SELECT IDNFE_XML, CHAVE, RAZAO, VALOR, EMISSAO, STATUS, TPNF, CNPJ_CPF, ESTAB
-                   FROM nfe_xml WHERE CHAVE = ?`;
+                   FROM nfe_xml n WHERE n.CHAVE = ?`;
         if (estab) {
-            sql += ' AND ESTAB = ?';
+            sql += ` AND ${sqlSoDigitos('n.ESTAB')} = ?`;
             params.push(estab);
         }
         sql += ' LIMIT 1';
