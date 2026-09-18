@@ -336,6 +336,100 @@
       margin: 0.5rem 0 0;
     }
 
+    .cte-consulta-linha {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 0.35rem 0 0.75rem;
+    }
+
+    .cte-consulta-linha input {
+      flex: 1 1 280px;
+      min-width: 0;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.92rem;
+      letter-spacing: 0.02em;
+      padding: 0.55rem 0.75rem;
+      border: 1px solid rgba(0, 0, 0, 0.14);
+      border-radius: 10px;
+      background: #fff;
+    }
+
+    .cte-sugestoes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin: 0 0 0.75rem;
+    }
+
+    .cte-chip {
+      border: 1px solid rgba(200, 16, 46, 0.25);
+      background: rgba(200, 16, 46, 0.06);
+      color: var(--lumi-dark);
+      border-radius: 999px;
+      padding: 0.28rem 0.7rem;
+      font-size: 0.78rem;
+      font-family: ui-monospace, Consolas, monospace;
+      cursor: pointer;
+    }
+
+    .cte-lista {
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+
+    .cte-card {
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 10px;
+      padding: 0.75rem 0.9rem;
+      background: #fff;
+    }
+
+    .cte-card-cab {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.65rem;
+      flex-wrap: wrap;
+    }
+
+    .cte-card-chave {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.86rem;
+      font-weight: 600;
+    }
+
+    .cte-card-meta {
+      margin: 0.45rem 0 0;
+      font-size: 0.85rem;
+      color: var(--lumi-muted);
+    }
+
+    .cte-card-acoes {
+      display: flex;
+      gap: 0.45rem;
+      flex-wrap: wrap;
+      margin-top: 0.7rem;
+    }
+
+    .cte-card-acoes .btn-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      padding: 0.45rem 0.75rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .cte-aviso {
+      margin: 0.45rem 0 0;
+      font-size: 0.82rem;
+      color: #7a5b00;
+    }
+
     .table-wrapper {
       position: relative;
       overflow: auto;
@@ -953,6 +1047,31 @@
         </div>
       </section>
 
+      <section class="card" id="cte-section">
+        <div class="card-header">
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+            <button type="button" class="btn-toggle-section" id="btn-toggle-cte" onclick="toggleSection('cte-section-content')" title="Expandir/Ocultar CT-e">
+              <span class="icon">▼</span>
+            </button>
+            <h2 style="margin: 0;">CT-e vinculado (frete)</h2>
+            <span id="cte-badge-qtd" class="sefaz-badge sefaz-badge--pendente">Nenhum gravado</span>
+          </div>
+        </div>
+        <div class="section-content visible" id="cte-section-content">
+          <p class="sefaz-meta">O CT-e é o documento de frete. A SEFAZ não localiza o CT-e pela chave da NF-e — informe a chave de 44 dígitos do CT-e (modelo 57). A consulta grava o XML no CONFNF vinculado a esta nota.</p>
+          <div class="cte-consulta-linha">
+            <input type="text" id="cte-chave-input" maxlength="54" placeholder="Chave do CT-e (44 dígitos)" autocomplete="off" inputmode="numeric">
+            <button type="button" class="btn-sefaz" id="btn-consultar-cte">Consultar CT-e</button>
+          </div>
+          <div id="cte-sugestoes" class="cte-sugestoes hidden"></div>
+          <div id="cte-lista" class="cte-lista">
+            <p class="sefaz-meta">Nenhum CT-e gravado para esta NF-e.</p>
+          </div>
+          <p id="cte-status-msg" class="sefaz-meta hidden"></p>
+          <p id="cte-erro" class="sefaz-erro hidden"></p>
+        </div>
+      </section>
+
       <section class="card" id="totais-section">
         <div class="card-header">
           <div style="display: flex; align-items: center; gap: 0.5rem;">
@@ -1083,6 +1202,8 @@
       const btnCertSefaz = document.getElementById('btn-sefaz-cert');
       if (btnConsultarSefaz) btnConsultarSefaz.onclick = consultarSituacaoSefaz;
       if (btnCertSefaz) btnCertSefaz.onclick = escolherCertificadoSefaz;
+      ligarConsultaCte();
+      carregarCtesVinculados();
 
       // Configurar botões de ação
       const chaveNFe = dados.chave;
@@ -1667,6 +1788,275 @@
         msgEl.textContent = data.mensagem || 'Consulta concluída.';
       } catch (e) {
         erroEl.textContent = e?.message || 'Falha ao consultar a SEFAZ.';
+        erroEl.classList.remove('hidden');
+        msgEl.classList.add('hidden');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function classeBadgeCte(situacao) {
+      if (situacao === 'autorizado') return 'sefaz-badge--ok';
+      if (situacao === 'cancelado') return 'sefaz-badge--cancelada';
+      if (situacao === 'denegado') return 'sefaz-badge--denegada';
+      return 'sefaz-badge--pendente';
+    }
+
+    function soDigitosChave(valor) {
+      return String(valor || '').replace(/\D/g, '');
+    }
+
+    function formatarChaveDigitacao(valor) {
+      return soDigitosChave(valor).slice(0, 44).replace(/(\d{4})(?=\d)/g, '$1 ').trim();
+    }
+
+    function formatarCnpjCte(cnpj) {
+      const d = soDigitosChave(cnpj);
+      if (d.length !== 14) return cnpj || '-';
+      return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+    }
+
+    function atualizarBadgeQtdCte(lista) {
+      const el = document.getElementById('cte-badge-qtd');
+      if (!el) return;
+      const n = Array.isArray(lista) ? lista.length : 0;
+      el.textContent = n === 0 ? 'Nenhum gravado' : (n === 1 ? '1 gravado' : `${n} gravados`);
+      el.className = 'sefaz-badge ' + (n ? 'sefaz-badge--ok' : 'sefaz-badge--pendente');
+    }
+
+    function htmlBotoesCte(chaveCte) {
+      return `
+        <div class="cte-card-acoes">
+          <button type="button" class="btn-icon" data-cte-acao="dacte" data-chave-cte="${escaparHtml(chaveCte)}" title="Visualizar DACTE" style="background: var(--lumi-primary-strong); color: white; border: none;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            <span style="margin-left: 0.5rem; font-size: 0.9rem;">DACTE</span>
+          </button>
+          <button type="button" class="btn-icon" data-cte-acao="xml" data-chave-cte="${escaparHtml(chaveCte)}" title="Baixar XML do CT-e" style="background: var(--lumi-primary-strong); color: white; border: none;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span style="margin-left: 0.5rem; font-size: 0.9rem;">XML</span>
+          </button>
+          <button type="button" class="btn-icon" data-cte-acao="copiar" data-chave-cte="${escaparHtml(chaveCte)}" title="Copiar chave do CT-e" style="background: var(--lumi-primary-strong); color: white; border: none;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            <span style="margin-left: 0.5rem; font-size: 0.9rem;">Copiar</span>
+          </button>
+        </div>
+      `;
+    }
+
+    function renderizarSugestoesCte(sugestoes, jaGravadas) {
+      const el = document.getElementById('cte-sugestoes');
+      if (!el) return;
+      const gravadas = new Set((jaGravadas || []).map((c) => c.chaveCte));
+      const lista = (sugestoes || []).filter((ch) => !gravadas.has(ch));
+      if (!lista.length) {
+        el.classList.add('hidden');
+        el.innerHTML = '';
+        return;
+      }
+      el.classList.remove('hidden');
+      el.innerHTML = `<span class="sefaz-meta" style="margin:0;width:100%;">Chave de CT-e encontrada no XML da NF-e:</span>` +
+        lista.map((ch) => `<button type="button" class="cte-chip" data-chave-sugestao="${escaparHtml(ch)}">${escaparHtml(formatarChave(ch))}</button>`).join('');
+      el.querySelectorAll('[data-chave-sugestao]').forEach((btn) => {
+        btn.onclick = () => {
+          const input = document.getElementById('cte-chave-input');
+          if (input) {
+            input.value = formatarChaveDigitacao(btn.getAttribute('data-chave-sugestao'));
+            input.focus();
+          }
+        };
+      });
+    }
+
+    function renderizarListaCte(lista) {
+      const painel = document.getElementById('cte-lista');
+      atualizarBadgeQtdCte(lista);
+      if (!painel) return;
+      if (!lista || !lista.length) {
+        painel.innerHTML = '<p class="sefaz-meta">Nenhum CT-e gravado para esta NF-e.</p>';
+        return;
+      }
+      painel.innerHTML = lista.map((cte) => {
+        const chave = cte.chaveCte || '';
+        const valor = cte.vTPrest != null && cte.vTPrest !== '' ? formatarMoeda(Number(cte.vTPrest)) : '-';
+        const emit = cte.nomeEmitente
+          ? `${escaparHtml(cte.nomeEmitente)} · ${escaparHtml(formatarCnpjCte(cte.cnpjEmitente))}`
+          : escaparHtml(formatarCnpjCte(cte.cnpjEmitente));
+        const nro = [cte.nct, cte.serie].filter(Boolean).length
+          ? `Nº ${escaparHtml(cte.nct || '-')} · Série ${escaparHtml(cte.serie || '-')}`
+          : '';
+        return `
+          <article class="cte-card">
+            <div class="cte-card-cab">
+              <span class="cte-card-chave">${escaparHtml(formatarChave(chave))}</span>
+              <span class="sefaz-badge ${classeBadgeCte(cte.situacao)}">${escaparHtml(cte.situacaoLabel || 'Consultado')}</span>
+            </div>
+            <p class="cte-card-meta">${nro ? nro + ' · ' : ''}${emit}</p>
+            <p class="cte-card-meta">Prestação ${valor} · Emissão ${escaparHtml(formatarData(cte.dhEmi))}${cte.consultadoEm ? ' · Consultado ' + escaparHtml(formatarDataHoraSefaz(cte.consultadoEm)) : ''}</p>
+            ${cte.vinculoNfe === false ? '<p class="cte-aviso">O XML deste CT-e não cita a chave desta NF-e.</p>' : ''}
+            ${htmlBotoesCte(chave)}
+          </article>
+        `;
+      }).join('');
+      painel.querySelectorAll('[data-cte-acao]').forEach((btn) => {
+        btn.onclick = () => acaoDocumentoCte(btn.getAttribute('data-cte-acao'), btn.getAttribute('data-chave-cte'));
+      });
+    }
+
+    async function acaoDocumentoCte(acao, chaveCte) {
+      const chaveNFe = window.nfeChave || '';
+      if (!chaveNFe || !chaveCte) return;
+      try {
+        if (acao === 'copiar') {
+          await navigator.clipboard.writeText(chaveCte);
+          mostrarToast('Chave do CT-e copiada para a área de transferência.');
+          return;
+        }
+        if (acao === 'xml') {
+          const resposta = await fetch(`/api/nfe/cte/${chaveNFe}/${chaveCte}/xml`);
+          if (!resposta.ok) {
+            const erro = await resposta.json().catch(() => ({}));
+            throw new Error(erro?.erro || erro?.error || 'Falha ao baixar XML do CT-e.');
+          }
+          const blob = await resposta.blob();
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `cte-${chaveCte}.xml`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => URL.revokeObjectURL(url), 60_000);
+          mostrarToast('XML do CT-e baixado com sucesso.');
+          return;
+        }
+        if (acao === 'dacte') {
+          const resposta = await fetch(`/api/nfe/cte/${chaveNFe}/${chaveCte}/dacte`);
+          if (!resposta.ok) {
+            const erro = await resposta.json().catch(() => ({}));
+            throw new Error(erro?.error || erro?.erro || 'Falha ao gerar DACTE.');
+          }
+          const blob = await resposta.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const novaJanela = window.open(blobUrl, '_blank');
+          if (!novaJanela) {
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.target = '_blank';
+            link.rel = 'noopener';
+            link.click();
+          }
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+          mostrarToast('DACTE gerado em uma nova guia.');
+        }
+      } catch (error) {
+        console.error(error);
+        mostrarToast(error?.message || 'Não foi possível concluir a ação do CT-e.', true);
+      }
+    }
+
+    async function carregarCtesVinculados() {
+      const chaveNFe = window.nfeChave || '';
+      if (!chaveNFe || chaveNFe.length !== 44) return;
+      try {
+        const resp = await fetch(`/api/nfe/cte/${chaveNFe}`);
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data?.erro || 'Falha ao carregar CT-es.');
+        renderizarListaCte(data.ctes || []);
+        renderizarSugestoesCte(data.sugestoes || [], data.ctes || []);
+      } catch (error) {
+        console.warn(error);
+        renderizarListaCte([]);
+      }
+    }
+
+    function ligarConsultaCte() {
+      const input = document.getElementById('cte-chave-input');
+      const btn = document.getElementById('btn-consultar-cte');
+      if (input && !input.dataset.ligado) {
+        input.dataset.ligado = '1';
+        input.addEventListener('input', () => {
+          const pos = input.selectionStart;
+          const antes = soDigitosChave(input.value.slice(0, pos)).length;
+          input.value = formatarChaveDigitacao(input.value);
+          let i = 0;
+          let d = 0;
+          while (i < input.value.length && d < antes) {
+            if (/\d/.test(input.value[i])) d += 1;
+            i += 1;
+          }
+          input.setSelectionRange(i, i);
+        });
+        input.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter') {
+            ev.preventDefault();
+            consultarCteVinculado();
+          }
+        });
+      }
+      if (btn) btn.onclick = consultarCteVinculado;
+    }
+
+    async function consultarCteVinculado() {
+      const erroEl = document.getElementById('cte-erro');
+      const msgEl = document.getElementById('cte-status-msg');
+      const btn = document.getElementById('btn-consultar-cte');
+      const input = document.getElementById('cte-chave-input');
+      erroEl.classList.add('hidden');
+      msgEl.classList.add('hidden');
+      const chaveNFe = window.nfeChave || '';
+      const estab = window.nfeEstab || '';
+      const chaveCte = soDigitosChave(input && input.value);
+      if (!chaveNFe || chaveNFe.length !== 44) {
+        erroEl.textContent = 'Chave da NF-e inválida.';
+        erroEl.classList.remove('hidden');
+        return;
+      }
+      if (chaveCte.length !== 44) {
+        erroEl.textContent = 'Informe a chave do CT-e com 44 dígitos.';
+        erroEl.classList.remove('hidden');
+        return;
+      }
+      if (!estab) {
+        erroEl.textContent = 'Estabelecimento (CNPJ) não identificado para consultar a SEFAZ.';
+        erroEl.classList.remove('hidden');
+        return;
+      }
+      const cert = typeof lerCertSefaz === 'function' ? lerCertSefaz() : null;
+      btn.disabled = true;
+      msgEl.textContent = 'Consultando CT-e na SEFAZ e gravando no CONFNF…';
+      msgEl.classList.remove('hidden');
+      try {
+        const payload = { chaveNfe: chaveNFe, chaveCte, estab };
+        if (cert?.thumbprint) payload.thumbprint = cert.thumbprint;
+        const resp = await fetch('/api/nfe/cte/consultar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          let msg = data?.erro || 'Falha ao consultar o CT-e.';
+          if (data?.orientacao) msg += '\n\n' + data.orientacao;
+          throw new Error(msg);
+        }
+        renderizarListaCte(data.ctes || (data.cte ? [data.cte] : []));
+        msgEl.textContent = data.mensagem || 'CT-e gravado no CONFNF.';
+        mostrarToast(data.mensagem || 'CT-e gravado no CONFNF.');
+      } catch (e) {
+        erroEl.textContent = e?.message || 'Falha ao consultar o CT-e.';
         erroEl.classList.remove('hidden');
         msgEl.classList.add('hidden');
       } finally {
@@ -3843,6 +4233,8 @@
         btn = document.getElementById('btn-toggle-info');
       } else if (sectionContentId === 'totais-section-content') {
         btn = document.getElementById('btn-toggle-totais');
+      } else if (sectionContentId === 'cte-section-content') {
+        btn = document.getElementById('btn-toggle-cte');
       }
       
       if (!btn) return;

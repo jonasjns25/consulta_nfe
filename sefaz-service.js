@@ -1223,6 +1223,208 @@ async function listarCertificadosParaUI() {
     return { certificados, debug };
 }
 
+const CTE_DIST_URL = {
+    1: 'https://www1.cte.fazenda.gov.br/CTeDistribuicaoDFe/CTeDistribuicaoDFe.asmx',
+    2: 'https://hom1.cte.fazenda.gov.br/CTeDistribuicaoDFe/CTeDistribuicaoDFe.asmx',
+};
+
+function modeloDaChave(chave) {
+    return String(chave || '').replace(/\D/g, '').slice(20, 22);
+}
+
+function ehChaveCte(chave) {
+    const mod = modeloDaChave(chave);
+    return mod === '57' || mod === '67';
+}
+
+function codigoUfAutor(uf, chaveRef) {
+    const s = String(uf || '').trim().toUpperCase();
+    if (/^\d{2}$/.test(s)) return s;
+    if (MAP_UF[s]) return MAP_UF[s];
+    const cUF = String(chaveRef || '').replace(/\D/g, '').slice(0, 2);
+    return /^\d{2}$/.test(cUF) ? cUF : '35';
+}
+
+function situacaoCtePorCstat(cStat, xMotivo) {
+    const c = String(cStat || '');
+    if (['100', '150'].includes(c)) return { situacao: 'autorizado', situacaoLabel: 'Autorizado' };
+    if (['101', '151', '155'].includes(c)) return { situacao: 'cancelado', situacaoLabel: 'Cancelado' };
+    if (['110', '301', '302', '303'].includes(c)) return { situacao: 'denegado', situacaoLabel: 'Denegado' };
+    if (!c) return { situacao: 'desconhecida', situacaoLabel: xMotivo || 'Consultado' };
+    return { situacao: 'outro', situacaoLabel: xMotivo || `cStat ${c}` };
+}
+
+function extrairChavesCteDeXmlNfe(xml, chaveNfe) {
+    const texto = String(xml || '');
+    const nfe = String(chaveNfe || '').replace(/\D/g, '');
+    const achadas = new Set();
+    const re = /\d{44}/g;
+    let m;
+    while ((m = re.exec(texto))) {
+        const ch = m[0];
+        if (ch !== nfe && ehChaveCte(ch)) achadas.add(ch);
+    }
+    return [...achadas];
+}
+
+function chavesNfeNoXmlCte(xml, parsed) {
+    const chaves = new Set();
+    const infNFes = coletarPorNomeLocal(parsed, 'infNFe');
+    for (const n of infNFes) {
+        const ch = textoCampo(n && (n.chave || n.chNFe || n.chNfe)).replace(/\D/g, '');
+        if (ch.length === 44 && modeloDaChave(ch) === '55') chaves.add(ch);
+    }
+    const re = /\d{44}/g;
+    let m;
+    const texto = String(xml || '');
+    while ((m = re.exec(texto))) {
+        if (modeloDaChave(m[0]) === '55') chaves.add(m[0]);
+    }
+    return [...chaves];
+}
+
+function parsearXmlCte(xml) {
+    const parsed = parserStatusXml.parse(String(xml || ''));
+    const infs = coletarPorNomeLocal(parsed, 'infCte').concat(coletarPorNomeLocal(parsed, 'infCTe'));
+    const inf = infs[0] || {};
+    const ide = inf.ide || {};
+    const emit = inf.emit || {};
+    const vPrest = inf.vPrest || {};
+    const infProt = coletarPorNomeLocal(parsed, 'infProt')[0] || {};
+    const idInf = textoCampo(inf._Id || inf.Id || inf._id).replace(/\D/g, '');
+    const chave = (idInf.length === 44 ? idInf : textoCampo(infProt.chCTe).replace(/\D/g, '')) || '';
+    const cStat = textoCampo(infProt.cStat);
+    const xMotivo = textoCampo(infProt.xMotivo);
+    const sit = situacaoCtePorCstat(cStat, xMotivo);
+    const cnpjEmit = textoCampo(emit.CNPJ || emit.CPF).replace(/\D/g, '');
+    return {
+        xml: String(xml || ''),
+        chave,
+        nct: textoCampo(ide.nCT || ide.nCTe),
+        serie: textoCampo(ide.serie),
+        cnpjEmitente: cnpjEmit,
+        nomeEmitente: textoCampo(emit.xNome),
+        vTPrest: textoCampo(vPrest.vTPrest),
+        dhEmi: textoCampo(ide.dhEmi),
+        situacao: sit.situacao,
+        situacaoLabel: sit.situacaoLabel,
+        cStat,
+        xMotivo,
+        ambiente: rotuloAmbienteSefaz(ide.tpAmb || infProt.tpAmb),
+        chavesNfe: chavesNfeNoXmlCte(xml, parsed),
+    };
+}
+
+function textoDocZip(doc) {
+    if (doc == null) return '';
+    if (typeof doc === 'string') return doc;
+    return textoCampo(doc) || String(doc['#text'] || doc._text || '');
+}
+
+function envelopesDistCte(cnpj, cUFAutor, chaveCte, tpAmb) {
+    const dist =
+        `<distDFeInt xmlns="http://www.portalfiscal.inf.br/cte" versao="1.00">` +
+        `<tpAmb>${tpAmb}</tpAmb><cUFAutor>${cUFAutor}</cUFAutor>` +
+        `<CNPJ>${cnpj}</CNPJ><consChCTe><chCTe>${chaveCte}</chCTe></consChCTe></distDFeInt>`;
+    const soapAction = 'http://www.portalfiscal.inf.br/cte/wsdl/CTeDistribuicaoDFe/cteDistDFeInteresse';
+    return [
+        {
+            body:
+                `<?xml version="1.0" encoding="utf-8"?>` +
+                `<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">` +
+                `<soap:Body><cteDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/cte/wsdl/CTeDistribuicaoDFe">` +
+                `<cteDadosMsg>${dist}</cteDadosMsg></cteDistDFeInteresse></soap:Body></soap:Envelope>`,
+            headers: {
+                'Content-Type': 'text/xml; charset=utf-8',
+                SOAPAction: `"${soapAction}"`,
+            },
+        },
+        {
+            body:
+                `<?xml version="1.0" encoding="utf-8"?>` +
+                `<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">` +
+                `<soap12:Body><cteDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/cte/wsdl/CTeDistribuicaoDFe">` +
+                `<cteDadosMsg>${dist}</cteDadosMsg></cteDistDFeInteresse></soap12:Body></soap12:Envelope>`,
+            headers: {
+                'Content-Type': `application/soap+xml; charset=utf-8; action="${soapAction}"`,
+                SOAPAction: `"${soapAction}"`,
+            },
+        },
+    ];
+}
+
+/**
+ * Consulta o XML do CT-e (modelo 57/67) na Distribuição DFe nacional por chave.
+ */
+async function consultarXmlCtePorChave(chaveCte, dnCert, uf, opts = {}) {
+    const chave = String(chaveCte || '').replace(/\D/g, '');
+    if (chave.length !== 44) {
+        throw new Error('Chave do CT-e inválida. Informe os 44 dígitos.');
+    }
+    if (!ehChaveCte(chave)) {
+        throw new Error(`A chave informada não é de CT-e (modelo 57 ou 67). Modelo encontrado: ${modeloDaChave(chave) || '-'}.`);
+    }
+    const tpAmb = String(opts.tpAmb || process.env.SEFAZ_TPAMB || '1');
+    const cnpj = extrairCnpjDoDN(dnCert);
+    const cUFAutor = codigoUfAutor(uf, opts.chaveNfe || chave);
+    const cred = await obterCredenciais(cnpj, opts.thumbprint);
+    const agent = new https.Agent({
+        pfx: cred.pfx,
+        passphrase: cred.passphrase || '',
+        rejectUnauthorized: false,
+    });
+    const url = CTE_DIST_URL[tpAmb] || CTE_DIST_URL[1];
+
+    let ultimoErro = null;
+    for (const env of envelopesDistCte(cnpj, cUFAutor, chave, tpAmb)) {
+        try {
+            const { status, xmlResp } = await postConsultaProtocolo(url, env.body, env.headers, agent);
+            if (status >= 400) {
+                ultimoErro = new Error(`Distribuição CT-e HTTP ${status}`);
+                continue;
+            }
+            if (!xmlResp || /<\s*html[\s>]/i.test(xmlResp)) {
+                ultimoErro = new Error('Distribuição CT-e retornou HTML em vez de XML.');
+                continue;
+            }
+            const parsed = parserStatusXml.parse(xmlResp);
+            expandirXmlAninhado(parsed);
+            const rets = coletarPorNomeLocal(parsed, 'retDistDFeInt');
+            const ret = rets[0] || parsed;
+            const cStat = textoCampo(ret.cStat);
+            const xMotivo = textoCampo(ret.xMotivo);
+            if (cStat && cStat !== '138') {
+                throw new Error(xMotivo ? `SEFAZ CT-e (${cStat}): ${xMotivo}` : `SEFAZ CT-e cStat ${cStat}.`);
+            }
+            const docs = coletarPorNomeLocal(parsed, 'docZip');
+            let xmlCte = '';
+            for (const doc of docs) {
+                const unzip = xmlDocParaTexto(textoDocZip(doc));
+                if (unzip && /infCte|infCTe/i.test(unzip)) {
+                    xmlCte = unzip;
+                    break;
+                }
+                if (!xmlCte && unzip && unzip.includes('<')) xmlCte = unzip;
+            }
+            if (!xmlCte) {
+                ultimoErro = new Error(xMotivo || 'A SEFAZ não devolveu o XML do CT-e para esta chave.');
+                continue;
+            }
+            const dados = parsearXmlCte(xmlCte);
+            if (!dados.chave) dados.chave = chave;
+            dados.cStat = dados.cStat || cStat;
+            dados.xMotivo = dados.xMotivo || xMotivo;
+            if (!dados.situacaoLabel && xMotivo) dados.situacaoLabel = xMotivo;
+            console.log(`[SEFAZ CT-e] cStat=${dados.cStat || cStat || '-'} chave=${dados.chave}`);
+            return dados;
+        } catch (err) {
+            if (err && /SEFAZ CT-e/.test(err.message)) throw err;
+            ultimoErro = err;
+        }
+    }
+    throw ultimoErro || new Error('Falha ao consultar o CT-e na SEFAZ.');
+}
+
 /** Formata erro de certificado/SEFAZ para resposta HTTP da API. */
 function formatarErroRespostaSefaz(error) {
     if (error instanceof ErroCertificadoSefaz) {
@@ -1250,6 +1452,10 @@ module.exports = {
     certificadoCompativelComEstabelecimento,
     extrairCnpjsDoTexto,
     consultarXmlPorChave,
+    consultarXmlCtePorChave,
+    parsearXmlCte,
+    extrairChavesCteDeXmlNfe,
+    ehChaveCte,
     consultarStatusPorChave,
     analisarSituacaoNFeSefaz,
     extrairEventosSefaz,
