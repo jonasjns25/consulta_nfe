@@ -1399,20 +1399,29 @@
       const isNFRecebida = window.compraStatus === '4';
       const msgNFRecebida = 'Não disponível para notas com status "NF Recebida"';
       const msgNFAusenteERP = 'Disponível somente quando a NF estiver lançada no ERP';
-      [document.getElementById('btn-acoes-itemcomp'), document.getElementById('btn-itemcomp-dev-ref')].forEach(btn => {
-        if (btn) {
-          if (window.podeAlterar === false) {
-            btn.hidden = true;
-            btn.style.display = 'none';
-            return;
-          }
-          const indisponivel = isNFRecebida || !window.nfEstaNoERP;
-          btn.disabled = indisponivel;
-          const tituloDevRef = 'Gravar CHAVE_DFE e item do XML em itemcomp_dev_ref (um registro por itemcomp)';
-          btn.title = isNFRecebida ? msgNFRecebida : (!window.nfEstaNoERP ? msgNFAusenteERP : (btn.id === 'btn-itemcomp-dev-ref' ? tituloDevRef : 'Abrir ações em massa'));
-          btn.style.opacity = indisponivel ? '0.5' : '1';
-          btn.style.cursor = indisponivel ? 'not-allowed' : 'pointer';
+      const tituloDevRef = 'Gravar CHAVE_DFE e item do XML em itemcomp_dev_ref (um registro por itemcomp)';
+      const aplicarEstadoBtnErp = (btn, { permitirNFRecebida, tituloAtivo }) => {
+        if (!btn) return;
+        if (window.podeAlterar === false) {
+          btn.hidden = true;
+          btn.style.display = 'none';
+          return;
         }
+        const indisponivel = !window.nfEstaNoERP || (!permitirNFRecebida && isNFRecebida);
+        btn.disabled = indisponivel;
+        btn.title = !window.nfEstaNoERP
+          ? msgNFAusenteERP
+          : (!permitirNFRecebida && isNFRecebida ? msgNFRecebida : tituloAtivo);
+        btn.style.opacity = indisponivel ? '0.5' : '1';
+        btn.style.cursor = indisponivel ? 'not-allowed' : 'pointer';
+      };
+      aplicarEstadoBtnErp(document.getElementById('btn-acoes-itemcomp'), {
+        permitirNFRecebida: false,
+        tituloAtivo: 'Abrir ações em massa',
+      });
+      aplicarEstadoBtnErp(document.getElementById('btn-itemcomp-dev-ref'), {
+        permitirNFRecebida: true,
+        tituloAtivo: tituloDevRef,
       });
       
       // Armazenar tolerância globalmente
@@ -5112,10 +5121,6 @@ document.addEventListener('DOMContentLoaded', () => {
   async function sincronizarItemcompDevRef() {
     if (!window.nfEstaNoERP) {
       mostrarToast('A NF precisa estar lançada no ERP (itemcomp).', true);
-      return;
-    }
-    if (window.compraStatus === '4') {
-      mostrarToast('Não disponível para notas com status "NF Recebida".', true);
       return;
     }
     const chave = String(window.nfeChave || '').replace(/\D/g, '');
