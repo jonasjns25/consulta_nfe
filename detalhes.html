@@ -1119,6 +1119,7 @@
               </button>
               <div class="config-dropdown-panel" id="config-panel">
                 <button type="button" class="config-item config-action" id="btn-acoes-itemcomp" title="Abrir ações em massa">Aplicar Ações em Massa</button>
+                <button type="button" class="config-item config-action" id="btn-itemcomp-dev-ref" title="Gravar vínculo NF-e (chave e item) em itemcomp_dev_ref">Gravar itemcomp_dev_ref</button>
                 <div class="config-divider"></div>
                 <label class="config-item" style="cursor: pointer;">
                   <input type="checkbox" id="oda-bc-normal-global" checked onchange="atualizarODABCNormal()" style="width: 16px; height: 16px; cursor: pointer;">
@@ -1215,6 +1216,8 @@
 
       window.nfeChave = dados.chave;
       window.nfeEstab = String(dados.estab || dados.destinatario?.cnpj || '').replace(/\D/g, '');
+      window.nfeNumero = dados.numero != null ? String(dados.numero).trim() : '';
+      window.nfeFornece = String(dados.emitente?.cnpj || '').replace(/\D/g, '');
       renderizarPainelSefaz(dados.sefazConsulta || null, dados.sefazHistorico || []);
       atualizarInfoCertSefaz();
       const btnConsultarSefaz = document.getElementById('btn-consultar-sefaz');
@@ -1396,7 +1399,7 @@
       const isNFRecebida = window.compraStatus === '4';
       const msgNFRecebida = 'Não disponível para notas com status "NF Recebida"';
       const msgNFAusenteERP = 'Disponível somente quando a NF estiver lançada no ERP';
-      [document.getElementById('btn-acoes-itemcomp')].forEach(btn => {
+      [document.getElementById('btn-acoes-itemcomp'), document.getElementById('btn-itemcomp-dev-ref')].forEach(btn => {
         if (btn) {
           if (window.podeAlterar === false) {
             btn.hidden = true;
@@ -1405,7 +1408,8 @@
           }
           const indisponivel = isNFRecebida || !window.nfEstaNoERP;
           btn.disabled = indisponivel;
-          btn.title = isNFRecebida ? msgNFRecebida : (!window.nfEstaNoERP ? msgNFAusenteERP : 'Abrir ações em massa');
+          const tituloDevRef = 'Gravar CHAVE_DFE e item do XML em itemcomp_dev_ref (um registro por itemcomp)';
+          btn.title = isNFRecebida ? msgNFRecebida : (!window.nfEstaNoERP ? msgNFAusenteERP : (btn.id === 'btn-itemcomp-dev-ref' ? tituloDevRef : 'Abrir ações em massa'));
           btn.style.opacity = indisponivel ? '0.5' : '1';
           btn.style.cursor = indisponivel ? 'not-allowed' : 'pointer';
         }
@@ -5095,16 +5099,79 @@ document.addEventListener('DOMContentLoaded', () => {
   fetch('/api/auth/me').then((r) => r.json()).then((u) => {
     window.podeAlterar = !(u && u.podeAlterar === false);
     if (window.podeAlterar === false) {
-      const btn = document.getElementById('btn-acoes-itemcomp');
-      if (btn) {
-        btn.hidden = true;
-        btn.style.display = 'none';
-      }
+      ['btn-acoes-itemcomp', 'btn-itemcomp-dev-ref'].forEach((id) => {
+        const btn = document.getElementById(id);
+        if (btn) {
+          btn.hidden = true;
+          btn.style.display = 'none';
+        }
+      });
     }
   }).catch(() => { window.podeAlterar = true; });
+
+  async function sincronizarItemcompDevRef() {
+    if (!window.nfEstaNoERP) {
+      mostrarToast('A NF precisa estar lançada no ERP (itemcomp).', true);
+      return;
+    }
+    if (window.compraStatus === '4') {
+      mostrarToast('Não disponível para notas com status "NF Recebida".', true);
+      return;
+    }
+    const chave = String(window.nfeChave || '').replace(/\D/g, '');
+    const fornece = window.nfeFornece || '';
+    const numero = window.nfeNumero || '';
+    const estab = window.nfeEstab || '';
+    if (chave.length !== 44 || !fornece || !numero || !estab) {
+      mostrarToast('Dados da NF incompletos (chave, emitente, número ou estabelecimento).', true);
+      return;
+    }
+    const linhas = [];
+    for (const p of window.produtosData || []) {
+      if (String(p?.dadosERPOrigem || '').toLowerCase() !== 'itemcomp' || !p.dadosERP) continue;
+      const registro = buscarCampoERP(p.dadosERP, 'registro', 'REGISTRO');
+      const itemXml = p.item;
+      if (registro != null && itemXml != null) {
+        linhas.push({ registro, itemDfe: itemXml });
+      }
+    }
+    const ok = confirm(
+      `Gravar/atualizar itemcomp_dev_ref para a NF ${numero}?\n\n` +
+      `${linhas.length ? linhas.length + ' item(ns) pareados com o XML.' : 'Será usado itemcomp.item como ITEM_DFE.'}\n` +
+      'Chave: ' + chave
+    );
+    if (!ok) return;
+    const btn = document.getElementById('btn-itemcomp-dev-ref');
+    if (btn) btn.disabled = true;
+    try {
+      const resp = await fetch('/itemcomp/sincronizar-dev-ref', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chave, fornece, numero, estab, linhas }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        throw new Error(data.error || data.erro || 'Falha ao gravar itemcomp_dev_ref.');
+      }
+      mostrarToast(
+        `itemcomp_dev_ref: ${data.gravados ?? 0} registro(s) gravado(s)` +
+        (data.ignorados ? ` (${data.ignorados} ignorado(s))` : '') +
+        '.'
+      );
+    } catch (e) {
+      mostrarToast(e?.message || 'Erro ao gravar itemcomp_dev_ref.', true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
   const btnAcoesItemcomp = document.getElementById('btn-acoes-itemcomp');
   if (btnAcoesItemcomp) {
     btnAcoesItemcomp.addEventListener('click', abrirAcoesItemcomp);
+  }
+  const btnItemcompDevRef = document.getElementById('btn-itemcomp-dev-ref');
+  if (btnItemcompDevRef) {
+    btnItemcompDevRef.addEventListener('click', sincronizarItemcompDevRef);
   }
   // Menu de configurações: toggle e fechar ao clicar fora
   const btnConfig = document.getElementById('btn-config-toggle');

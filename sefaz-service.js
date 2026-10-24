@@ -29,6 +29,7 @@ const parserStatusXml = new XMLParser({
 });
 
 const https = require('https');
+const tls = require('tls');
 const zlib = require('zlib');
 const axios = require('axios');
 const {
@@ -100,6 +101,65 @@ function mensagemIndicaChaveNaoExportavel(msg) {
         t.includes('não é possível exportar chave privada') ||
         t.includes('nao e possivel exportar chave privada')
     );
+}
+
+function mensagemIndicaMacVerifyFailure(msg) {
+    const t = String(msg || '').toLowerCase();
+    return (
+        t.includes('mac verify failure') ||
+        t.includes('mac verify error') ||
+        t.includes('bad decrypt') ||
+        t.includes('invalid pfx') ||
+        (t.includes('pkcs12') && (t.includes('password') || t.includes('mac')))
+    );
+}
+
+/** Tenta abrir o PFX com a senha (evita "mac verify failure" só na chamada HTTPS). */
+function validarPfxComSenha(pfxBuffer, passphrase) {
+    try {
+        tls.createSecureContext({
+            pfx: pfxBuffer,
+            passphrase: passphrase || '',
+        });
+        return true;
+    } catch (e) {
+        if (mensagemIndicaMacVerifyFailure(e.message)) return false;
+        throw e;
+    }
+}
+
+function erroCertificadoSenhaPfxInvalida(detalheTecnico, caminhoPfx) {
+    return new ErroCertificadoSefaz(
+        'Senha incorreta ou arquivo .pfx inválido para o certificado A1.',
+        {
+            codigo: 'CERT_SENHA_PFX',
+            permiteSelecaoManual: true,
+            orientacao:
+                'Verifique SEFAZ_PFX_PASS (ou SEFAZ_PFX_PASS_<CNPJ14>) no .env.\n' +
+                'Se o .pfx está na pasta Certificados\\, use a senha definida na exportação.\n' +
+                'Alternativa: clique em Certificado e selecione o A1 instalado no Windows.\n' +
+                (caminhoPfx ? `Arquivo: ${caminhoPfx}\n` : '') +
+                (detalheTecnico ? `Detalhe: ${detalheTecnico}` : ''),
+        }
+    );
+}
+
+function criarHttpsAgentPfx(cred, caminhoPfx) {
+    if (!validarPfxComSenha(cred.pfx, cred.passphrase)) {
+        throw erroCertificadoSenhaPfxInvalida('mac verify failure', caminhoPfx);
+    }
+    return new https.Agent({
+        pfx: cred.pfx,
+        passphrase: cred.passphrase || '',
+        rejectUnauthorized: false,
+    });
+}
+
+function relancarSeErroSenhaPfx(err, caminhoPfx) {
+    if (err instanceof ErroCertificadoSefaz) throw err;
+    if (mensagemIndicaMacVerifyFailure(err?.message)) {
+        throw erroCertificadoSenhaPfxInvalida(err.message, caminhoPfx);
+    }
 }
 
 function erroCertificadoNaoExportavel(detalheTecnico) {
@@ -519,7 +579,7 @@ function tentarPfxDeArquivo(cnpj) {
                 console.warn(`[SEFAZ] PFX encontrado sem senha, ignorando (defina SEFAZ_PFX_PASS): ${p}`);
                 continue;
             }
-            return { pfx: fs.readFileSync(p), passphrase: pass };
+            return { pfx: fs.readFileSync(p), passphrase: pass, path: p };
         }
     }
     return null;
@@ -534,7 +594,12 @@ function tentarPfxDeArquivo(cnpj) {
 async function obterCredenciais(cnpj, thumbprint) {
     const pfxArquivo = tentarPfxDeArquivo(cnpj);
     if (pfxArquivo) {
-        return pfxArquivo;
+        if (validarPfxComSenha(pfxArquivo.pfx, pfxArquivo.passphrase)) {
+            return { pfx: pfxArquivo.pfx, passphrase: pfxArquivo.passphrase, path: pfxArquivo.path };
+        }
+        console.warn(
+            `[SEFAZ] PFX em arquivo com senha inválida, ignorando: ${pfxArquivo.path || '(env)'}`
+        );
     }
 
     if (thumbprint) {
@@ -1086,11 +1151,7 @@ async function executarConsultaProtocoloNFe(chave, dnCert, opts = {}) {
     const cnpj = extrairCnpjDoDN(dnCert);
     const cred = await obterCredenciais(cnpj, opts.thumbprint);
     const url = urlConsultaProtocolo(chaveLimpa, tpAmb);
-    const agent = new https.Agent({
-        pfx: cred.pfx,
-        passphrase: cred.passphrase || '',
-        rejectUnauthorized: false,
-    });
+    const agent = criarHttpsAgentPfx(cred, cred.path);
 
     let ultimoErro = null;
     for (const env of envelopesConsultaProtocolo(chaveLimpa, tpAmb)) {
@@ -1130,6 +1191,7 @@ async function executarConsultaProtocoloNFe(chave, dnCert, opts = {}) {
                 return situacao;
             } catch (err) {
                 if (err instanceof ErroConsultaSefazProtocolo) throw err;
+                relancarSeErroSenhaPfx(err, cred.path);
                 if (tentativa === 0 && erroRedeOuTimeout(err)) {
                     ultimoErro = err;
                     continue;
@@ -1139,6 +1201,7 @@ async function executarConsultaProtocoloNFe(chave, dnCert, opts = {}) {
             }
         }
     }
+    if (ultimoErro) relancarSeErroSenhaPfx(ultimoErro, cred.path);
     throw ultimoErro || new Error('Falha na consulta de protocolo da NF-e');
 }
 
@@ -1506,11 +1569,7 @@ async function baixarProcCteDistribuicao(chaveCte, dnCert, uf, opts = {}) {
     const cnpj = extrairCnpjDoDN(dnCert);
     const cUFAutor = codigoUfAutor(uf, chave);
     const cred = await obterCredenciais(cnpj, opts.thumbprint);
-    const agent = new https.Agent({
-        pfx: cred.pfx,
-        passphrase: cred.passphrase || '',
-        rejectUnauthorized: false,
-    });
+    const agent = criarHttpsAgentPfx(cred, cred.path);
     let ultNSU = padNsu15(
         opts.lerUltNsu ? await opts.lerUltNsu(cnpj) : '000000000000000'
     );
@@ -1640,11 +1699,7 @@ async function consultarXmlCtePorChave(chaveCte, dnCert, uf, opts = {}) {
     const tpAmb = String(opts.tpAmb || process.env.SEFAZ_TPAMB || '1');
     const cnpj = extrairCnpjDoDN(dnCert);
     const cred = await obterCredenciais(cnpj, opts.thumbprint);
-    const agent = new https.Agent({
-        pfx: cred.pfx,
-        passphrase: cred.passphrase || '',
-        rejectUnauthorized: false,
-    });
+    const agent = criarHttpsAgentPfx(cred, cred.path);
     const url = urlConsultaCte(chave, tpAmb);
 
     let ultimoErro = null;
@@ -1716,6 +1771,18 @@ function formatarErroRespostaSefaz(error) {
                 codigo: error.codigo,
                 orientacao: error.orientacao,
                 permiteSelecaoManual: error.permiteSelecaoManual,
+            },
+        };
+    }
+    if (mensagemIndicaMacVerifyFailure(error?.message)) {
+        const certErr = erroCertificadoSenhaPfxInvalida(error.message);
+        return {
+            status: 500,
+            body: {
+                erro: certErr.message,
+                codigo: certErr.codigo,
+                orientacao: certErr.orientacao,
+                permiteSelecaoManual: certErr.permiteSelecaoManual,
             },
         };
     }

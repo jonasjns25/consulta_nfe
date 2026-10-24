@@ -3935,6 +3935,110 @@ app.post('/itemcomp/aplicar-oda-frete', async (req, res) => {
     }
 });
 
+/** Lê PK e campos comuns de uma linha itemcomp (mysql2 varia maiúsculas). */
+function campoItemcompRow(row, ...candidatos) {
+    if (!row || typeof row !== 'object') return undefined;
+    const keys = Object.keys(row);
+    for (const c of candidatos) {
+        const k = keys.find((x) => x.toLowerCase() === String(c).toLowerCase());
+        if (k !== undefined && row[k] !== undefined && row[k] !== null && row[k] !== '') return row[k];
+        if (k !== undefined && (row[k] === 0 || row[k] === 0n)) return row[k];
+    }
+    return undefined;
+}
+
+/**
+ * Grava/atualiza itemcomp_dev_ref — uma linha por registro em itemcomp da NF.
+ * body: { chave, fornece, numero, estab, linhas?: [{ registro, itemDfe }] }
+ * ITEMCOMP (PK dev_ref) = itemcomp.REGISTRO; NOTA = itemcomp.nota; ITEM_DFE = XML ou itemcomp.item.
+ */
+app.post('/itemcomp/sincronizar-dev-ref', async (req, res) => {
+    const { chave, fornece, numero, estab, linhas } = req.body || {};
+    const chaveLimpa = String(chave || '').replace(/\D/g, '');
+    const forneceLimpo = String(fornece || '').replace(/\D/g, '').padStart(14, '0');
+    const estabLimpo = String(estab || '').replace(/\D/g, '').padStart(14, '0');
+    const numeroStr = numero !== undefined && numero !== null ? String(numero).trim() : '';
+
+    if (chaveLimpa.length !== 44) {
+        return res.status(400).json({ error: 'Chave NF-e inválida (44 dígitos).' });
+    }
+    if (!forneceLimpo || forneceLimpo.length !== 14 || !numeroStr || !estabLimpo || estabLimpo.length !== 14) {
+        return res.status(400).json({ error: 'Informe fornece (CNPJ emitente), numero da NF e estab (CNPJ destino).' });
+    }
+
+    const mapItemDfe = new Map();
+    if (Array.isArray(linhas)) {
+        for (const l of linhas) {
+            const reg = l?.registro ?? l?.REGISTRO ?? l?.itemcomp ?? l?.ITEMCOMP;
+            const dfe = l?.itemDfe ?? l?.ITEM_DFE ?? l?.item_dfe;
+            if (reg !== undefined && reg !== null && dfe !== undefined && dfe !== null) {
+                mapItemDfe.set(Number(reg), Number(dfe));
+            }
+        }
+    }
+
+    const connection = await pool.getConnection();
+    try {
+        const [rows] = await connection.query(
+            `SELECT REGISTRO, registro, nota, NOTA, item, ITEM
+             FROM itemcomp
+             WHERE fornece = ? AND (numero = ? OR numero = CAST(? AS UNSIGNED)) AND estab = ?`,
+            [forneceLimpo, numeroStr, numeroStr, estabLimpo]
+        );
+
+        if (!rows || rows.length === 0) {
+            return res.status(404).json({ error: 'Nenhum registro em itemcomp para esta NF (fornece/numero/estab).' });
+        }
+
+        const upsertSql = `
+            INSERT INTO itemcomp_dev_ref (ITEMCOMP, NOTA, CHAVE_DFE, ITEM_DFE)
+            VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                NOTA = VALUES(NOTA),
+                CHAVE_DFE = VALUES(CHAVE_DFE),
+                ITEM_DFE = VALUES(ITEM_DFE)`;
+
+        await connection.beginTransaction();
+        let gravados = 0;
+        let ignorados = 0;
+        for (const row of rows) {
+            const registro = campoItemcompRow(row, 'registro', 'REGISTRO');
+            if (registro === undefined || registro === null) {
+                ignorados++;
+                continue;
+            }
+            const registroNum = Number(registro);
+            const notaRaw = campoItemcompRow(row, 'nota', 'NOTA');
+            const nota = parseInt(String(notaRaw).replace(/\D/g, ''), 10);
+            let itemDfe = mapItemDfe.has(registroNum)
+                ? mapItemDfe.get(registroNum)
+                : Number(campoItemcompRow(row, 'item', 'ITEM'));
+            if (!Number.isFinite(nota) || !Number.isFinite(itemDfe)) {
+                ignorados++;
+                continue;
+            }
+            await connection.query(upsertSql, [registroNum, nota, chaveLimpa, itemDfe]);
+            gravados++;
+        }
+        await connection.commit();
+        return res.json({
+            gravados,
+            ignorados,
+            totalItemcomp: rows.length,
+        });
+    } catch (error) {
+        await connection.rollback().catch(() => {});
+        console.error('Erro ao sincronizar itemcomp_dev_ref:', error);
+        const msg = String(error?.message || '');
+        if (/itemcomp_dev_ref/i.test(msg) && /doesn't exist|não existe|unknown table/i.test(msg)) {
+            return res.status(500).json({ error: 'Tabela itemcomp_dev_ref não encontrada no banco SAC.' });
+        }
+        return res.status(500).json({ error: 'Falha ao gravar itemcomp_dev_ref.', detalhe: msg });
+    } finally {
+        connection.release();
+    }
+});
+
 app.get('/detalhes.html', (req, res) => res.sendFile(path.join(__dirname, 'detalhes.html')));
 app.get('/manutencao.html', (req, res) => res.sendFile(path.join(__dirname, 'manutencao.html')));
 app.get('/autorizacao-recepcao-xml.html', (req, res) => res.sendFile(path.join(__dirname, 'autorizacao-recepcao-xml.html')));
