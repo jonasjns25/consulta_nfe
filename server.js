@@ -1,8 +1,24 @@
+const path = require('path');
+const fs = require('fs');
+
+const MODULOS_LIB_OBRIGATORIOS = [
+    'lib/sefaz-nfe-consulta-protocolo-urls.js',
+    'lib/sefaz-situacao-protocolo.js',
+    'lib/sefaz-consulta-limiter.js',
+];
+for (const rel of MODULOS_LIB_OBRIGATORIOS) {
+    if (!fs.existsSync(path.join(__dirname, rel))) {
+        console.error(`\n[ERRO] Arquivo obrigatório ausente: ${rel}`);
+        console.error(
+            'A pasta lib/ não está instalada. Atualize com o ZIP completo da release ou copie lib/ do GitHub (consulta_nfe).\n'
+        );
+        process.exit(1);
+    }
+}
+
 const express = require('express');
 const mysql = require('mysql2/promise');
 const axios = require('axios');
-const path = require('path');
-const fs = require('fs');
 const { AsyncLocalStorage } = require('node:async_hooks');
 const {
     consultarXmlPorChave,
