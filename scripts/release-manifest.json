@@ -28,6 +28,8 @@
   "atualizar_agora.bat",
   "atualizar-consulta-nfe.bat",
   "verificar_configuracao.js",
+  "scripts/verificar-modulos-obrigatorios.cjs",
+  "scripts/pm2-consulta-status.cjs",
   "MANUAL_INSTALACAO.md",
   "MANUAL_ATUALIZACAO_REMOTA.md",
   "SOLUCAO_ERRO_CONEXAO.md",
