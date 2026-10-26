@@ -27,6 +27,7 @@
   "desinstalar_servico.bat",
   "atualizar_agora.bat",
   "atualizar-consulta-nfe.bat",
+  "CORRIGIR_INSTALACAO.bat",
   "verificar_configuracao.js",
   "scripts/verificar-modulos-obrigatorios.cjs",
   "scripts/pm2-consulta-status.cjs",

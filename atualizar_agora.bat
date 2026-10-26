@@ -1,7 +1,6 @@
 @echo off
 REM ==============================================================================
-REM Consulta NF-e - Forca verificacao de atualizacao (GitHub Releases)
-REM Compativel com PM2 (consulta-nfe) e servico Windows (ConsultaNFE)
+REM Consulta NF-e - Baixa release do GitHub e reinicia (PM2 ou servico Windows)
 REM ==============================================================================
 setlocal enableextensions
 cd /d "%~dp0"
@@ -21,6 +20,7 @@ if errorlevel 1 (
 
 if not exist "updater.js" (
     echo [ERRO] updater.js nao encontrado em %cd%
+    echo        Use CORRIGIR_INSTALACAO.bat se nao tiver updater.
     pause
     exit /b 1
 )
@@ -51,10 +51,29 @@ echo [INFO] Verificando atualizacoes no GitHub...
 node updater.js %*
 set RESULTADO=%ERRORLEVEL%
 
+if not exist "lib\sefaz-nfe-consulta-protocolo-urls.js" (
+    echo.
+    echo [AVISO] Pasta lib/ ausente apos update — re-baixando ZIP ^(--force^)...
+    node updater.js --force
+    set RESULTADO=%ERRORLEVEL%
+)
+
+if "%USOU_SERVICO%"=="1" (
+    echo [INFO] Servico Windows: use reiniciar-consulta-nfe.bat apos npm install.
+)
+
+if exist "atualizar-consulta-nfe.bat" (
+    echo.
+    echo [INFO] Executando atualizar-consulta-nfe.bat ^(npm + PM2 + checagem^)...
+    call atualizar-consulta-nfe.bat
+    exit /b %ERRORLEVEL%
+)
+
 if "%USOU_PM2%"=="1" (
     echo [INFO] Reiniciando PM2...
-    call pm2 start consulta-nfe >nul 2>&1
-    if errorlevel 1 call pm2 restart consulta-nfe
+    call pm2 delete consulta-nfe >nul 2>&1
+    call pm2 start server.js --name consulta-nfe --cwd "%cd%"
+    call pm2 save >nul 2>&1
 )
 
 if "%USOU_SERVICO%"=="1" (
@@ -64,11 +83,11 @@ if "%USOU_SERVICO%"=="1" (
 
 echo.
 if "%RESULTADO%"=="0" (
-    echo [OK] Atualizacao aplicada. Reinicie o processo se ainda nao reiniciou sozinho.
+    echo [OK] Atualizacao aplicada.
 ) else if "%RESULTADO%"=="1" (
-    echo [INFO] Ja esta na versao mais recente.
+    echo [INFO] Versao remota igual a local; arquivos podem ter sido re-aplicados com --force.
 ) else (
-    echo [ERRO] Falha na verificacao. Confira UPDATE_* no .env e a release no GitHub.
+    echo [ERRO] Falha no updater. Confira UPDATE_* no .env ou use CORRIGIR_INSTALACAO.bat
 )
 echo.
 pause

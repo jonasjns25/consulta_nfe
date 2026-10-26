@@ -5,8 +5,11 @@ set "DIR_PROJETO=%cd%"
 set "FALHOU=0"
 
 echo ==========================================
-echo   ATUALIZAR CONSULTA-NFE
+echo   ATUALIZAR CONSULTA-NFE  (script v2 — 5 passos)
 echo ==========================================
+echo.
+echo Se aparecer [1/3] voce esta com script ANTIGO.
+echo Baixe CORRIGIR_INSTALACAO.bat do GitHub e execute uma vez.
 echo.
 echo Pasta: %DIR_PROJETO%
 echo.
