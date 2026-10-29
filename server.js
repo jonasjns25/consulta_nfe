@@ -19,6 +19,7 @@ for (const rel of MODULOS_LIB_OBRIGATORIOS) {
 const express = require('express');
 const mysql = require('mysql2/promise');
 const axios = require('axios');
+const AdmZip = require('adm-zip');
 const { AsyncLocalStorage } = require('node:async_hooks');
 const {
     consultarXmlPorChave,
@@ -498,6 +499,53 @@ async function gerarDanfeViaXml(chave) {
     }
 }
 
+const DANFE_LOTE_MAX = Math.min(Math.max(Number(process.env.DANFE_LOTE_MAX || 80), 1), 200);
+const DANFE_LOTE_CONCORRENCIA = Math.min(Math.max(Number(process.env.DANFE_LOTE_CONCORRENCIA || 3), 1), 8);
+
+async function obterPdfDanfePorChave(chave) {
+    const conversao = await gerarDanfeViaXml(chave);
+    if (conversao?.buffer) return conversao;
+
+    try {
+        await danfeClient.put(`/fd/add/${chave}`);
+    } catch (error) {
+        const status = error?.response?.status;
+        if (status !== 409 && status !== 422) {
+            const detalhe = error?.response?.data || error.message;
+            throw new Error(`Falha ao preparar DANFE na API externa (${detalhe}).`);
+        }
+    }
+
+    try {
+        const pdfResponse = await danfeClient.get(`/fd/get/da/${chave}`, {
+            responseType: 'arraybuffer',
+            headers: { Accept: 'application/pdf' }
+        });
+        return {
+            buffer: Buffer.from(pdfResponse.data),
+            filename: `danfe-${chave}.pdf`
+        };
+    } catch (error) {
+        const status = error?.response?.status;
+        if (status === 404) throw new Error('DANFE não encontrado na API externa.');
+        throw new Error(error?.response?.data?.error || error.message || 'Falha ao gerar DANFE.');
+    }
+}
+
+async function mapearComLimite(itens, limite, fn) {
+    const saida = new Array(itens.length);
+    let indice = 0;
+    async function trabalhador() {
+        while (indice < itens.length) {
+            const atual = indice++;
+            saida[atual] = await fn(itens[atual], atual);
+        }
+    }
+    const n = Math.min(Math.max(1, limite), itens.length || 1);
+    await Promise.all(Array.from({ length: n }, trabalhador));
+    return saida;
+}
+
 async function gerarDacteViaXml(xml, chaveCte) {
     if (!DANFE_API_KEY || !xml) return null;
     try {
@@ -745,9 +793,16 @@ app.get('/consulta', async (req, res) => {
         const [rows] = await pool.query(sql, valores);
         await anexarObservacoesNfe(rows);
         await anexarUltimasSefaz(rows);
-        const data = (nfeObsAtivo() && observacaoFiltro === '__vazia__')
+        await anexarDanfeExportado(rows);
+        let data = (nfeObsAtivo() && observacaoFiltro === '__vazia__')
             ? rows.filter((r) => !r.OBSERVACAO)
             : rows;
+        const filtroDanfe = String(req.query.danfe_exportado || '').trim().toLowerCase();
+        if (filtroDanfe === 'nao' || filtroDanfe === 'pendente') {
+            data = data.filter((r) => !r.DANFE_EXPORTADO);
+        } else if (filtroDanfe === 'sim' || filtroDanfe === 'exportado') {
+            data = data.filter((r) => r.DANFE_EXPORTADO);
+        }
         res.json({
             data,
             meta: {
@@ -1055,40 +1110,84 @@ app.get('/danfe/:chave', async (req, res) => {
         return res.status(500).json({ error: 'API key do DANFE não configurada.' });
     }
 
-    const conversao = await gerarDanfeViaXml(chave);
-    if (conversao?.buffer) {
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `inline; filename="${conversao.filename}"`);
-        return res.send(conversao.buffer);
-    }
-
     try {
-        await danfeClient.put(`/fd/add/${chave}`);
-    } catch (error) {
-        const status = error?.response?.status;
-        if (status !== 409 && status !== 422) {
-            console.error('Erro ao adicionar NF na área do cliente Meu Danfe:', error?.response?.data || error.message);
-            return res.status(502).json({ error: 'Falha ao preparar DANFE na API externa.' });
-        }
-    }
-
-    try {
-        const pdfResponse = await danfeClient.get(`/fd/get/da/${chave}`, {
-            responseType: 'arraybuffer',
-            headers: { Accept: 'application/pdf' }
-        });
+        const pdf = await obterPdfDanfePorChave(chave);
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `inline; filename="danfe-${chave}.pdf"`);
-        return res.send(pdfResponse.data);
+        res.setHeader('Content-Disposition', `inline; filename="${pdf.filename}"`);
+        return res.send(pdf.buffer);
     } catch (error) {
-        console.error('Erro ao baixar DANFE:', error?.response?.data || error.message);
-        const status = error?.response?.status;
+        console.error('Erro ao baixar DANFE:', error?.message || error);
         return res.status(502).json({
-            error: status === 404
-                ? 'DANFE não encontrado na API externa.'
-                : 'Falha ao gerar DANFE. Tente novamente.'
+            error: error?.message || 'Falha ao gerar DANFE. Tente novamente.'
         });
     }
+});
+
+/**
+ * Gera DANFE (PDF) de várias chaves e devolve um ZIP.
+ * body: { chaves: string[] }
+ */
+app.post('/danfe/lote', async (req, res) => {
+    if (!DANFE_API_KEY) {
+        return res.status(500).json({ error: 'API key do DANFE não configurada.' });
+    }
+    const brutas = Array.isArray(req.body?.chaves) ? req.body.chaves : [];
+    const chaves = [...new Set(
+        brutas.map((c) => String(c || '').replace(/\D/g, '')).filter((c) => /^\d{44}$/.test(c))
+    )];
+    if (!chaves.length) {
+        return res.status(400).json({ error: 'Informe ao menos uma chave de 44 dígitos.' });
+    }
+    if (chaves.length > DANFE_LOTE_MAX) {
+        return res.status(400).json({
+            error: `No máximo ${DANFE_LOTE_MAX} DANFEs por vez. Refine o filtro ou baixe em partes.`,
+            max: DANFE_LOTE_MAX,
+            solicitado: chaves.length
+        });
+    }
+
+    const erros = [];
+    const okChaves = [];
+    const zip = new AdmZip();
+    try {
+        await mapearComLimite(chaves, DANFE_LOTE_CONCORRENCIA, async (chave) => {
+            try {
+                const pdf = await obterPdfDanfePorChave(chave);
+                const nome = String(pdf.filename || `danfe-${chave}.pdf`).replace(/[\\/]/g, '_');
+                zip.addFile(nome, pdf.buffer);
+                okChaves.push(chave);
+            } catch (error) {
+                const msg = error?.message || 'Falha ao gerar DANFE';
+                erros.push(`${chave}: ${msg}`);
+                console.error(`[DANFE lote] ${chave}:`, msg);
+            }
+        });
+    } catch (error) {
+        console.error('[DANFE lote]', error);
+        return res.status(500).json({ error: 'Falha ao gerar o lote de DANFEs.' });
+    }
+
+    if (!okChaves.length) {
+        return res.status(502).json({
+            error: 'Não foi possível gerar nenhum DANFE.',
+            erros
+        });
+    }
+    try {
+        await marcarDanfesExportados(okChaves);
+    } catch (error) {
+        console.error('[DANFE export marcar]', error?.message || error);
+    }
+    if (erros.length) {
+        zip.addFile('_erros.txt', Buffer.from(erros.join('\n'), 'utf8'));
+    }
+
+    const dataArq = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="danfes-${dataArq}.zip"`);
+    res.setHeader('X-Danfe-Ok', String(okChaves.length));
+    res.setHeader('X-Danfe-Erros', String(erros.length));
+    return res.send(zip.toBuffer());
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -1190,6 +1289,85 @@ async function anexarObservacoesNfe(rows) {
         console.warn('[NFE obs listar]', error?.message || error);
     }
     return rows;
+}
+
+let tabelaDanfeExportOk = false;
+async function garantirTabelaDanfeExport() {
+    if (tabelaDanfeExportOk) return true;
+    try {
+        await getConfNfPool().query(`SELECT 1 FROM ${tabelaConfnf('conf_nfe_danfe_export')} LIMIT 1`);
+        tabelaDanfeExportOk = true;
+        return true;
+    } catch (_e) {
+        try {
+            await getConfNfPool().query(`
+                CREATE TABLE IF NOT EXISTS ${tabelaConfnf('conf_nfe_danfe_export')} (
+                    chave_nfe VARCHAR(44) NOT NULL,
+                    exportado_em DATETIME NOT NULL,
+                    origem VARCHAR(20) NOT NULL DEFAULT 'lote',
+                    PRIMARY KEY (chave_nfe),
+                    KEY idx_danfe_export_em (exportado_em)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+            tabelaDanfeExportOk = true;
+            return true;
+        } catch (error) {
+            console.error('[DANFE export tabela]', error?.message || error);
+            return false;
+        }
+    }
+}
+
+async function anexarDanfeExportado(rows) {
+    if (!Array.isArray(rows) || !rows.length) return rows;
+    for (const row of rows) {
+        row.DANFE_EXPORTADO = false;
+        row.DANFE_EXPORTADO_EM = null;
+    }
+    if (!(await garantirTabelaDanfeExport())) return rows;
+    const chaves = [...new Set(rows.map((r) => String(r.CHAVE || r.chave || '').replace(/\D/g, '')).filter((c) => c.length === 44))];
+    if (!chaves.length) return rows;
+    try {
+        const [marcadas] = await getConfNfPool().query(
+            `SELECT chave_nfe, DATE_FORMAT(exportado_em, '%Y-%m-%dT%H:%i:%s') AS exportado_em
+             FROM ${tabelaConfnf('conf_nfe_danfe_export')}
+             WHERE chave_nfe IN (${chaves.map(() => '?').join(',')})`,
+            chaves
+        );
+        const mapa = {};
+        for (const m of marcadas || []) {
+            const k = String(m.chave_nfe || m.CHAVE_NFE || '').replace(/\D/g, '');
+            if (k) mapa[k] = m.exportado_em || m.EXPORTADO_EM || true;
+        }
+        for (const row of rows) {
+            const k = String(row.CHAVE || '').replace(/\D/g, '');
+            if (!mapa[k]) continue;
+            row.DANFE_EXPORTADO = true;
+            row.DANFE_EXPORTADO_EM = mapa[k] === true ? null : mapa[k];
+        }
+    } catch (error) {
+        console.warn('[DANFE export listar]', error?.message || error);
+    }
+    return rows;
+}
+
+async function marcarDanfesExportados(chaves) {
+    const unicas = [...new Set((chaves || []).map((c) => String(c || '').replace(/\D/g, '')).filter((c) => c.length === 44))];
+    if (!unicas.length) return 0;
+    if (!(await garantirTabelaDanfeExport())) {
+        console.warn('[DANFE export] tabela indisponível — NFs não foram marcadas.');
+        return 0;
+    }
+    const sql = `
+        INSERT INTO ${tabelaConfnf('conf_nfe_danfe_export')} (chave_nfe, exportado_em, origem)
+        VALUES (?, NOW(), 'lote')
+        ON DUPLICATE KEY UPDATE exportado_em = VALUES(exportado_em), origem = VALUES(origem)`;
+    let n = 0;
+    for (const chave of unicas) {
+        await getConfNfPool().query(sql, [chave]);
+        n++;
+    }
+    return n;
 }
 
 async function anexarUltimasSefaz(rows) {

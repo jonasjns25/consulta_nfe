@@ -888,7 +888,8 @@
     }
 
     .nfe-acoes-bar .status-pill,
-    .nfe-acoes-bar .sefaz-chip {
+    .nfe-acoes-bar .sefaz-chip,
+    .nfe-acoes-bar .danfe-chip {
       flex: 0 0 auto;
       white-space: nowrap;
       max-width: none;
@@ -1147,6 +1148,19 @@
     .sefaz-chip--cancelada {
       background: rgba(220, 53, 69, 0.12);
       color: #b42334;
+    }
+
+    .danfe-chip {
+      display: inline-block;
+      padding: 0.05rem 0.42rem;
+      border-radius: 999px;
+      font-size: 0.64rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      line-height: 1.35;
+      white-space: nowrap;
+      background: rgba(0, 137, 88, 0.14);
+      color: #0b6b46;
     }
 
     .sefaz-chip--denegada,
@@ -1833,6 +1847,14 @@
               <option value="__vazia__">Sem classificação</option>
             </select>
           </label>
+          <label class="field-large">
+            DANFE exportado
+            <select id="filtro-danfe-export" name="danfe_exportado" title="Marcado ao baixar o ZIP de DANFEs">
+              <option value="">Todos</option>
+              <option value="nao">Não exportados</option>
+              <option value="sim">Já exportados</option>
+            </select>
+          </label>
         </div>
         <datalist id="usuarios-list"></datalist>
 
@@ -1863,7 +1885,8 @@
               <button type="button" class="btn-ghost btn-small" id="btn-colunas-padrao">Restaurar padrão</button>
             </div>
           </div>
-          <button type="button" class="btn-secondary" id="btn-export-pdf" disabled>Exportar PDF</button>
+          <button type="button" class="btn-secondary" id="btn-export-pdf" disabled title="Relatório em tabela (não é o DANFE)">Exportar PDF</button>
+          <button type="button" class="btn-secondary" id="btn-danfes-lote" disabled title="Baixa um ZIP com o DANFE em PDF de cada NF do filtro">Baixar DANFEs</button>
           <button type="button" class="btn-secondary" id="btn-export" disabled>Exportar CSV</button>
         </div>
       </div>
@@ -1975,6 +1998,8 @@
     const tabelaContainer = document.getElementById('tabela-container');
     const btnExport = document.getElementById('btn-export');
     const btnExportPdf = document.getElementById('btn-export-pdf');
+    const btnDanfesLote = document.getElementById('btn-danfes-lote');
+    const DANFE_LOTE_MAX = 80;
     const btnClear = document.getElementById('btn-clear');
     const btnToggleFiltros = document.getElementById('btn-toggle-filtros');
     const filtrosContent = document.getElementById('filtros-content');
@@ -2743,6 +2768,11 @@
         const label = obsSel?.selectedOptions[0]?.textContent || params.observacao;
         tags.push(`<span class="filtro-tag"><strong>Obs.:</strong> ${escaparHtml(label)}</span>`);
       }
+
+      if (params.danfe_exportado) {
+        const labelDanfe = params.danfe_exportado === 'sim' ? 'Já exportados' : 'Não exportados';
+        tags.push(`<span class="filtro-tag"><strong>DANFE:</strong> ${labelDanfe}</span>`);
+      }
       
       filtrosResumo.innerHTML = tags.join('');
     }
@@ -2757,6 +2787,8 @@
       tipoNfSelect.value = '1'; // Padrão: Saída
       const filtroObs = document.getElementById('filtro-observacao');
       if (filtroObs) filtroObs.value = '';
+      const filtroDanfe = document.getElementById('filtro-danfe-export');
+      if (filtroDanfe) filtroDanfe.value = '';
       state.rows = [];
       state.filtered = [];
       atualizarTabela();
@@ -2822,6 +2854,7 @@
     });
 
     btnExportPdf.addEventListener('click', gerarRelatorioPdf);
+    btnDanfesLote.addEventListener('click', baixarDanfesDoFiltro);
 
     tbody.addEventListener('click', async (event) => {
       if (event.target.closest('select[data-obs-chave]')) return;
@@ -2972,7 +3005,8 @@
         usuario: (formData.get('usuario') || '').trim(),
         estabelecimento: cnpjEstabelecimentoFiltro(),
         tipo_nf: formData.get('tipo_nf'),
-        observacao: (formData.get('observacao') || '').trim()
+        observacao: (formData.get('observacao') || '').trim(),
+        danfe_exportado: (formData.get('danfe_exportado') || '').trim()
       };
     }
 
@@ -3386,6 +3420,7 @@
       const semDados = state.filtered.length === 0;
       btnExport.disabled = semDados;
       btnExportPdf.disabled = semDados;
+      if (btnDanfesLote) btnDanfesLote.disabled = semDados;
     }
 
     function atualizarStatus(mensagem, tipo = 'info') {
@@ -3450,9 +3485,10 @@
     function aplicarFiltrosStatus() {
       const filtroStatusNF = statusSelect.value;
       const filtroStatusCompra = statusCompraSelect.value;
+      const filtroDanfe = document.getElementById('filtro-danfe-export')?.value || '';
       
       // Se não há filtros, mostra todos
-      if (!filtroStatusNF && !filtroStatusCompra) {
+      if (!filtroStatusNF && !filtroStatusCompra && !filtroDanfe) {
         state.filtered = [...state.rows];
         return;
       }
@@ -3461,6 +3497,7 @@
         const lancada = Number(row.LANCADA) === 1;
         let passaFiltroNF = true;
         let passaFiltroCompra = true;
+        let passaFiltroDanfe = true;
 
         // Filtro de status da NF (lançada/pendente)
         if (filtroStatusNF) {
@@ -3490,7 +3527,10 @@
           }
         }
 
-        return passaFiltroNF && passaFiltroCompra;
+        if (filtroDanfe === 'nao') passaFiltroDanfe = !row.DANFE_EXPORTADO;
+        else if (filtroDanfe === 'sim') passaFiltroDanfe = Boolean(row.DANFE_EXPORTADO);
+
+        return passaFiltroNF && passaFiltroCompra && passaFiltroDanfe;
       });
     }
 
@@ -3655,6 +3695,13 @@
       }
     }
 
+    function htmlChipDanfeExportado(row) {
+      if (!row?.DANFE_EXPORTADO) return '';
+      const quando = String(row.DANFE_EXPORTADO_EM || '').replace('T', ' ').slice(0, 16);
+      const title = quando ? `DANFE exportado em ${quando}` : 'DANFE já exportado (pode exportar de novo)';
+      return `<span class="danfe-chip" title="${escaparHtml(title)}">DANFE exportado</span>`;
+    }
+
     function htmlChipSefaz(row) {
       const s = row.SEFAZ;
       if (!s || !(s.situacaoLabel || s.situacao)) return '';
@@ -3720,7 +3767,8 @@
         ? `<span class="status-pill ${statusInfo.className}" title="Status da compra">${escaparHtml(statusInfo.label)}</span>`
         : '';
       const sefazHtml = mostrarSefaz ? htmlChipSefaz(row) : '';
-      const statusHtml = `${compraHtml}${sefazHtml}`;
+      const danfeExpHtml = htmlChipDanfeExportado(row);
+      const statusHtml = `${compraHtml}${sefazHtml}${danfeExpHtml}`;
       const botoesHtml = botoes ? `<div class="nfe-acoes-btns">${botoes}</div>` : '';
       const tr = document.createElement('tr');
       tr.className = `nfe-acoes${alt ? ' nfe-alt' : ''}`;
@@ -3902,6 +3950,80 @@
 
       doc.save(`relatorio-nfe-${new Date().toISOString().slice(0, 10)}.pdf`);
       mostrarToast('Relatório PDF gerado com sucesso.');
+    }
+
+    function chavesDanfeDoFiltro() {
+      const vistas = new Set();
+      const chaves = [];
+      for (const row of state.filtered || []) {
+        const chave = String(row?.CHAVE || '').replace(/\D/g, '');
+        if (chave.length !== 44 || vistas.has(chave)) continue;
+        vistas.add(chave);
+        chaves.push(chave);
+      }
+      return chaves;
+    }
+
+    async function baixarDanfesDoFiltro() {
+      const chaves = chavesDanfeDoFiltro();
+      if (!chaves.length) {
+        mostrarToast('Nenhuma NF com chave válida no filtro atual.', true);
+        return;
+      }
+      if (chaves.length > DANFE_LOTE_MAX) {
+        mostrarToast(
+          `O filtro tem ${chaves.length} NFs. Baixe no máximo ${DANFE_LOTE_MAX} por vez — refine o período ou os filtros.`,
+          true
+        );
+        return;
+      }
+      const ok = confirm(
+        `Gerar o DANFE em PDF de ${chaves.length} NF(s) e baixar em um arquivo ZIP?\n\n` +
+        'Pode levar alguns minutos, conforme a quantidade.'
+      );
+      if (!ok) return;
+
+      const textoOriginal = btnDanfesLote.textContent;
+      btnDanfesLote.disabled = true;
+      btnDanfesLote.textContent = `Gerando ${chaves.length} DANFE(s)…`;
+      atualizarStatus(`Gerando DANFEs (${chaves.length})… isso pode demorar.`, 'info');
+      setLoading(true);
+      try {
+        const resp = await fetch('/danfe/lote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chaves })
+        });
+        if (!resp.ok) {
+          const erro = await resp.json().catch(() => ({}));
+          throw new Error(erro?.error || 'Falha ao gerar o lote de DANFEs.');
+        }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `danfes-${new Date().toISOString().slice(0, 10)}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        const nOk = resp.headers.get('X-Danfe-Ok');
+        const nErr = Number(resp.headers.get('X-Danfe-Erros') || 0);
+        const msg = nErr
+          ? `ZIP baixado: ${nOk || chaves.length} DANFE(s). ${nErr} falha(s) listadas em _erros.txt.`
+          : `ZIP com ${nOk || chaves.length} DANFE(s) baixado.`;
+        mostrarToast(msg);
+        atualizarStatus(msg, nErr ? 'error' : 'success');
+        await consultarNotas();
+      } catch (error) {
+        console.error(error);
+        mostrarToast(error?.message || 'Não foi possível baixar os DANFEs.', true);
+        atualizarStatus(error?.message || 'Falha ao baixar DANFEs.', 'error');
+      } finally {
+        setLoading(false);
+        btnDanfesLote.textContent = textoOriginal;
+        atualizarExportacao();
+      }
     }
 
     async function gerarDanfe(botao) {
